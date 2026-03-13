@@ -100,7 +100,7 @@ function PlanViewerContent(props: PlanViewerContentProps) {
     const target = review.scrollTarget();
     if (!target) return;
     const y = cardOffsets()[target.id];
-    if (y != null && scrollRef) {
+    if (y !== undefined && scrollRef) {
       scrollRef.scrollTo({ top: Math.max(0, y - 100), behavior: 'smooth' });
     }
   });
