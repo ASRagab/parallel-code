@@ -19,6 +19,23 @@ const MAIN_BRANCH_TTL = 60_000; // 60s
 const MERGE_BASE_TTL = 30_000; // 30s
 const MAX_BUFFER = 10 * 1024 * 1024; // 10MB
 
+/** Check if a file is binary by looking for null bytes in the first 8KB (same heuristic as git). */
+async function isBinaryFile(filePath: string): Promise<boolean> {
+  let fd: fs.promises.FileHandle;
+  try {
+    fd = await fs.promises.open(filePath, 'r');
+  } catch {
+    return true; // unreadable files are safer treated as binary
+  }
+  try {
+    const buf = Buffer.alloc(8000);
+    const { bytesRead } = await fd.read(buf, 0, 8000, 0);
+    return buf.subarray(0, bytesRead).includes(0);
+  } finally {
+    await fd.close();
+  }
+}
+
 function invalidateMergeBaseCache(): void {
   mergeBaseCache.clear();
 }
@@ -591,6 +608,10 @@ export async function getAllFileDiffs(worktreePath: string): Promise<string> {
       try {
         const stat = await fs.promises.stat(fullPath);
         if (!stat.isFile() || stat.size >= MAX_BUFFER) continue;
+        if (await isBinaryFile(fullPath)) {
+          untrackedDiff += `diff --git a/${filePath} b/${filePath}\nnew file mode 100644\nBinary files /dev/null and b/${filePath} differ\n`;
+          continue;
+        }
         const content = await fs.promises.readFile(fullPath, 'utf8');
         const lines = content.split('\n');
         const lineCount = content.endsWith('\n') ? lines.length - 1 : lines.length;
@@ -718,12 +739,16 @@ export async function getFileDiff(worktreePath: string, filePath: string): Promi
   // Untracked/uncommitted file with no committed diff — build pseudo-diff from disk content
   // Only when content was actually readable (skip for files exceeding MAX_BUFFER)
   if (!diff && fileExistsOnDisk && !oldContent && fileContentReadable) {
-    const lines = newContent.split('\n');
-    let pseudo = `--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${lines.length} @@\n`;
-    for (const line of lines) {
-      pseudo += `+${line}\n`;
+    if (await isBinaryFile(fullPath)) {
+      diff = `Binary files /dev/null and b/${filePath} differ`;
+    } else {
+      const lines = newContent.split('\n');
+      let pseudo = `--- /dev/null\n+++ b/${filePath}\n@@ -0,0 +1,${lines.length} @@\n`;
+      for (const line of lines) {
+        pseudo += `+${line}\n`;
+      }
+      diff = pseudo;
     }
-    diff = pseudo;
   }
 
   // Uncommitted deletion with no committed diff — build deletion pseudo-diff

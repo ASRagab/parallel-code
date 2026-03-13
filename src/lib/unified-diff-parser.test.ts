@@ -205,6 +205,30 @@ describe('parseUnifiedDiff', () => {
   });
 
   // -------------------------------------------------------------------------
+  // New (untracked) binary file — pseudo-diff from backend
+  // -------------------------------------------------------------------------
+  describe('new binary file (untracked)', () => {
+    const diff = [
+      'diff --git a/assets/logo.png b/assets/logo.png',
+      'new file mode 100644',
+      'Binary files /dev/null and b/assets/logo.png differ',
+    ].join('\n');
+
+    it('detects as added binary', () => {
+      const result = parseUnifiedDiff(diff);
+      expect(result).toHaveLength(1);
+      expect(result[0].status).toBe('A');
+      expect(result[0].binary).toBe(true);
+      expect(result[0].hunks).toEqual([]);
+    });
+
+    it('extracts file path', () => {
+      const result = parseUnifiedDiff(diff);
+      expect(result[0].path).toBe('assets/logo.png');
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Multiple files in one diff
   // -------------------------------------------------------------------------
   describe('multiple files', () => {
