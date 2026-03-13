@@ -21,6 +21,8 @@ interface AskCodeMessage {
   exitCode?: number;
 }
 
+const MAX_RESPONSE_LENGTH = 100_000;
+
 export function AskCodeCard(props: AskCodeCardProps) {
   const [response, setResponse] = createSignal('');
   const [error, setError] = createSignal('');
@@ -30,7 +32,7 @@ export function AskCodeCard(props: AskCodeCardProps) {
 
   channel.onmessage = (msg) => {
     if (msg.type === 'chunk') {
-      setResponse((prev) => prev + (msg.text ?? ''));
+      setResponse((prev) => (prev.length < MAX_RESPONSE_LENGTH ? prev + (msg.text ?? '') : prev));
     } else if (msg.type === 'error') {
       setError((prev) => prev + (msg.text ?? ''));
     } else if (msg.type === 'done') {

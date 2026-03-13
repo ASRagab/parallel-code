@@ -132,18 +132,22 @@ export function DiffViewerDialog(props: DiffViewerDialogProps) {
     setReviewAnnotations((prev) => prev.filter((a) => a.id !== id));
   }
 
+  const [submitError, setSubmitError] = createSignal('');
+
   async function submitReview() {
     const taskId = props.taskId;
     const agentId = props.agentId;
     if (!taskId || !agentId) return;
+    setSubmitError('');
     const prompt = compileReview(reviewAnnotations());
     try {
       await sendPrompt(taskId, agentId, prompt);
       setReviewAnnotations([]);
       setSidebarOpen(false);
       props.onClose();
-    } catch {
+    } catch (err) {
       // Keep annotations intact so user can retry
+      setSubmitError(err instanceof Error ? err.message : 'Failed to send review');
     }
   }
 
@@ -326,13 +330,28 @@ export function DiffViewerDialog(props: DiffViewerDialogProps) {
           </div>
 
           <Show when={sidebarOpen() && reviewAnnotations().length > 0}>
-            <ReviewSidebar
-              annotations={reviewAnnotations()}
-              canSubmit={!!props.taskId && !!props.agentId}
-              onDismiss={dismissAnnotation}
-              onScrollTo={setScrollTarget}
-              onSubmit={submitReview}
-            />
+            <div style={{ display: 'flex', 'flex-direction': 'column' }}>
+              <Show when={submitError()}>
+                <div
+                  style={{
+                    padding: '6px 12px',
+                    color: theme.error,
+                    'font-size': sf(11),
+                    'border-bottom': `1px solid ${theme.border}`,
+                    background: 'rgba(255, 95, 115, 0.08)',
+                  }}
+                >
+                  {submitError()}
+                </div>
+              </Show>
+              <ReviewSidebar
+                annotations={reviewAnnotations()}
+                canSubmit={!!props.taskId && !!props.agentId}
+                onDismiss={dismissAnnotation}
+                onScrollTo={setScrollTarget}
+                onSubmit={submitReview}
+              />
+            </div>
           </Show>
         </div>
       </Show>

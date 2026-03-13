@@ -312,15 +312,14 @@ function ExpandableGap(props: {
       const fileLines = result.newContent.split('\n');
       const startLine = props.prevHunk.newStart + props.prevHunk.newCount;
       const endLine = props.currentHunk.newStart;
+      const prevOldEnd = props.prevHunk.oldStart + props.prevHunk.oldCount;
+      const prevNewEnd = props.prevHunk.newStart + props.prevHunk.newCount;
       const gapLines: DiffLine[] = [];
       for (let n = startLine; n < endLine; n++) {
         gapLines.push({
           type: 'context',
           content: fileLines[n - 1] ?? '',
-          oldLine:
-            n -
-            (props.currentHunk.newStart - props.currentHunk.oldStart) +
-            (props.prevHunk.newStart - props.prevHunk.oldStart),
+          oldLine: prevOldEnd + (n - prevNewEnd),
           newLine: n,
         });
       }

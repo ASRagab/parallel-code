@@ -100,23 +100,23 @@ export function askAboutCode(win: BrowserWindow, args: AskCodeRequest): void {
 
   proc.on('error', (err) => {
     cleanup();
-    send({ type: 'error', text: err.message });
     if (!finished) {
       finished = true;
+      send({ type: 'error', text: err.message });
       send({ type: 'done', exitCode: 1 });
     }
   });
 
-  // Safety timeout: kill after 2 minutes
+  // Safety timeout: kill after 2 minutes.
+  // Set finished BEFORE cancel to prevent the async close handler from
+  // also sending a done message (race between timeout and process exit).
   const timer = setTimeout(() => {
     activeTimers.delete(requestId);
     if (activeRequests.has(requestId)) {
+      finished = true;
       send({ type: 'error', text: 'Request timed out after 2 minutes.' });
       cancelAskAboutCode(requestId);
-      if (!finished) {
-        finished = true;
-        send({ type: 'done', exitCode: 1 });
-      }
+      send({ type: 'done', exitCode: 1 });
     }
   }, TIMEOUT_MS);
   activeTimers.set(requestId, timer);
