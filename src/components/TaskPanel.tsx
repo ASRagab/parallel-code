@@ -632,7 +632,6 @@ export function TaskPanel(props: TaskPanelProps) {
                             border: `1px solid ${theme.border}`,
                             'border-radius': '6px',
                             cursor: 'pointer',
-                            opacity: '0.8',
                             'z-index': '1',
                           }}
                           onClick={() => setPlanFullscreen(true)}
