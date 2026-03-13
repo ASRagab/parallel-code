@@ -13,7 +13,7 @@ import {
   killAllAgents,
   getAgentMeta,
 } from './pty.js';
-import { ensurePlansDirectory, startPlanWatcher } from './plans.js';
+import { ensurePlansDirectory, startPlanWatcher, readPlanForWorktree } from './plans.js';
 import { startRemoteServer } from '../remote/server.js';
 import {
   getGitIgnoredDirs,
@@ -294,6 +294,12 @@ export function registerAllHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.CheckPathExists, (_e, args) => {
     validatePath(args.path, 'path');
     return fs.existsSync(args.path);
+  });
+
+  // --- Plan content (one-shot read) ---
+  ipcMain.handle(IPC.ReadPlanContent, (_e, args) => {
+    assertString(args.worktreePath, 'worktreePath');
+    return readPlanForWorktree(args.worktreePath);
   });
 
   // --- Ask about code ---

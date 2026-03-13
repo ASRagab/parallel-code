@@ -86,7 +86,7 @@ function readNewestPlan(plansDir: string): { content: string; fileName: string; 
 }
 
 /** Reads the newest plan across multiple directories. */
-function readNewestPlanFromDirs(plansDirs: string[]): { content: string; fileName: string } | null {
+export function readNewestPlanFromDirs(plansDirs: string[]): { content: string; fileName: string } | null {
   let best: { content: string; fileName: string; mtime: number } | null = null;
   for (const dir of plansDirs) {
     const result = readNewestPlan(dir);
@@ -217,6 +217,12 @@ export function stopPlanWatcher(taskId: string): void {
     w.close();
   }
   watchers.delete(taskId);
+}
+
+/** Read the newest plan from a worktree (one-shot, no watcher). */
+export function readPlanForWorktree(worktreePath: string): { content: string; fileName: string } | null {
+  const plansDirs = PLAN_DIRS.map((rel) => path.join(worktreePath, rel));
+  return readNewestPlanFromDirs(plansDirs);
 }
 
 /** Stops all plan watchers. */

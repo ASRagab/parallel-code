@@ -80,6 +80,7 @@ export enum IPC {
 
   // Plan
   PlanContent = 'plan_content',
+  ReadPlanContent = 'read_plan_content',
 
   // Ask about code
   AskAboutCode = 'ask_about_code',
