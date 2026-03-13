@@ -9,6 +9,7 @@ interface PlanWatcher {
   pollTimer: ReturnType<typeof setInterval> | null;
   plansDirs: string[];
   watchedDirs: Set<string>;
+  knownFiles: Set<string>;
 }
 
 const watchers = new Map<string, PlanWatcher>();
@@ -18,6 +19,25 @@ const PLAN_DIRS = ['.claude/plans', 'docs/plans'];
 
 /** How often to check for newly created plan directories (ms). */
 const DIR_POLL_INTERVAL = 3_000;
+
+/** Snapshot existing `.md` filenames across the given directories. */
+export function snapshotExistingFiles(dirs: string[]): Set<string> {
+  const known = new Set<string>();
+  for (const dir of dirs) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      if (e.isFile() && e.name.endsWith('.md')) {
+        known.add(e.name);
+      }
+    }
+  }
+  return known;
+}
 
 /**
  * Reads and merges `.claude/settings.local.json` in the worktree to set
@@ -51,7 +71,10 @@ export function ensurePlansDirectory(worktreePath: string): void {
 }
 
 /** Reads the newest `.md` file by mtime from a single plans directory. */
-function readNewestPlan(plansDir: string): { content: string; fileName: string; mtime: number } | null {
+function readNewestPlan(
+  plansDir: string,
+  knownFiles?: Set<string>,
+): { content: string; fileName: string; mtime: number } | null {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(plansDir, { withFileTypes: true });
@@ -59,7 +82,9 @@ function readNewestPlan(plansDir: string): { content: string; fileName: string; 
     return null;
   }
 
-  const mdFiles = entries.filter((e) => e.isFile() && e.name.endsWith('.md'));
+  const mdFiles = entries.filter(
+    (e) => e.isFile() && e.name.endsWith('.md') && (!knownFiles || !knownFiles.has(e.name)),
+  );
   if (mdFiles.length === 0) return null;
 
   let newest: { name: string; mtime: number } | null = null;
@@ -86,10 +111,13 @@ function readNewestPlan(plansDir: string): { content: string; fileName: string; 
 }
 
 /** Reads the newest plan across multiple directories. */
-function readNewestPlanFromDirs(plansDirs: string[]): { content: string; fileName: string } | null {
+export function readNewestPlanFromDirs(
+  plansDirs: string[],
+  knownFiles?: Set<string>,
+): { content: string; fileName: string } | null {
   let best: { content: string; fileName: string; mtime: number } | null = null;
   for (const dir of plansDirs) {
-    const result = readNewestPlan(dir);
+    const result = readNewestPlan(dir, knownFiles);
     if (result && (!best || result.mtime > best.mtime)) {
       best = result;
     }
@@ -98,9 +126,9 @@ function readNewestPlanFromDirs(plansDirs: string[]): { content: string; fileNam
 }
 
 /** Sends plan content for a task to the renderer. */
-function sendPlanContent(win: BrowserWindow, taskId: string, plansDirs: string[]): void {
+function sendPlanContent(win: BrowserWindow, taskId: string, plansDirs: string[], knownFiles: Set<string>): void {
   if (win.isDestroyed()) return;
-  const result = readNewestPlanFromDirs(plansDirs);
+  const result = readNewestPlanFromDirs(plansDirs, knownFiles);
   if (result) {
     win.webContents.send(IPC.PlanContent, {
       taskId,
@@ -142,6 +170,10 @@ function startDirPolling(taskId: string, entry: PlanWatcher, onChange: () => voi
     for (const dir of current.plansDirs) {
       if (current.watchedDirs.has(dir)) continue;
       if (!fs.existsSync(dir)) continue;
+      // Snapshot existing files before watching so they are ignored
+      for (const name of snapshotExistingFiles([dir])) {
+        current.knownFiles.add(name);
+      }
       const watcher = watchDir(dir, onChange);
       if (watcher) {
         current.fsWatchers.push(watcher);
@@ -174,7 +206,7 @@ export function startPlanWatcher(win: BrowserWindow, taskId: string, worktreePat
   const claudePlansDir = path.join(worktreePath, '.claude', 'plans');
   fs.mkdirSync(claudePlansDir, { recursive: true });
 
-  sendPlanContent(win, taskId, plansDirs);
+  const knownFiles = snapshotExistingFiles(plansDirs);
 
   const entry: PlanWatcher = {
     fsWatchers: [],
@@ -182,6 +214,7 @@ export function startPlanWatcher(win: BrowserWindow, taskId: string, worktreePat
     pollTimer: null,
     plansDirs,
     watchedDirs: new Set(),
+    knownFiles,
   };
 
   const onChange = () => {
@@ -190,7 +223,7 @@ export function startPlanWatcher(win: BrowserWindow, taskId: string, worktreePat
     if (current.timeout) clearTimeout(current.timeout);
     current.timeout = setTimeout(() => {
       current.timeout = null;
-      sendPlanContent(win, taskId, current.plansDirs);
+      sendPlanContent(win, taskId, current.plansDirs, current.knownFiles);
     }, 200);
   };
 
