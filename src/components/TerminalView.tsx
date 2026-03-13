@@ -135,6 +135,7 @@ export function TerminalView(props: TerminalViewProps) {
       }
 
       if (isPaste) {
+        e.preventDefault();
         navigator.clipboard.readText().then((text) => {
           if (text) enqueueInput(text);
         });
