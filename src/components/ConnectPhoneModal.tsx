@@ -36,14 +36,17 @@ export function ConnectPhoneModal(props: ConnectPhoneModalProps) {
 
   async function generateQr(url: string) {
     try {
-      const QRCode = await import('qrcode');
+      const mod = await import('qrcode');
+      // qrcode is CJS — Vite dev wraps it as .default only, prod adds named re-exports
+      const QRCode = mod.default ?? mod;
       const dataUrl = await QRCode.toDataURL(url, {
         width: 256,
         margin: 2,
         color: { dark: '#000000', light: '#ffffff' },
       });
       setQrDataUrl(dataUrl);
-    } catch {
+    } catch (err) {
+      console.error('[ConnectPhoneModal] QR generation failed:', err);
       setQrDataUrl(null);
     }
   }
