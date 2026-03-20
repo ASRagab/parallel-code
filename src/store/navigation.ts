@@ -1,4 +1,5 @@
 import { store, setStore } from './core';
+import { getTaskFocusedPanel, setTaskFocusedPanel } from './focus';
 import { showNotification } from './notification';
 import { pickAndAddProject } from './projects';
 import { reorderTask } from './tasks';
@@ -43,6 +44,8 @@ export function moveActiveTask(direction: 'left' | 'right'): void {
   const target = direction === 'left' ? idx - 1 : idx + 1;
   if (target < 0 || target >= taskOrder.length) return;
   reorderTask(idx, target);
+  // Re-focus the moved task and scroll it into view (DOM node move loses focus)
+  setTaskFocusedPanel(activeTaskId, getTaskFocusedPanel(activeTaskId));
 }
 
 export function toggleNewTaskDialog(show?: boolean): void {
