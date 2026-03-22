@@ -1,5 +1,4 @@
 import type { AgentDef, WorktreeStatus } from '../ipc/types';
-import type { TerminalFont } from '../lib/fonts';
 import type { LookPreset } from '../lib/look';
 
 export interface TerminalBookmark {
@@ -113,7 +112,7 @@ export interface PersistedState {
   completedTaskCount?: number;
   mergedLinesAdded?: number;
   mergedLinesRemoved?: number;
-  terminalFont?: TerminalFont;
+  terminalFont?: string;
   themePreset?: LookPreset;
   windowState?: PersistedWindowState;
   autoTrustFolders?: boolean;
@@ -177,7 +176,7 @@ export interface AppStore {
   completedTaskCount: number;
   mergedLinesAdded: number;
   mergedLinesRemoved: number;
-  terminalFont: TerminalFont;
+  terminalFont: string;
   themePreset: LookPreset;
   windowState: PersistedWindowState | null;
   autoTrustFolders: boolean;

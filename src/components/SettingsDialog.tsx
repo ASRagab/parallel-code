@@ -1,6 +1,11 @@
-import { For, Show, createMemo } from 'solid-js';
+import { For, Show, createSignal, createEffect, on } from 'solid-js';
 import { Dialog } from './Dialog';
-import { getAvailableTerminalFonts, getTerminalFontFamily, LIGATURE_FONTS } from '../lib/fonts';
+import {
+  getAvailableTerminalFonts,
+  fetchAvailableTerminalFonts,
+  getTerminalFontFamily,
+  LIGATURE_FONTS,
+} from '../lib/fonts';
 import { LOOK_PRESETS } from '../lib/look';
 import { theme, sectionLabelStyle } from '../lib/theme';
 import {
@@ -16,20 +21,33 @@ import {
 } from '../store/store';
 import { CustomAgentEditor } from './CustomAgentEditor';
 import { mod } from '../lib/platform';
-import type { TerminalFont } from '../lib/fonts';
 
 interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
 }
 
+function ensureSelectedFont(available: string[]): string[] {
+  if (available.includes(store.terminalFont)) return available;
+  return [store.terminalFont, ...available];
+}
+
 export function SettingsDialog(props: SettingsDialogProps) {
-  const fonts = createMemo<TerminalFont[]>(() => {
-    const available = getAvailableTerminalFonts();
-    // Always include the currently selected font so it stays visible even if detection misses it
-    if (available.includes(store.terminalFont)) return available;
-    return [store.terminalFont, ...available];
-  });
+  const [fonts, setFonts] = createSignal<string[]>(ensureSelectedFont(getAvailableTerminalFonts()));
+
+  // Fetch system fonts when the dialog opens
+  createEffect(
+    on(
+      () => props.open,
+      (open) => {
+        if (open) {
+          fetchAvailableTerminalFonts().then((available) =>
+            setFonts(ensureSelectedFont(available)),
+          );
+        }
+      },
+    ),
+  );
 
   return (
     <Dialog

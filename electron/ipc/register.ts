@@ -50,6 +50,7 @@ import { listAgents } from './agents.js';
 import { saveAppState, loadAppState } from './persistence.js';
 import { spawn } from 'child_process';
 import { askAboutCode, cancelAskAboutCode } from './ask-code.js';
+import { getSystemMonospaceFonts } from './system-fonts.js';
 import path from 'path';
 import {
   assertString,
@@ -406,6 +407,9 @@ export function registerAllHandlers(win: BrowserWindow): void {
     assertString(args.requestId, 'requestId');
     cancelAskAboutCode(args.requestId);
   });
+
+  // --- System ---
+  ipcMain.handle(IPC.GetSystemFonts, () => getSystemMonospaceFonts());
 
   // --- Notifications (fire-and-forget via ipcMain.on) ---
   const activeNotifications = new Set<Notification>();

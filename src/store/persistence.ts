@@ -14,7 +14,7 @@ import type {
   Project,
 } from './types';
 import type { AgentDef } from '../ipc/types';
-import { DEFAULT_TERMINAL_FONT, isTerminalFont } from '../lib/fonts';
+import { DEFAULT_TERMINAL_FONT } from '../lib/fonts';
 import { isLookPreset } from '../lib/look';
 import { syncTerminalCounter } from './terminals';
 
@@ -283,7 +283,10 @@ export async function loadState(): Promise<void> {
         typeof mergedLinesRemovedRaw === 'number' && Number.isFinite(mergedLinesRemovedRaw)
           ? Math.max(0, Math.floor(mergedLinesRemovedRaw))
           : 0;
-      s.terminalFont = isTerminalFont(raw.terminalFont) ? raw.terminalFont : DEFAULT_TERMINAL_FONT;
+      s.terminalFont =
+        typeof raw.terminalFont === 'string' && raw.terminalFont.trim()
+          ? raw.terminalFont
+          : DEFAULT_TERMINAL_FONT;
       s.themePreset = isLookPreset(raw.themePreset) ? raw.themePreset : 'minimal';
       s.windowState = parsePersistedWindowState(raw.windowState);
       s.autoTrustFolders = typeof raw.autoTrustFolders === 'boolean' ? raw.autoTrustFolders : false;

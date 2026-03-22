@@ -1,6 +1,5 @@
 import { produce } from 'solid-js/store';
 import { store, setStore } from './core';
-import type { TerminalFont } from '../lib/fonts';
 import type { LookPreset } from '../lib/look';
 import type { PersistedWindowState } from './types';
 
@@ -71,7 +70,7 @@ export function toggleSidebar(): void {
   setStore('sidebarVisible', !store.sidebarVisible);
 }
 
-export function setTerminalFont(terminalFont: TerminalFont): void {
+export function setTerminalFont(terminalFont: string): void {
   setStore('terminalFont', terminalFont);
 }
 

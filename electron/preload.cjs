@@ -35,6 +35,7 @@ const ALLOWED_CHANNELS = new Set([
   'rebase_task',
   'get_main_branch',
   'get_current_branch',
+  'check_is_git_repo',
   // Persistence
   'save_app_state',
   'load_app_state',
@@ -85,6 +86,8 @@ const ALLOWED_CHANNELS = new Set([
   // Ask about code
   'ask_about_code',
   'cancel_ask_about_code',
+  // System
+  'get_system_fonts',
   // Notifications
   'show_notification',
   'notification_clicked',
