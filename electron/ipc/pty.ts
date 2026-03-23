@@ -1,5 +1,6 @@
 import * as pty from 'node-pty';
 import { execFileSync, execFile, spawn as cpSpawn } from 'child_process';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -202,6 +203,9 @@ export function spawnAgent(
       cwd,
       // Forward env vars the agent needs (API keys, git config, etc.)
       ...buildDockerEnvFlags(spawnEnv),
+      // Writable HOME for agent config files (host HOME is blocked above)
+      '-e',
+      `HOME=${DOCKER_CONTAINER_HOME}`,
       // Mount SSH and git config read-only for git operations
       ...buildDockerCredentialMounts(),
       image,
@@ -245,6 +249,20 @@ export function spawnAgent(
       win.webContents.send(`channel:${channelId}`, msg);
     }
   };
+
+  // In Docker mode, write a diagnostic banner to the terminal so the user
+  // can see what command is being run (and debug when nothing else appears).
+  if (args.dockerMode) {
+    const image = args.dockerImage || DOCKER_DEFAULT_IMAGE;
+    const innerCmd = [command, ...args.args].join(' ');
+    const banner =
+      `\x1b[2m[docker] container: ${containerName}\r\n` +
+      `[docker] image: ${image}\r\n` +
+      `[docker] command: ${innerCmd}\r\n` +
+      `[docker] waiting for container to start…\x1b[0m\r\n\r\n`;
+    console.warn(`[docker] spawning container ${containerName} — image=${image} cmd=${innerCmd}`);
+    send({ type: 'Data', data: Buffer.from(banner, 'utf8').toString('base64') });
+  }
 
   const flush = () => {
     if (batchSize === 0) return;
@@ -301,6 +319,12 @@ export function spawnAgent(
     // If this session was replaced by a new spawn with the same agentId,
     // skip cleanup — the new session owns the map entry now.
     if (sessions.get(args.agentId) !== session) return;
+
+    if (containerName) {
+      console.warn(
+        `[docker] container ${containerName} exited — code=${exitCode} signal=${signal ?? 'none'}`,
+      );
+    }
 
     // Flush any remaining buffered data
     flush();
@@ -445,7 +469,18 @@ export function getAgentCols(agentId: string): number {
  * (custom API keys, feature flags, tool config, etc.) without needing an
  * ever-growing allowlist.
  */
+/** Home directory inside the Docker container (writable by uid 1000). */
+const DOCKER_CONTAINER_HOME = '/home/agent';
+
 const DOCKER_ENV_BLOCK_LIST = new Set([
+  // Host PATH must not override the container's PATH — agent CLIs like
+  // `claude` are installed at /usr/local/bin inside the image and won't be
+  // found if the host PATH (pointing at host-only dirs) is forwarded.
+  'PATH',
+  // Host HOME points to a non-writable directory inside the container
+  // (created by Docker for read-only credential mounts). Agents need a
+  // writable HOME for config files — we set HOME=/home/agent explicitly.
+  'HOME',
   // Display / desktop session
   'DISPLAY',
   'WAYLAND_DISPLAY',
@@ -512,35 +547,38 @@ function buildDockerCredentialMounts(): string[] {
   const home = process.env.HOME;
   if (!home) return mounts;
 
-  /** Mount a path read-only if it is readable; silently skip if absent. */
-  const mountIfExists = (hostPath: string): void => {
+  const containerHome = DOCKER_CONTAINER_HOME;
+
+  /** Mount a host path read-only into the container home. Skips if absent. */
+  const mountIfExists = (hostPath: string, containerPath: string): void => {
     try {
       fs.accessSync(hostPath, fs.constants.R_OK);
-      mounts.push('-v', `${hostPath}:${hostPath}:ro`);
+      mounts.push('-v', `${hostPath}:${containerPath}:ro`);
     } catch {
       // Path absent or unreadable — skip
     }
   };
 
   // SSH keys for git push/pull
-  mountIfExists(`${home}/.ssh`);
+  mountIfExists(`${home}/.ssh`, `${containerHome}/.ssh`);
 
   // Git identity / config
-  mountIfExists(`${home}/.gitconfig`);
+  mountIfExists(`${home}/.gitconfig`, `${containerHome}/.gitconfig`);
 
   // GitHub CLI auth tokens (~/.config/gh/)
-  mountIfExists(`${home}/.config/gh`);
+  mountIfExists(`${home}/.config/gh`, `${containerHome}/.config/gh`);
 
   // npm auth token
-  mountIfExists(`${home}/.npmrc`);
+  mountIfExists(`${home}/.npmrc`, `${containerHome}/.npmrc`);
 
   // General HTTP/git HTTPS credentials (used by git credential helper)
-  mountIfExists(`${home}/.netrc`);
+  mountIfExists(`${home}/.netrc`, `${containerHome}/.netrc`);
 
-  // Google Application Credentials file (for Vertex AI / gcloud)
+  // Google Application Credentials file (for Vertex AI / gcloud) — mounted
+  // at its original path since the env var points there.
   const googleCredsFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (googleCredsFile) {
-    mountIfExists(googleCredsFile);
+    mountIfExists(googleCredsFile, googleCredsFile);
   }
 
   return mounts;
@@ -569,12 +607,62 @@ export async function isDockerAvailable(): Promise<boolean> {
 /** The default image name for Docker-isolated tasks. */
 export const DOCKER_DEFAULT_IMAGE = 'parallel-code-agent:latest';
 
-/** Check if a Docker image exists locally. */
+/** Label key used to stamp the Dockerfile content hash on built images. */
+const DOCKERFILE_HASH_LABEL = 'parallel-code-dockerfile-hash';
+
+/**
+ * Resolve the path to the bundled Dockerfile.
+ * In dev mode it lives at `<repo>/docker/Dockerfile`;
+ * in production it's inside the asar resources directory.
+ */
+function resolveDockerfilePath(): string | null {
+  const devDockerDir = path.join(__dirname, '..', '..', 'docker');
+  const prodDockerDir = path.join(process.resourcesPath ?? '', 'docker');
+  const dockerDir = fs.existsSync(path.join(devDockerDir, 'Dockerfile'))
+    ? devDockerDir
+    : prodDockerDir;
+  const p = path.join(dockerDir, 'Dockerfile');
+  return fs.existsSync(p) ? p : null;
+}
+
+/** SHA-256 hex digest of the current Dockerfile, or null if not found. */
+function getDockerfileHash(): string | null {
+  const p = resolveDockerfilePath();
+  if (!p) return null;
+  return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+}
+
+/**
+ * Check if a Docker image exists locally **and** matches the current Dockerfile.
+ * Returns false when the image is missing or was built from a different Dockerfile,
+ * so the UI will prompt the user to (re)build.
+ */
 export async function dockerImageExists(image: string): Promise<boolean> {
+  const expectedHash = getDockerfileHash();
   return new Promise((resolve) => {
-    execFile('docker', ['image', 'inspect', image], { encoding: 'utf8', timeout: 5000 }, (err) => {
-      resolve(!err);
-    });
+    execFile(
+      'docker',
+      [
+        'image',
+        'inspect',
+        '--format',
+        `{{index .Config.Labels "${DOCKERFILE_HASH_LABEL}"}}`,
+        image,
+      ],
+      { encoding: 'utf8', timeout: 5000 },
+      (err, stdout) => {
+        if (err) {
+          resolve(false);
+          return;
+        }
+        // If we can't compute the expected hash (Dockerfile missing), accept any existing image
+        if (!expectedHash) {
+          resolve(true);
+          return;
+        }
+        resolve(stdout.trim() === expectedHash);
+      },
+    );
   });
 }
 
@@ -600,20 +688,14 @@ export function buildDockerImage(
       activeBuild = null;
       resolve(result);
     };
-    // Locate the Dockerfile bundled with the app.
-    // In dev mode it's at <repo>/docker/Dockerfile
-    // In production it's in the app.asar resources directory
-    const devDockerDir = path.join(__dirname, '..', '..', 'docker');
-    const prodDockerDir = path.join(process.resourcesPath ?? '', 'docker');
-    const dockerDir = fs.existsSync(path.join(devDockerDir, 'Dockerfile'))
-      ? devDockerDir
-      : prodDockerDir;
-    const dockerfilePath = path.join(dockerDir, 'Dockerfile');
 
-    if (!fs.existsSync(dockerfilePath)) {
-      finish({ ok: false, error: `Dockerfile not found at ${dockerfilePath}` });
+    const dockerfilePath = resolveDockerfilePath();
+    if (!dockerfilePath) {
+      finish({ ok: false, error: 'Dockerfile not found' });
       return;
     }
+    const dockerDir = path.dirname(dockerfilePath);
+    const hash = getDockerfileHash() ?? 'unknown';
 
     const send = (text: string) => {
       if (!win.isDestroyed()) {
@@ -623,7 +705,16 @@ export function buildDockerImage(
 
     const proc = cpSpawn(
       'docker',
-      ['build', '-t', DOCKER_DEFAULT_IMAGE, '-f', dockerfilePath, dockerDir],
+      [
+        'build',
+        '-t',
+        DOCKER_DEFAULT_IMAGE,
+        '--label',
+        `${DOCKERFILE_HASH_LABEL}=${hash}`,
+        '-f',
+        dockerfilePath,
+        dockerDir,
+      ],
       {
         stdio: ['ignore', 'pipe', 'pipe'],
       },

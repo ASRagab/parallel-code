@@ -50,7 +50,13 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
         <InfoBar
           title={
             props.task.lastPrompt ||
-            (props.task.initialPrompt ? 'Waiting to send prompt…' : 'No prompts sent yet')
+            (firstAgent()?.status === 'exited' && props.task.initialPrompt
+              ? 'Agent exited before prompt was sent'
+              : props.task.dockerMode && props.task.initialPrompt
+                ? 'Starting Docker container…'
+                : props.task.initialPrompt
+                  ? 'Waiting to send prompt…'
+                  : 'No prompts sent yet')
           }
           onDblClick={() => {
             if (props.task.lastPrompt && props.promptHandle && !props.promptHandle.getText())
@@ -60,12 +66,35 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
           <span style={{ opacity: props.task.lastPrompt ? 1 : 0.4 }}>
             {props.task.lastPrompt
               ? `> ${props.task.lastPrompt}`
-              : props.task.initialPrompt
-                ? '⏳ Waiting to send prompt…'
-                : 'No prompts sent'}
+              : firstAgent()?.status === 'exited' && props.task.initialPrompt
+                ? 'Agent exited before prompt was sent'
+                : props.task.dockerMode && props.task.initialPrompt
+                  ? 'Starting Docker container…'
+                  : props.task.initialPrompt
+                    ? 'Waiting to send prompt…'
+                    : 'No prompts sent'}
           </span>
         </InfoBar>
         <div style={{ flex: '1', position: 'relative', overflow: 'hidden' }}>
+          <Show when={props.task.dockerMode}>
+            <div
+              style={{
+                position: 'absolute',
+                top: '8px',
+                left: '12px',
+                'z-index': '10',
+                'font-size': sf(10),
+                color: theme.fgMuted,
+                background: 'color-mix(in srgb, var(--island-bg) 80%, transparent)',
+                padding: '2px 8px',
+                'border-radius': '6px',
+                border: `1px solid ${theme.border}`,
+                'pointer-events': 'none',
+              }}
+            >
+              docker
+            </div>
+          </Show>
           <Show when={firstAgent()}>
             {(a) => (
               <>

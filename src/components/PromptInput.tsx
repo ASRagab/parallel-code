@@ -2,6 +2,7 @@ import { createSignal, createEffect, onMount, onCleanup, untrack } from 'solid-j
 import { fireAndForget } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import {
+  store,
   sendPrompt,
   registerFocusFn,
   unregisterFocusFn,
@@ -104,8 +105,16 @@ export function PromptInput(props: PromptInputProps) {
     }
     cleanupAutoSend = cleanup;
 
+    function isAgentDead() {
+      return store.agents[agentId]?.status === 'exited';
+    }
+
     function trySend() {
       if (cancelled) return;
+      if (isAgentDead()) {
+        cleanup();
+        return;
+      }
       // Don't tear down the auto-send mechanism if we can't send yet —
       // the quiescence timer needs to stay alive to retry after settling.
       if (isAutoTrustSettling(agentId)) return;
@@ -180,6 +189,10 @@ export function PromptInput(props: PromptInputProps) {
     // quiescence (1.5s of stable output).
     quiescenceTimer = window.setInterval(() => {
       if (cancelled) return;
+      if (isAgentDead()) {
+        cleanup();
+        return;
+      }
       const elapsed = Date.now() - spawnedAt;
 
       if (elapsed > AUTOSEND_MAX_WAIT_MS) {
