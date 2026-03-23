@@ -19,6 +19,7 @@ import {
 } from '../store/store';
 import type { GitIsolationMode } from '../store/types';
 import { toBranchName, sanitizeBranchPrefix } from '../lib/branch-name';
+import { SegmentedButtons } from './SegmentedButtons';
 import { cleanTaskName } from '../lib/clean-task-name';
 import { extractGitHubUrl } from '../lib/github-url';
 import { theme, sectionLabelStyle, bannerStyle } from '../lib/theme';
@@ -594,50 +595,14 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
           style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}
         >
           <label style={sectionLabelStyle}>Git Isolation</label>
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <button
-              type="button"
-              onClick={() => setGitIsolation('worktree')}
-              style={{
-                flex: '1',
-                padding: '6px 12px',
-                'font-size': '12px',
-                'border-radius': '6px',
-                border: `1px solid ${gitIsolation() === 'worktree' ? theme.accent : theme.border}`,
-                background:
-                  gitIsolation() === 'worktree'
-                    ? `color-mix(in srgb, ${theme.accent} 15%, transparent)`
-                    : theme.bgInput,
-                color: gitIsolation() === 'worktree' ? theme.accent : theme.fgMuted,
-                cursor: 'pointer',
-                'font-weight': gitIsolation() === 'worktree' ? '600' : '400',
-              }}
-            >
-              Worktree
-            </button>
-            <button
-              type="button"
-              onClick={() => !directDisabled() && setGitIsolation('direct')}
-              disabled={directDisabled()}
-              style={{
-                flex: '1',
-                padding: '6px 12px',
-                'font-size': '12px',
-                'border-radius': '6px',
-                border: `1px solid ${gitIsolation() === 'direct' ? theme.accent : theme.border}`,
-                background:
-                  gitIsolation() === 'direct'
-                    ? `color-mix(in srgb, ${theme.accent} 15%, transparent)`
-                    : theme.bgInput,
-                color: gitIsolation() === 'direct' ? theme.accent : theme.fgMuted,
-                cursor: directDisabled() ? 'not-allowed' : 'pointer',
-                opacity: directDisabled() ? '0.5' : '1',
-                'font-weight': gitIsolation() === 'direct' ? '600' : '400',
-              }}
-            >
-              Direct
-            </button>
-          </div>
+          <SegmentedButtons
+            options={[
+              { value: 'worktree', label: 'Worktree' },
+              { value: 'direct', label: 'Direct', disabled: directDisabled() },
+            ]}
+            value={gitIsolation()}
+            onChange={setGitIsolation}
+          />
           <Show when={directDisabled()}>
             <span style={{ 'font-size': '11px', color: theme.fgSubtle }}>
               A direct-mode task already exists for this project

@@ -197,14 +197,14 @@ async function detectMergeBase(
   head?: string,
   baseBranch?: string,
 ): Promise<string> {
-  const key = cacheKey(repoRoot);
+  const mainBranch = baseBranch ?? (await detectMainBranch(repoRoot));
+  const key = `${cacheKey(repoRoot)}:${mainBranch}`;
   const cached = mergeBaseCache.get(key);
   if (cached) {
     if (cached.expiresAt > Date.now()) return cached.value;
     mergeBaseCache.delete(key);
   }
 
-  const mainBranch = baseBranch ?? (await detectMainBranch(repoRoot));
   let result: string;
   try {
     const { stdout } = await exec('git', ['merge-base', mainBranch, head ?? 'HEAD'], {

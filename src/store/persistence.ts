@@ -367,7 +367,7 @@ export async function loadState(): Promise<void> {
           notes: pt.notes,
           lastPrompt: pt.lastPrompt,
           gitIsolation: legacy.gitIsolation ?? (legacy.directMode ? 'direct' : 'worktree'),
-          baseBranch: legacy.baseBranch ?? pt.branchName,
+          baseBranch: legacy.baseBranch,
           skipPermissions: pt.skipPermissions === true,
           dockerMode: pt.dockerMode === true ? true : undefined,
           dockerImage: typeof pt.dockerImage === 'string' ? pt.dockerImage : undefined,
@@ -429,7 +429,7 @@ export async function loadState(): Promise<void> {
           lastPrompt: pt.lastPrompt,
           gitIsolation:
             legacyCollapsed.gitIsolation ?? (legacyCollapsed.directMode ? 'direct' : 'worktree'),
-          baseBranch: legacyCollapsed.baseBranch ?? pt.branchName,
+          baseBranch: legacyCollapsed.baseBranch,
           skipPermissions: pt.skipPermissions === true,
           dockerMode: pt.dockerMode === true ? true : undefined,
           dockerImage: typeof pt.dockerImage === 'string' ? pt.dockerImage : undefined,

@@ -19,7 +19,7 @@ export function createMergeWorkflow() {
       if (!c.worktreePath) continue;
       invoke<{ has_committed_changes: boolean; has_uncommitted_changes: boolean }>(
         IPC.GetWorktreeStatus,
-        { worktreePath: c.worktreePath, baseBranch: undefined },
+        { worktreePath: c.worktreePath },
       )
         .then((status) => {
           if (status.has_committed_changes || status.has_uncommitted_changes) {
@@ -90,7 +90,7 @@ export function createMergeWorkflow() {
     try {
       const status = await invoke<{ main_ahead_count: number; conflicting_files: string[] }>(
         IPC.CheckMergeStatus,
-        { worktreePath: competitor.worktreePath, baseBranch: undefined },
+        { worktreePath: competitor.worktreePath },
       );
       if (status.conflicting_files.length > 0) {
         setMergeError(`Conflicts in: ${status.conflicting_files.join(', ')}`);
@@ -104,7 +104,6 @@ export function createMergeWorkflow() {
         squash: true,
         message: `arena: merge ${competitor.name} — ${promptSnippet}`,
         cleanup: true,
-        baseBranch: undefined,
       });
       setMergedId(competitor.id);
       markBranchMerged(competitor.id);

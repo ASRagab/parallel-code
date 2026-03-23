@@ -10,6 +10,7 @@ import {
 import { sanitizeBranchPrefix, toBranchName } from '../lib/branch-name';
 import { theme, sectionLabelStyle } from '../lib/theme';
 import type { Project, TerminalBookmark, GitIsolationMode } from '../store/types';
+import { SegmentedButtons } from './SegmentedButtons';
 
 interface EditProjectDialogProps {
   project: Project | null;
@@ -26,9 +27,7 @@ export function EditProjectDialog(props: EditProjectDialogProps) {
   const [selectedHue, setSelectedHue] = createSignal(0);
   const [branchPrefix, setBranchPrefix] = createSignal('task');
   const [deleteBranchOnClose, setDeleteBranchOnClose] = createSignal(true);
-  const [defaultGitIsolation, setDefaultGitIsolation] = createSignal<GitIsolationMode | undefined>(
-    undefined,
-  );
+  const [defaultGitIsolation, setDefaultGitIsolation] = createSignal<GitIsolationMode>('worktree');
   const [defaultBaseBranch, setDefaultBaseBranch] = createSignal('');
   const [bookmarks, setBookmarks] = createSignal<TerminalBookmark[]>([]);
   const [newCommand, setNewCommand] = createSignal('');
@@ -42,7 +41,7 @@ export function EditProjectDialog(props: EditProjectDialogProps) {
     setSelectedHue(hueFromColor(p.color));
     setBranchPrefix(sanitizeBranchPrefix(p.branchPrefix ?? 'task'));
     setDeleteBranchOnClose(p.deleteBranchOnClose ?? true);
-    setDefaultGitIsolation(p.defaultGitIsolation);
+    setDefaultGitIsolation(p.defaultGitIsolation ?? 'worktree');
     setDefaultBaseBranch(p.defaultBaseBranch ?? '');
     setBookmarks(p.terminalBookmarks ? [...p.terminalBookmarks] : []);
     setNewCommand('');
@@ -327,47 +326,14 @@ export function EditProjectDialog(props: EditProjectDialogProps) {
             {/* Default isolation mode */}
             <div style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}>
               <label style={sectionLabelStyle}>Default Git Isolation</label>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <button
-                  type="button"
-                  onClick={() => setDefaultGitIsolation(undefined)}
-                  style={{
-                    flex: '1',
-                    padding: '6px 12px',
-                    'font-size': '12px',
-                    'border-radius': '6px',
-                    border: `1px solid ${!defaultGitIsolation() ? theme.accent : theme.border}`,
-                    background: !defaultGitIsolation()
-                      ? `color-mix(in srgb, ${theme.accent} 15%, transparent)`
-                      : theme.bgInput,
-                    color: !defaultGitIsolation() ? theme.accent : theme.fgMuted,
-                    cursor: 'pointer',
-                    'font-weight': !defaultGitIsolation() ? '600' : '400',
-                  }}
-                >
-                  Worktree
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDefaultGitIsolation('direct')}
-                  style={{
-                    flex: '1',
-                    padding: '6px 12px',
-                    'font-size': '12px',
-                    'border-radius': '6px',
-                    border: `1px solid ${defaultGitIsolation() === 'direct' ? theme.accent : theme.border}`,
-                    background:
-                      defaultGitIsolation() === 'direct'
-                        ? `color-mix(in srgb, ${theme.accent} 15%, transparent)`
-                        : theme.bgInput,
-                    color: defaultGitIsolation() === 'direct' ? theme.accent : theme.fgMuted,
-                    cursor: 'pointer',
-                    'font-weight': defaultGitIsolation() === 'direct' ? '600' : '400',
-                  }}
-                >
-                  Direct
-                </button>
-              </div>
+              <SegmentedButtons
+                options={[
+                  { value: 'worktree', label: 'Worktree' },
+                  { value: 'direct', label: 'Direct' },
+                ]}
+                value={defaultGitIsolation()}
+                onChange={setDefaultGitIsolation}
+              />
             </div>
 
             {/* Default base branch */}

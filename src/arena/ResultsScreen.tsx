@@ -81,7 +81,6 @@ export function ResultsScreen() {
         try {
           const files = await invoke<ChangedFile[]>(IPC.GetChangedFiles, {
             worktreePath: c.worktreePath,
-            baseBranch: undefined,
           });
           if (files.length > 0) {
             filesStr = files

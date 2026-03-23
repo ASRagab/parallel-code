@@ -48,7 +48,7 @@ export interface Task {
   closingStatus?: 'closing' | 'removing' | 'error';
   closingError?: string;
   gitIsolation: GitIsolationMode;
-  baseBranch: string;
+  baseBranch?: string;
   skipPermissions?: boolean;
   dockerMode?: boolean;
   dockerImage?: string;
@@ -77,7 +77,7 @@ export interface PersistedTask {
   shellCount: number;
   agentDef: AgentDef | null;
   gitIsolation: GitIsolationMode;
-  baseBranch: string;
+  baseBranch?: string;
   skipPermissions?: boolean;
   dockerMode?: boolean;
   dockerImage?: string;
