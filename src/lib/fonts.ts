@@ -24,7 +24,7 @@ export const LIGATURE_FONTS: ReadonlySet<string> = new Set([
 ]);
 
 export function getTerminalFontFamily(font: string): string {
-  return `'${font}', monospace`;
+  return `'${font.replace(/'/g, "\\'")}', monospace`;
 }
 
 /** Fonts loaded via Google Fonts — always available regardless of local install. */
