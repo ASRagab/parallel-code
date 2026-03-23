@@ -765,7 +765,7 @@ function CollapsedTaskRow(props: { taskId: string }) {
           }}
         >
           <StatusDot status={getTaskDotStatus(props.taskId)} size="sm" />
-          <Show when={t().directMode}>
+          <Show when={t().gitIsolation === 'direct'}>
             <DirectModeBadge branchName={t().branchName} />
           </Show>
           <span style={{ overflow: 'hidden', 'text-overflow': 'ellipsis' }}>{t().name}</span>
@@ -821,7 +821,7 @@ function TaskRow(props: TaskRowProps) {
             }}
           >
             <StatusDot status={getTaskDotStatus(props.taskId)} size="sm" />
-            <Show when={t().directMode}>
+            <Show when={t().gitIsolation === 'direct'}>
               <span
                 style={{
                   'font-size': sf(10),

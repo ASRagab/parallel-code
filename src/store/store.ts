@@ -26,7 +26,6 @@ export {
 } from './agents';
 export {
   createTask,
-  createDirectTask,
   closeTask,
   retryCloseTask,
   mergeTask,
@@ -42,7 +41,7 @@ export {
   spawnShellForTask,
   runBookmarkInTask,
   closeShell,
-  hasDirectModeTask,
+  hasDirectTask,
   collapseTask,
   uncollapseTask,
   getGitHubDropDefaults,

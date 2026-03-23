@@ -15,7 +15,7 @@ interface CloseTaskDialogProps {
 
 export function CloseTaskDialog(props: CloseTaskDialogProps) {
   const [worktreeStatus] = createResource(
-    () => (props.open && !props.task.directMode ? props.task.worktreePath : null),
+    () => (props.open && props.task.gitIsolation === 'worktree' ? props.task.worktreePath : null),
     (path) => invoke<WorktreeStatus>(IPC.GetWorktreeStatus, { worktreePath: path }),
   );
 
@@ -25,13 +25,13 @@ export function CloseTaskDialog(props: CloseTaskDialogProps) {
       title="Close Task"
       message={
         <div>
-          <Show when={props.task.directMode}>
+          <Show when={props.task.gitIsolation === 'direct'}>
             <p style={{ margin: '0' }}>
               This will stop all running agents and shells for this task. No git operations will be
               performed.
             </p>
           </Show>
-          <Show when={!props.task.directMode}>
+          <Show when={props.task.gitIsolation === 'worktree'}>
             <Show
               when={
                 worktreeStatus()?.has_uncommitted_changes || worktreeStatus()?.has_committed_changes
@@ -108,8 +108,8 @@ export function CloseTaskDialog(props: CloseTaskDialogProps) {
           </Show>
         </div>
       }
-      confirmLabel={props.task.directMode ? 'Close' : 'Delete'}
-      danger={!props.task.directMode}
+      confirmLabel={props.task.gitIsolation === 'direct' ? 'Close' : 'Delete'}
+      danger={props.task.gitIsolation === 'worktree'}
       onConfirm={() => {
         props.onDone();
         closeTask(props.task.id);

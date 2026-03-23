@@ -15,7 +15,7 @@ import {
 import { recordMergedLines, recordTaskCompleted } from './completion';
 import type { AgentDef, CreateTaskResult, MergeResult } from '../ipc/types';
 import { parseGitHubUrl, taskNameFromGitHubUrl } from '../lib/github-url';
-import type { Agent, Task } from './types';
+import type { Agent, Task, GitIsolationMode } from './types';
 
 function initTaskInStore(
   taskId: string,
@@ -74,9 +74,11 @@ export interface CreateTaskOptions {
   name: string;
   agentDef: AgentDef;
   projectId: string;
+  gitIsolation: GitIsolationMode;
+  baseBranch: string;
   symlinkDirs?: string[];
-  initialPrompt?: string;
   branchPrefixOverride?: string;
+  initialPrompt?: string;
   githubUrl?: string;
   skipPermissions?: boolean;
   dockerMode?: boolean;
@@ -88,6 +90,8 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
     name,
     agentDef,
     projectId,
+    gitIsolation,
+    baseBranch,
     symlinkDirs = [],
     initialPrompt,
     githubUrl,
@@ -99,96 +103,46 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
   if (!projectRoot) throw new Error('Project not found');
   if (isProjectMissing(projectId)) throw new Error('Project folder not found');
 
-  const branchPrefix = opts.branchPrefixOverride ?? getProjectBranchPrefix(projectId);
-  const result = await invoke<CreateTaskResult>(IPC.CreateTask, {
-    name,
-    projectRoot,
-    symlinkDirs,
-    branchPrefix,
-  });
+  let taskId: string;
+  let branchName: string;
+  let worktreePath: string;
 
-  const agentId = crypto.randomUUID();
-  const task: Task = {
-    id: result.id,
-    name,
-    projectId,
-    branchName: result.branch_name,
-    worktreePath: result.worktree_path,
-    agentIds: [agentId],
-    shellAgentIds: [],
-    notes: '',
-    lastPrompt: '',
-    initialPrompt: initialPrompt ?? undefined,
-    skipPermissions: skipPermissions ?? undefined,
-    dockerMode: dockerMode ?? undefined,
-    dockerImage: dockerImage ?? undefined,
-    githubUrl,
-    savedInitialPrompt: initialPrompt ?? undefined,
-  };
-
-  const agent: Agent = {
-    id: agentId,
-    taskId: result.id,
-    def: agentDef,
-    resumed: false,
-    status: 'running',
-    exitCode: null,
-    signal: null,
-    lastOutput: [],
-    generation: 0,
-  };
-
-  initTaskInStore(result.id, task, agent, projectId, agentDef);
-  return result.id;
-}
-
-export interface CreateDirectTaskOptions {
-  name: string;
-  agentDef: AgentDef;
-  projectId: string;
-  mainBranch: string;
-  initialPrompt?: string;
-  githubUrl?: string;
-  skipPermissions?: boolean;
-  dockerMode?: boolean;
-  dockerImage?: string;
-}
-
-export async function createDirectTask(opts: CreateDirectTaskOptions): Promise<string> {
-  const {
-    name,
-    agentDef,
-    projectId,
-    mainBranch,
-    initialPrompt,
-    githubUrl,
-    skipPermissions,
-    dockerMode,
-    dockerImage,
-  } = opts;
-  if (hasDirectModeTask(projectId)) {
-    throw new Error('A direct-mode task already exists for this project');
+  if (gitIsolation === 'worktree') {
+    const branchPrefix = opts.branchPrefixOverride ?? getProjectBranchPrefix(projectId);
+    const result = await invoke<CreateTaskResult>(IPC.CreateTask, {
+      name,
+      projectRoot,
+      symlinkDirs,
+      branchPrefix,
+      baseBranch,
+    });
+    taskId = result.id;
+    branchName = result.branch_name;
+    worktreePath = result.worktree_path;
+  } else {
+    if (hasDirectTask(projectId)) {
+      throw new Error('A direct-mode task already exists for this project');
+    }
+    taskId = crypto.randomUUID();
+    branchName = baseBranch;
+    worktreePath = projectRoot;
   }
-  const projectRoot = getProjectPath(projectId);
-  if (!projectRoot) throw new Error('Project not found');
-  if (isProjectMissing(projectId)) throw new Error('Project folder not found');
 
-  const id = crypto.randomUUID();
   const agentId = crypto.randomUUID();
-
   const task: Task = {
-    id,
+    id: taskId,
     name,
     projectId,
-    branchName: mainBranch,
-    worktreePath: projectRoot,
+    gitIsolation,
+    baseBranch,
+    branchName,
+    worktreePath,
     agentIds: [agentId],
     shellAgentIds: [],
     notes: '',
     lastPrompt: '',
     initialPrompt: initialPrompt ?? undefined,
     savedInitialPrompt: initialPrompt ?? undefined,
-    directMode: true,
     skipPermissions: skipPermissions ?? undefined,
     dockerMode: dockerMode ?? undefined,
     dockerImage: dockerImage ?? undefined,
@@ -197,7 +151,7 @@ export async function createDirectTask(opts: CreateDirectTaskOptions): Promise<s
 
   const agent: Agent = {
     id: agentId,
-    taskId: id,
+    taskId,
     def: agentDef,
     resumed: false,
     status: 'running',
@@ -207,8 +161,8 @@ export async function createDirectTask(opts: CreateDirectTaskOptions): Promise<s
     generation: 0,
   };
 
-  initTaskInStore(id, task, agent, projectId, agentDef);
-  return id;
+  initTaskInStore(taskId, task, agent, projectId, agentDef);
+  return taskId;
 }
 
 export async function closeTask(taskId: string): Promise<void> {
@@ -238,7 +192,7 @@ export async function closeTask(taskId: string): Promise<void> {
     }
 
     // Skip git cleanup for direct mode (no worktree/branch to remove)
-    if (!task.directMode) {
+    if (task.gitIsolation === 'worktree') {
       // Remove worktree + branch
       await invoke(IPC.DeleteTask, {
         taskId,
@@ -326,7 +280,7 @@ export async function mergeTask(
 ): Promise<void> {
   const task = store.tasks[taskId];
   if (!task || task.closingStatus === 'removing') return;
-  if (task.directMode) return;
+  if (task.gitIsolation === 'direct') return;
 
   const projectRoot = getProjectPath(task.projectId);
   if (!projectRoot) return;
@@ -343,6 +297,7 @@ export async function mergeTask(
   const mergeResult = await invoke<MergeResult>(IPC.MergeTask, {
     projectRoot,
     branchName,
+    baseBranch: task.baseBranch,
     squash: options?.squash ?? false,
     message: options?.message,
     cleanup,
@@ -359,7 +314,7 @@ export async function mergeTask(
 
 export async function pushTask(taskId: string, onOutput: Channel<string>): Promise<void> {
   const task = store.tasks[taskId];
-  if (!task || task.directMode) return;
+  if (!task || task.gitIsolation === 'direct') return;
 
   const projectRoot = getProjectPath(task.projectId);
   if (!projectRoot) return;
@@ -477,12 +432,15 @@ export async function closeShell(taskId: string, shellId: string): Promise<void>
   }
 }
 
-export function hasDirectModeTask(projectId: string): boolean {
+export function hasDirectTask(projectId: string): boolean {
   const allTaskIds = [...store.taskOrder, ...store.collapsedTaskOrder];
   return allTaskIds.some((taskId) => {
     const task = store.tasks[taskId];
     return (
-      task && task.projectId === projectId && task.directMode && task.closingStatus !== 'removing'
+      task &&
+      task.projectId === projectId &&
+      task.gitIsolation === 'direct' &&
+      task.closingStatus !== 'removing'
     );
   });
 }

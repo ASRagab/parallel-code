@@ -194,10 +194,10 @@ export function TaskPanel(props: TaskPanelProps) {
         setShowCloseConfirm(true);
         break;
       case 'merge':
-        if (!props.task.directMode) setShowMergeConfirm(true);
+        if (props.task.gitIsolation === 'worktree') setShowMergeConfirm(true);
         break;
       case 'push':
-        if (!props.task.directMode) setShowPushConfirm(true);
+        if (props.task.gitIsolation === 'worktree') setShowPushConfirm(true);
         break;
     }
   });
@@ -250,7 +250,7 @@ export function TaskPanel(props: TaskPanelProps) {
             }}
           >
             <StatusDot status={getTaskDotStatus(props.task.id)} size="md" />
-            <Show when={props.task.directMode}>
+            <Show when={props.task.gitIsolation === 'direct'}>
               <span
                 style={{
                   'font-size': '11px',
@@ -293,7 +293,7 @@ export function TaskPanel(props: TaskPanelProps) {
             />
           </div>
           <div style={{ display: 'flex', gap: '4px', 'margin-left': '8px', 'flex-shrink': '0' }}>
-            <Show when={!props.task.directMode}>
+            <Show when={props.task.gitIsolation === 'worktree'}>
               <IconButton
                 icon={
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -510,8 +510,8 @@ export function TaskPanel(props: TaskPanelProps) {
             >
               <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm6.25 7.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 7.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm0 0h5.5a2.5 2.5 0 0 0 2.5-2.5v-.5a.75.75 0 0 0-1.5 0v.5a1 1 0 0 1-1 1H5a3.25 3.25 0 1 0 0 6.5h6.25a.75.75 0 0 0 0-1.5H5a1.75 1.75 0 1 1 0-3.5Z" />
             </svg>
-            <Show when={!props.task.directMode}>{props.task.branchName}</Show>
-            <Show when={props.task.directMode}>
+            <Show when={props.task.gitIsolation === 'worktree'}>{props.task.branchName}</Show>
+            <Show when={props.task.gitIsolation === 'direct'}>
               <span
                 style={{
                   'font-size': '10px',
@@ -783,6 +783,7 @@ export function TaskPanel(props: TaskPanelProps) {
                         isActive={props.isActive}
                         onFileClick={(file) => setDiffScrollTarget(file.path)}
                         ref={(el) => (changedFilesRef = el)}
+                        baseBranch={props.task.baseBranch}
                       />
                     </div>
                   </div>
@@ -1453,6 +1454,7 @@ export function TaskPanel(props: TaskPanelProps) {
         worktreePath={props.task.worktreePath}
         projectRoot={getProject(props.task.projectId)?.path}
         branchName={props.task.branchName}
+        baseBranch={props.task.baseBranch}
         onClose={() => setDiffScrollTarget(null)}
         taskId={props.task.id}
         agentId={props.task.agentIds[0]}

@@ -4,7 +4,7 @@ import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { store, setStore } from './core';
 import { closeTask } from './tasks';
-import type { Project } from './types';
+import type { Project, GitIsolationMode } from './types';
 import { sanitizeBranchPrefix } from '../lib/branch-name';
 
 export const PASTEL_HUES = [0, 30, 60, 120, 180, 210, 260, 300, 330];
@@ -62,7 +62,8 @@ export function updateProject(
       | 'color'
       | 'branchPrefix'
       | 'deleteBranchOnClose'
-      | 'defaultDirectMode'
+      | 'defaultGitIsolation'
+      | 'defaultBaseBranch'
       | 'terminalBookmarks'
     >
   >,
@@ -77,8 +78,10 @@ export function updateProject(
         s.projects[idx].branchPrefix = sanitizeBranchPrefix(updates.branchPrefix);
       if (updates.deleteBranchOnClose !== undefined)
         s.projects[idx].deleteBranchOnClose = updates.deleteBranchOnClose;
-      if (updates.defaultDirectMode !== undefined)
-        s.projects[idx].defaultDirectMode = updates.defaultDirectMode;
+      if (updates.defaultGitIsolation !== undefined)
+        s.projects[idx].defaultGitIsolation = updates.defaultGitIsolation;
+      if (updates.defaultBaseBranch !== undefined)
+        s.projects[idx].defaultBaseBranch = updates.defaultBaseBranch;
       if (updates.terminalBookmarks !== undefined)
         s.projects[idx].terminalBookmarks = updates.terminalBookmarks;
     }),
@@ -92,6 +95,16 @@ export function getProjectBranchPrefix(projectId: string): string {
 
 export function getProjectPath(projectId: string): string | undefined {
   return store.projects.find((p) => p.id === projectId)?.path;
+}
+
+export function getProjectDefaultBaseBranch(projectId: string): string | undefined {
+  const project = getProject(projectId);
+  return project?.defaultBaseBranch;
+}
+
+export function getProjectDefaultGitIsolation(projectId: string): GitIsolationMode {
+  const project = getProject(projectId);
+  return project?.defaultGitIsolation ?? 'worktree';
 }
 
 export async function removeProjectWithTasks(projectId: string): Promise<void> {

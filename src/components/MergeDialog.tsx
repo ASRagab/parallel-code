@@ -26,17 +26,24 @@ export function MergeDialog(props: MergeDialogProps) {
   const [rebaseError, setRebaseError] = createSignal('');
   const [rebaseSuccess, setRebaseSuccess] = createSignal(false);
 
-  const [branchLog, { refetch: refetchBranchLog }] = createResource(
-    () => (props.open ? props.task.worktreePath : null),
-    (path) => invoke<string>(IPC.GetBranchLog, { worktreePath: path }),
+  const resourceSource = () =>
+    props.open ? { path: props.task.worktreePath, baseBranch: props.task.baseBranch } : null;
+  const [branchLog, { refetch: refetchBranchLog }] = createResource(resourceSource, (src) =>
+    invoke<string>(IPC.GetBranchLog, { worktreePath: src.path, baseBranch: src.baseBranch }),
   );
   const [worktreeStatus, { refetch: refetchWorktreeStatus }] = createResource(
-    () => (props.open ? props.task.worktreePath : null),
-    (path) => invoke<WorktreeStatus>(IPC.GetWorktreeStatus, { worktreePath: path }),
+    resourceSource,
+    (src) =>
+      invoke<WorktreeStatus>(IPC.GetWorktreeStatus, {
+        worktreePath: src.path,
+        baseBranch: src.baseBranch,
+      }),
   );
-  const [mergeStatus, { refetch: refetchMergeStatus }] = createResource(
-    () => (props.open ? props.task.worktreePath : null),
-    (path) => invoke<MergeStatus>(IPC.CheckMergeStatus, { worktreePath: path }),
+  const [mergeStatus, { refetch: refetchMergeStatus }] = createResource(resourceSource, (src) =>
+    invoke<MergeStatus>(IPC.CheckMergeStatus, {
+      worktreePath: src.path,
+      baseBranch: src.baseBranch,
+    }),
   );
 
   const hasConflicts = () => (mergeStatus()?.conflicting_files.length ?? 0) > 0;
@@ -152,7 +159,10 @@ export function MergeDialog(props: MergeDialogProps) {
                       setRebaseError('');
                       setRebaseSuccess(false);
                       try {
-                        await invoke(IPC.RebaseTask, { worktreePath: props.task.worktreePath });
+                        await invoke(IPC.RebaseTask, {
+                          worktreePath: props.task.worktreePath,
+                          baseBranch: props.task.baseBranch,
+                        });
                         setRebaseSuccess(true);
                         refetchMergeStatus();
                         refetchBranchLog();
@@ -325,6 +335,7 @@ export function MergeDialog(props: MergeDialogProps) {
               worktreePath={props.task.worktreePath}
               isActive={props.open}
               onFileClick={props.onDiffFileClick}
+              baseBranch={props.task.baseBranch}
             />
           </div>
           <label

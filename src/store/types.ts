@@ -1,6 +1,8 @@
 import type { AgentDef, WorktreeStatus } from '../ipc/types';
 import type { LookPreset } from '../lib/look';
 
+export type GitIsolationMode = 'worktree' | 'direct';
+
 export interface TerminalBookmark {
   id: string;
   command: string;
@@ -13,7 +15,8 @@ export interface Project {
   color: string;
   branchPrefix?: string; // default "task" if unset
   deleteBranchOnClose?: boolean; // default true if unset
-  defaultDirectMode?: boolean; // default false if unset
+  defaultGitIsolation?: GitIsolationMode;
+  defaultBaseBranch?: string;
   terminalBookmarks?: TerminalBookmark[];
 }
 
@@ -44,7 +47,8 @@ export interface Task {
   prefillPrompt?: string; // fills prompt input without sending
   closingStatus?: 'closing' | 'removing' | 'error';
   closingError?: string;
-  directMode?: boolean;
+  gitIsolation: GitIsolationMode;
+  baseBranch: string;
   skipPermissions?: boolean;
   dockerMode?: boolean;
   dockerImage?: string;
@@ -72,7 +76,8 @@ export interface PersistedTask {
   lastPrompt: string;
   shellCount: number;
   agentDef: AgentDef | null;
-  directMode?: boolean;
+  gitIsolation: GitIsolationMode;
+  baseBranch: string;
   skipPermissions?: boolean;
   dockerMode?: boolean;
   dockerImage?: string;

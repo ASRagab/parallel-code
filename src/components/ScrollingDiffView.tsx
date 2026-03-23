@@ -19,6 +19,8 @@ interface ScrollingDiffViewProps {
   files: FileDiff[];
   scrollToPath: string | null;
   worktreePath: string;
+  /** Base branch for diff comparison (e.g. 'main', 'develop'). Undefined = auto-detect. */
+  baseBranch?: string;
   searchQuery?: string;
   reviewAnnotations: ReviewAnnotation[];
   onAnnotationAdd: (annotation: ReviewAnnotation) => void;
@@ -299,6 +301,7 @@ function GapView(props: {
   lang: string;
   worktreePath: string;
   filePath: string;
+  baseBranch?: string;
   searchQuery?: string;
   highlightedRange?: HighlightRange | null;
   borderTop?: boolean;
@@ -322,6 +325,7 @@ function GapView(props: {
       const result = await invoke<FileDiffResult>(IPC.GetFileDiff, {
         worktreePath: props.worktreePath,
         filePath: props.filePath,
+        baseBranch: props.baseBranch,
       });
       const fileLines = result.newContent.split('\n');
       const gapLines: DiffLine[] = [];
@@ -392,6 +396,7 @@ function TrailingGap(props: {
   lang: string;
   worktreePath: string;
   filePath: string;
+  baseBranch?: string;
   searchQuery?: string;
   highlightedRange?: HighlightRange | null;
 }) {
@@ -405,6 +410,7 @@ function TrailingGap(props: {
     const result = await invoke<FileDiffResult>(IPC.GetFileDiff, {
       worktreePath: props.worktreePath,
       filePath: props.filePath,
+      baseBranch: props.baseBranch,
     });
     const fileLines = result.newContent.split('\n');
     const totalLines = result.newContent.endsWith('\n') ? fileLines.length - 1 : fileLines.length;
@@ -513,6 +519,7 @@ function TrailingGap(props: {
 function FileSection(props: {
   file: FileDiff;
   worktreePath: string;
+  baseBranch?: string;
   ref: (el: HTMLDivElement) => void;
   dimmed: boolean;
   searchQuery?: string;
@@ -675,6 +682,7 @@ function FileSection(props: {
                 lang={lang()}
                 worktreePath={props.worktreePath}
                 filePath={props.file.path}
+                baseBranch={props.baseBranch}
                 searchQuery={props.searchQuery}
                 highlightedRange={props.highlightedRange}
                 borderBottom
@@ -697,6 +705,7 @@ function FileSection(props: {
                       lang={lang()}
                       worktreePath={props.worktreePath}
                       filePath={props.file.path}
+                      baseBranch={props.baseBranch}
                       searchQuery={props.searchQuery}
                       highlightedRange={props.highlightedRange}
                       borderTop
@@ -774,6 +783,7 @@ function FileSection(props: {
                 lang={lang()}
                 worktreePath={props.worktreePath}
                 filePath={props.file.path}
+                baseBranch={props.baseBranch}
                 searchQuery={props.searchQuery}
                 highlightedRange={props.highlightedRange}
               />
@@ -940,6 +950,7 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
           <FileSection
             file={file}
             worktreePath={props.worktreePath}
+            baseBranch={props.baseBranch}
             ref={(el) => sectionRefs.set(file.path, el)}
             dimmed={dimOthers() && file.path !== props.scrollToPath}
             searchQuery={props.searchQuery}

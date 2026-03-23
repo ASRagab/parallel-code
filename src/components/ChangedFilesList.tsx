@@ -15,6 +15,8 @@ interface ChangedFilesListProps {
   projectRoot?: string;
   /** Branch name for branch-based fallback when worktree doesn't exist */
   branchName?: string | null;
+  /** Base branch for diff comparison (e.g. 'main', 'develop'). Undefined = auto-detect. */
+  baseBranch?: string;
 }
 
 export function ChangedFilesList(props: ChangedFilesListProps) {
@@ -60,6 +62,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     const path = props.worktreePath;
     const projectRoot = props.projectRoot;
     const branchName = props.branchName;
+    const baseBranch = props.baseBranch;
     if (!props.isActive) return;
     let cancelled = false;
     let inFlight = false;
@@ -74,6 +77,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
           try {
             const result = await invoke<ChangedFile[]>(IPC.GetChangedFiles, {
               worktreePath: path,
+              baseBranch,
             });
             if (!cancelled) setFiles(result);
             return;
@@ -89,6 +93,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
             const result = await invoke<ChangedFile[]>(IPC.GetChangedFilesFromBranch, {
               projectRoot,
               branchName,
+              baseBranch,
             });
             if (!cancelled) setFiles(result);
           } catch {

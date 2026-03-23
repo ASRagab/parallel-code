@@ -74,7 +74,8 @@ export async function saveState(): Promise<void> {
       lastPrompt: task.lastPrompt,
       shellCount: task.shellAgentIds.length,
       agentDef: firstAgent?.def ?? null,
-      directMode: task.directMode,
+      gitIsolation: task.gitIsolation,
+      baseBranch: task.baseBranch,
       skipPermissions: task.skipPermissions,
       dockerMode: task.dockerMode,
       dockerImage: task.dockerImage,
@@ -100,7 +101,8 @@ export async function saveState(): Promise<void> {
       lastPrompt: task.lastPrompt,
       shellCount: task.shellAgentIds.length,
       agentDef: firstAgent?.def ?? task.savedAgentDef ?? null,
-      directMode: task.directMode,
+      gitIsolation: task.gitIsolation,
+      baseBranch: task.baseBranch,
       skipPermissions: task.skipPermissions,
       dockerMode: task.dockerMode,
       dockerImage: task.dockerImage,
@@ -225,8 +227,15 @@ export async function loadState(): Promise<void> {
   const lastAgentId: string | null = raw.lastAgentId ?? null;
 
   // Assign colors to projects that don't have one (backward compat)
+  // Also migrate defaultDirectMode -> defaultGitIsolation
   for (const p of projects) {
     if (!p.color) p.color = randomPastelColor();
+    // Migrate defaultDirectMode -> defaultGitIsolation
+    const legacy = p as Project & { defaultDirectMode?: boolean };
+    if (legacy.defaultDirectMode !== undefined && p.defaultGitIsolation === undefined) {
+      p.defaultGitIsolation = legacy.defaultDirectMode ? 'direct' : undefined;
+      delete (legacy as unknown as Record<string, unknown>).defaultDirectMode;
+    }
   }
 
   if (projects.length === 0 && raw.projectRoot) {
@@ -346,6 +355,7 @@ export async function loadState(): Promise<void> {
           shellAgentIds.push(crypto.randomUUID());
         }
 
+        const legacy = pt as PersistedTask & { directMode?: boolean };
         const task: Task = {
           id: pt.id,
           name: pt.name,
@@ -356,7 +366,8 @@ export async function loadState(): Promise<void> {
           shellAgentIds,
           notes: pt.notes,
           lastPrompt: pt.lastPrompt,
-          directMode: pt.directMode,
+          gitIsolation: legacy.gitIsolation ?? (legacy.directMode ? 'direct' : 'worktree'),
+          baseBranch: legacy.baseBranch ?? pt.branchName,
           skipPermissions: pt.skipPermissions === true,
           dockerMode: pt.dockerMode === true ? true : undefined,
           dockerImage: typeof pt.dockerImage === 'string' ? pt.dockerImage : undefined,
@@ -405,6 +416,7 @@ export async function loadState(): Promise<void> {
         const agentDef = pt.agentDef;
         enrichAgentDef(agentDef, s.availableAgents);
 
+        const legacyCollapsed = pt as PersistedTask & { directMode?: boolean };
         const task: Task = {
           id: pt.id,
           name: pt.name,
@@ -415,7 +427,9 @@ export async function loadState(): Promise<void> {
           shellAgentIds: [],
           notes: pt.notes,
           lastPrompt: pt.lastPrompt,
-          directMode: pt.directMode,
+          gitIsolation:
+            legacyCollapsed.gitIsolation ?? (legacyCollapsed.directMode ? 'direct' : 'worktree'),
+          baseBranch: legacyCollapsed.baseBranch ?? pt.branchName,
           skipPermissions: pt.skipPermissions === true,
           dockerMode: pt.dockerMode === true ? true : undefined,
           dockerImage: typeof pt.dockerImage === 'string' ? pt.dockerImage : undefined,

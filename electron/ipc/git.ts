@@ -192,7 +192,11 @@ async function getCurrentBranchName(repoRoot: string): Promise<string> {
   return stdout.trim();
 }
 
-async function detectMergeBase(repoRoot: string, head?: string): Promise<string> {
+async function detectMergeBase(
+  repoRoot: string,
+  head?: string,
+  baseBranch?: string,
+): Promise<string> {
   const key = cacheKey(repoRoot);
   const cached = mergeBaseCache.get(key);
   if (cached) {
@@ -200,7 +204,7 @@ async function detectMergeBase(repoRoot: string, head?: string): Promise<string>
     mergeBaseCache.delete(key);
   }
 
-  const mainBranch = await detectMainBranch(repoRoot);
+  const mainBranch = baseBranch ?? (await detectMainBranch(repoRoot));
   let result: string;
   try {
     const { stdout } = await exec('git', ['merge-base', mainBranch, head ?? 'HEAD'], {
@@ -361,6 +365,7 @@ export async function createWorktree(
   repoRoot: string,
   branchName: string,
   symlinkDirs: string[],
+  baseBranch?: string,
   forceClean = false,
 ): Promise<{ path: string; branch: string }> {
   const worktreePath = `${repoRoot}/.worktrees/${branchName}`;
@@ -387,7 +392,9 @@ export async function createWorktree(
   }
 
   // Create fresh worktree with new branch
-  await exec('git', ['worktree', 'add', '-b', branchName, worktreePath], { cwd: repoRoot });
+  const worktreeArgs = ['worktree', 'add', '-b', branchName, worktreePath];
+  if (baseBranch) worktreeArgs.push(baseBranch);
+  await exec('git', worktreeArgs, { cwd: repoRoot });
 
   // Symlink selected directories
   for (const name of symlinkDirs) {
@@ -477,10 +484,23 @@ export async function getCurrentBranch(projectRoot: string): Promise<string> {
   return getCurrentBranchName(projectRoot);
 }
 
-export async function getChangedFiles(worktreePath: string): Promise<ChangedFile[]> {
+export async function getBranches(projectRoot: string): Promise<string[]> {
+  const { stdout } = await exec('git', ['branch', '--list', '--format=%(refname:short)'], {
+    cwd: projectRoot,
+  });
+  return stdout
+    .split('\n')
+    .map((b) => b.trim())
+    .filter(Boolean);
+}
+
+export async function getChangedFiles(
+  worktreePath: string,
+  baseBranch?: string,
+): Promise<ChangedFile[]> {
   // Pin HEAD first so merge-base and diff use the same immutable commit
   const headHash = await pinHead(worktreePath);
-  const base = await detectMergeBase(worktreePath, headHash).catch(() => headHash);
+  const base = await detectMergeBase(worktreePath, headHash, baseBranch).catch(() => headHash);
 
   // git diff --raw --numstat <base> <head> — committed changes only (immutable)
   let diffStr = '';
@@ -585,9 +605,9 @@ export async function getChangedFiles(worktreePath: string): Promise<ChangedFile
   return files;
 }
 
-export async function getAllFileDiffs(worktreePath: string): Promise<string> {
+export async function getAllFileDiffs(worktreePath: string, baseBranch?: string): Promise<string> {
   const headHash = await pinHead(worktreePath);
-  const base = await detectMergeBase(worktreePath, headHash).catch(() => headHash);
+  const base = await detectMergeBase(worktreePath, headHash, baseBranch).catch(() => headHash);
 
   // Single combined diff: merge-base to working tree.
   // This avoids duplicate entries when a file has both committed and uncommitted changes.
@@ -651,8 +671,9 @@ export async function getAllFileDiffs(worktreePath: string): Promise<string> {
 export async function getAllFileDiffsFromBranch(
   projectRoot: string,
   branchName: string,
+  baseBranch?: string,
 ): Promise<string> {
-  const mainBranch = await detectMainBranch(projectRoot);
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
   try {
     const { stdout } = await exec('git', ['diff', '-U3', `${mainBranch}...${branchName}`], {
       cwd: projectRoot,
@@ -670,10 +691,14 @@ interface FileDiffResult {
   newContent: string;
 }
 
-export async function getFileDiff(worktreePath: string, filePath: string): Promise<FileDiffResult> {
+export async function getFileDiff(
+  worktreePath: string,
+  filePath: string,
+  baseBranch?: string,
+): Promise<FileDiffResult> {
   // Pin HEAD first so merge-base and all reads use the same immutable commit
   const headHash = await pinHead(worktreePath);
-  const base = await detectMergeBase(worktreePath, headHash).catch(() => headHash);
+  const base = await detectMergeBase(worktreePath, headHash, baseBranch).catch(() => headHash);
 
   // Old content from merge base
   let oldContent = '';
@@ -788,6 +813,7 @@ export async function getFileDiff(worktreePath: string, filePath: string): Promi
 
 export async function getWorktreeStatus(
   worktreePath: string,
+  baseBranch?: string,
 ): Promise<{ has_committed_changes: boolean; has_uncommitted_changes: boolean }> {
   const { stdout: statusOut } = await exec('git', ['status', '--porcelain'], {
     cwd: worktreePath,
@@ -795,7 +821,7 @@ export async function getWorktreeStatus(
   });
   const hasUncommittedChanges = statusOut.trim().length > 0;
 
-  const mainBranch = await detectMainBranch(worktreePath).catch(() => 'HEAD');
+  const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath).catch(() => 'HEAD'));
   let hasCommittedChanges = false;
   try {
     const { stdout: logOut } = await exec('git', ['log', `${mainBranch}..HEAD`, '--oneline'], {
@@ -826,8 +852,9 @@ export async function discardUncommitted(worktreePath: string): Promise<void> {
 
 export async function checkMergeStatus(
   worktreePath: string,
+  baseBranch?: string,
 ): Promise<{ main_ahead_count: number; conflicting_files: string[] }> {
-  const mainBranch = await detectMainBranch(worktreePath);
+  const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath));
 
   let mainAheadCount = 0;
   try {
@@ -862,11 +889,12 @@ export async function mergeTask(
   squash: boolean,
   message: string | null,
   cleanup: boolean,
+  baseBranch?: string,
 ): Promise<{ main_branch: string; lines_added: number; lines_removed: number }> {
   const lockKey = await detectRepoLockKey(projectRoot).catch(() => projectRoot);
 
   return withWorktreeLock(lockKey, async () => {
-    const mainBranch = await detectMainBranch(projectRoot);
+    const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
     const { linesAdded, linesRemoved } = await computeBranchDiffStats(
       projectRoot,
       mainBranch,
@@ -941,8 +969,8 @@ export async function mergeTask(
   });
 }
 
-export async function getBranchLog(worktreePath: string): Promise<string> {
-  const mainBranch = await detectMainBranch(worktreePath).catch(() => 'HEAD');
+export async function getBranchLog(worktreePath: string, baseBranch?: string): Promise<string> {
+  const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath).catch(() => 'HEAD'));
   try {
     const { stdout } = await exec(
       'git',
@@ -961,8 +989,9 @@ export async function getBranchLog(worktreePath: string): Promise<string> {
 export async function getChangedFilesFromBranch(
   projectRoot: string,
   branchName: string,
+  baseBranch?: string,
 ): Promise<ChangedFile[]> {
-  const mainBranch = await detectMainBranch(projectRoot);
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
 
   let diffStr = '';
   try {
@@ -999,8 +1028,9 @@ export async function getFileDiffFromBranch(
   projectRoot: string,
   branchName: string,
   filePath: string,
+  baseBranch?: string,
 ): Promise<FileDiffResult> {
-  const mainBranch = await detectMainBranch(projectRoot);
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
 
   let diff = '';
   try {
@@ -1107,11 +1137,11 @@ export function pushTask(
   });
 }
 
-export async function rebaseTask(worktreePath: string): Promise<void> {
+export async function rebaseTask(worktreePath: string, baseBranch?: string): Promise<void> {
   const lockKey = await detectRepoLockKey(worktreePath).catch(() => worktreePath);
 
   return withWorktreeLock(lockKey, async () => {
-    const mainBranch = await detectMainBranch(worktreePath);
+    const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath));
     try {
       await exec('git', ['rebase', mainBranch], { cwd: worktreePath });
     } catch (e) {

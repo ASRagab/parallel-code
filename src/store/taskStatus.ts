@@ -591,6 +591,7 @@ async function refreshTaskGitStatus(taskId: string): Promise<void> {
   try {
     const status = await invoke<WorktreeStatus>(IPC.GetWorktreeStatus, {
       worktreePath: task.worktreePath,
+      baseBranch: task.baseBranch,
     });
     setStore('taskGitStatus', taskId, status);
   } catch {
