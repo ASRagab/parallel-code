@@ -433,7 +433,12 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   }
 
   return (
-    <Dialog open={props.open} onClose={props.onClose} width="420px" panelStyle={{ gap: '20px' }}>
+    <Dialog
+      open={props.open}
+      onClose={props.onClose}
+      width={store.availableAgents.length > 8 ? '540px' : '420px'}
+      panelStyle={{ gap: '20px' }}
+    >
       <form
         ref={formRef}
         onSubmit={handleSubmit}
