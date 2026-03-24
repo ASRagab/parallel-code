@@ -4,7 +4,7 @@ import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { store, setStore } from './core';
 import { closeTask } from './tasks';
-import type { Project, GitIsolationMode } from './types';
+import type { Project } from './types';
 import { sanitizeBranchPrefix } from '../lib/branch-name';
 
 export const PASTEL_HUES = [0, 30, 60, 120, 180, 210, 260, 300, 330];
@@ -95,16 +95,6 @@ export function getProjectBranchPrefix(projectId: string): string {
 
 export function getProjectPath(projectId: string): string | undefined {
   return store.projects.find((p) => p.id === projectId)?.path;
-}
-
-export function getProjectDefaultBaseBranch(projectId: string): string | undefined {
-  const project = getProject(projectId);
-  return project?.defaultBaseBranch;
-}
-
-export function getProjectDefaultGitIsolation(projectId: string): GitIsolationMode {
-  const project = getProject(projectId);
-  return project?.defaultGitIsolation ?? 'worktree';
 }
 
 export async function removeProjectWithTasks(projectId: string): Promise<void> {
