@@ -876,12 +876,18 @@ export async function getFileDiff(
 export async function getWorktreeStatus(
   worktreePath: string,
   baseBranch?: string,
-): Promise<{ has_committed_changes: boolean; has_uncommitted_changes: boolean }> {
+): Promise<{
+  has_committed_changes: boolean;
+  has_uncommitted_changes: boolean;
+  current_branch: string | null;
+}> {
   const { stdout: statusOut } = await exec('git', ['status', '--porcelain'], {
     cwd: worktreePath,
     maxBuffer: MAX_BUFFER,
   });
   const hasUncommittedChanges = statusOut.trim().length > 0;
+
+  const currentBranch = await getCurrentBranchName(worktreePath).catch(() => null);
 
   const mainBranch = await resolveComparisonRef(
     worktreePath,
@@ -900,6 +906,7 @@ export async function getWorktreeStatus(
   return {
     has_committed_changes: hasCommittedChanges,
     has_uncommitted_changes: hasUncommittedChanges,
+    current_branch: currentBranch,
   };
 }
 
@@ -963,6 +970,28 @@ export async function mergeTask(
 
   return withWorktreeLock(lockKey, async () => {
     const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
+
+    // Safety check: verify the worktree is actually on the expected branch.
+    // AI agents sometimes check out a different branch (or detach HEAD),
+    // and merging the original branch would silently discard their work.
+    const worktreePath = path.join(projectRoot, '.worktrees', branchName);
+    if (fs.existsSync(worktreePath)) {
+      const actualBranch = await getCurrentBranchName(worktreePath).catch(() => null);
+      if (actualBranch === null) {
+        throw new Error(
+          `The worktree for '${branchName}' has a detached HEAD. ` +
+            `Merging would use the stale branch ref and discard work. ` +
+            `Please check out '${branchName}' in the worktree first.`,
+        );
+      }
+      if (actualBranch !== branchName) {
+        throw new Error(
+          `Branch mismatch: the worktree is on '${actualBranch}' but the task expects '${branchName}'. ` +
+            `Changes on '${actualBranch}' would be lost. Please check out '${branchName}' in the worktree first, or update the task branch.`,
+        );
+      }
+    }
+
     const comparisonRef = await resolveComparisonRef(projectRoot, mainBranch);
     const { linesAdded, linesRemoved } = await computeBranchDiffStats(
       projectRoot,

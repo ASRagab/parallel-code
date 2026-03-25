@@ -31,6 +31,7 @@ export {
   mergeTask,
   pushTask,
   updateTaskName,
+  updateTaskBranch,
   updateTaskNotes,
   sendPrompt,
   setLastPrompt,

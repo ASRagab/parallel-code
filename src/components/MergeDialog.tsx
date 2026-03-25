@@ -1,7 +1,7 @@
 import { Show, For, createSignal, createResource, createEffect } from 'solid-js';
 import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
-import { store, mergeTask, sendPrompt } from '../store/store';
+import { store, mergeTask, sendPrompt, updateTaskBranch } from '../store/store';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ChangedFilesList } from './ChangedFilesList';
 import { theme, bannerStyle } from '../lib/theme';
@@ -48,6 +48,13 @@ export function MergeDialog(props: MergeDialogProps) {
 
   const hasConflicts = () => (mergeStatus()?.conflicting_files.length ?? 0) > 0;
   const hasCommittedChangesToMerge = () => worktreeStatus()?.has_committed_changes ?? false;
+  const hasBranchMismatch = () => {
+    const status = worktreeStatus();
+    if (!status) return false;
+    const current = status.current_branch;
+    // null means detached HEAD — also a mismatch
+    return current === null || current !== props.task.branchName;
+  };
 
   createEffect(() => {
     if (props.open) {
@@ -76,6 +83,60 @@ export function MergeDialog(props: MergeDialogProps) {
       autoFocusCancel
       message={
         <div>
+          <Show when={hasBranchMismatch()}>
+            <div
+              style={{
+                ...bannerStyle(theme.error),
+                'margin-bottom': '12px',
+                'font-size': '12px',
+              }}
+            >
+              <Show when={worktreeStatus()?.current_branch === null}>
+                <div style={{ 'font-weight': '600' }}>
+                  Worktree has a detached HEAD — merging '{props.task.branchName}' would discard
+                  work.
+                </div>
+              </Show>
+              <Show when={worktreeStatus()?.current_branch !== null}>
+                <div style={{ 'font-weight': '600' }}>
+                  The worktree is on '{worktreeStatus()?.current_branch}' but this task tracks '
+                  {props.task.branchName}'.
+                </div>
+                <div
+                  style={{
+                    'margin-top': '8px',
+                    display: 'flex',
+                    'align-items': 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = worktreeStatus()?.current_branch;
+                      if (current) {
+                        updateTaskBranch(props.task.id, current);
+                        refetchBranchLog();
+                        refetchMergeStatus();
+                        refetchWorktreeStatus();
+                      }
+                    }}
+                    style={{
+                      padding: '4px 12px',
+                      background: theme.bgInput,
+                      border: `1px solid ${theme.border}`,
+                      'border-radius': '6px',
+                      color: theme.fg,
+                      cursor: 'pointer',
+                      'font-size': '12px',
+                    }}
+                  >
+                    Use '{worktreeStatus()?.current_branch}'
+                  </button>
+                </div>
+              </Show>
+            </div>
+          </Show>
           <Show when={worktreeStatus()?.has_uncommitted_changes}>
             <div
               style={{
@@ -422,7 +483,9 @@ export function MergeDialog(props: MergeDialogProps) {
           </Show>
         </div>
       }
-      confirmDisabled={merging() || hasConflicts() || !hasCommittedChangesToMerge()}
+      confirmDisabled={
+        merging() || hasConflicts() || !hasCommittedChangesToMerge() || hasBranchMismatch()
+      }
       confirmLoading={merging()}
       confirmLabel={merging() ? 'Merging...' : squash() ? 'Squash Merge' : 'Merge'}
       onConfirm={() => {

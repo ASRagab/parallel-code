@@ -42,6 +42,7 @@ export interface ChangedFile {
 export interface WorktreeStatus {
   has_committed_changes: boolean;
   has_uncommitted_changes: boolean;
+  current_branch: string | null;
 }
 
 export interface MergeStatus {

@@ -330,6 +330,10 @@ export function updateTaskName(taskId: string, name: string): void {
   setStore('tasks', taskId, 'name', name);
 }
 
+export function updateTaskBranch(taskId: string, branchName: string): void {
+  setStore('tasks', taskId, 'branchName', branchName);
+}
+
 export function updateTaskNotes(taskId: string, notes: string): void {
   setStore('tasks', taskId, 'notes', notes);
 }
