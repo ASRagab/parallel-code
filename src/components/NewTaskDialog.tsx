@@ -16,6 +16,7 @@ import {
   setPrefillPrompt,
   setDockerAvailable,
   setDockerImage,
+  showNotification,
 } from '../store/store';
 import type { GitIsolationMode } from '../store/types';
 import { toBranchName, sanitizeBranchPrefix } from '../lib/branch-name';
@@ -46,6 +47,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   const [gitIsolation, setGitIsolation] = createSignal<GitIsolationMode>('worktree');
   const [baseBranch, setBaseBranch] = createSignal('');
   const [branches, setBranches] = createSignal<string[]>([]);
+  const [branchesLoading, setBranchesLoading] = createSignal(false);
   const [skipPermissions, setSkipPermissions] = createSignal(false);
   const [dockerMode, setDockerMode] = createSignal(false);
   const [dockerImageReady, setDockerImageReady] = createSignal<boolean | null>(null); // null = unknown
@@ -58,7 +60,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   let buildOutputRef!: HTMLPreElement;
 
   const focusableSelector =
-    'textarea:not(:disabled):not([tabindex="-1"]), input:not(:disabled):not([tabindex="-1"]), select:not(:disabled):not([tabindex="-1"]), button:not(:disabled):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])';
+    'textarea:not(:disabled), input:not(:disabled), select:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
   function navigateDialogFields(direction: 'up' | 'down'): void {
     if (!formRef) return;
@@ -110,16 +112,11 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     if (!props.open) return;
 
     // Reset signals for a fresh dialog
-    // selectedProjectId must be reset to null so the branch-fetching effect
-    // re-triggers even when the same project is selected again on reopen.
-    setSelectedProjectId(null);
     setPrompt('');
     setName('');
     setError('');
     setLoading(false);
     setGitIsolation('worktree');
-    setBaseBranch('');
-    setBranches([]);
     setSkipPermissions(false);
     setDockerMode(false);
     setDockerImageReady(null);
@@ -220,34 +217,55 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     setBranchPrefix(pid ? getProjectBranchPrefix(pid) : 'task');
   });
 
-  // Fetch branches and set default base branch when project changes
+  // Fetch branches on every dialog open and on project change (D-02 merged effect)
   createEffect(() => {
+    // D-02, D-03: All reactive reads synchronous before any async code
+    const open = props.open;
     const pid = selectedProjectId();
     const projectPath = pid ? getProjectPath(pid) : undefined;
     let cancelled = false;
 
-    if (!projectPath) {
+    if (!open || !projectPath) {
       setBranches([]);
       setBaseBranch('');
+      setBranchesLoading(false);
+      // D-03: onCleanup registered synchronously even on early return
+      onCleanup(() => {
+        cancelled = true;
+      });
       return;
     }
 
-    void (async () => {
-      try {
-        const [branchList, mainBranch] = await Promise.all([
-          invoke<string[]>(IPC.GetBranches, { projectRoot: projectPath }),
-          invoke<string>(IPC.GetMainBranch, { projectRoot: projectPath }),
-        ]);
-        if (cancelled) return;
-        setBranches(branchList);
-        const proj = pid ? getProject(pid) : undefined;
-        setBaseBranch(proj?.defaultBaseBranch ?? mainBranch);
-      } catch {
-        if (cancelled) return;
-        setBranches([]);
-      }
-    })();
+    // D-01: Clear list and show spinner immediately on every open
+    setBranches([]);
+    setBranchesLoading(true);
 
+    const doFetch = async () => {
+      const [branchList, mainBranch] = await Promise.all([
+        invoke<string[]>(IPC.GetBranches, { projectRoot: projectPath }),
+        invoke<string>(IPC.GetMainBranch, { projectRoot: projectPath }),
+      ]);
+      if (cancelled) return;
+      // Set both in same synchronous sequence — avoids SolidJS #2241 select value race
+      setBranches(branchList);
+      const proj = pid ? getProject(pid) : undefined;
+      setBaseBranch(proj?.defaultBaseBranch ?? mainBranch);
+      setBranchesLoading(false);
+    };
+
+    void doFetch().catch(async () => {
+      // D-04: Retry once silently
+      if (cancelled) return;
+      try {
+        await doFetch();
+      } catch (err) {
+        if (cancelled) return;
+        setBranchesLoading(false);
+        showNotification(`Failed to load branches: ${String(err)}`);
+      }
+    });
+
+    // D-03: onCleanup MUST be synchronous in effect body, not inside the IIFE
     onCleanup(() => {
       cancelled = true;
     });
@@ -402,10 +420,17 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
           projectRoot: projectPath,
         });
         if (currentBranch !== baseBranch()) {
-          setError(
-            `Repository is on branch "${currentBranch}", not "${baseBranch()}". Please checkout ${baseBranch()} first.`,
-          );
-          return;
+          try {
+            await invoke(IPC.CheckoutBranch, {
+              projectRoot: projectPath,
+              branchName: baseBranch(),
+            });
+          } catch (err) {
+            setError(
+              `Cannot switch to "${baseBranch()}": ${err instanceof Error ? err.message : String(err)}`,
+            );
+            return;
+          }
         }
       }
 
@@ -439,7 +464,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     <Dialog
       open={props.open}
       onClose={props.onClose}
-      width={store.availableAgents.length > 8 ? '580px' : '500px'}
+      width={store.availableAgents.length > 8 ? '540px' : '420px'}
       panelStyle={{ gap: '20px' }}
     >
       <form
@@ -630,11 +655,20 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         >
           <label style={sectionLabelStyle}>
             {gitIsolation() === 'worktree' ? 'Base branch' : 'Branch'}
+            <Show when={branchesLoading()}>
+              {' '}
+              <span
+                class="inline-spinner"
+                aria-hidden="true"
+                style={{ 'vertical-align': 'middle' }}
+              />
+            </Show>
           </label>
           <select
             class="input-field"
             value={baseBranch()}
             onChange={(e) => setBaseBranch(e.currentTarget.value)}
+            disabled={branchesLoading()}
             style={{
               background: theme.bgInput,
               border: `1px solid ${theme.border}`,
@@ -644,6 +678,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
               'font-size': '13px',
               'font-family': "'JetBrains Mono', monospace",
               outline: 'none',
+              opacity: branchesLoading() ? '0.5' : '1',
             }}
           >
             <For each={branches()}>{(b) => <option value={b}>{b}</option>}</For>

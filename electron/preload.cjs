@@ -35,6 +35,7 @@ const ALLOWED_CHANNELS = new Set([
   'rebase_task',
   'get_main_branch',
   'get_current_branch',
+  'checkout_branch',
   'get_branches',
   'check_is_git_repo',
   // Persistence

@@ -30,6 +30,7 @@ export enum IPC {
   RebaseTask = 'rebase_task',
   GetMainBranch = 'get_main_branch',
   GetCurrentBranch = 'get_current_branch',
+  CheckoutBranch = 'checkout_branch',
   GetBranches = 'get_branches',
   CheckIsGitRepo = 'check_is_git_repo',
   CommitAll = 'commit_all',

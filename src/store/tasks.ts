@@ -114,7 +114,7 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
       projectRoot,
       symlinkDirs,
       branchPrefix,
-      baseBranch,
+      baseBranch: baseBranch || undefined,
     });
     taskId = result.id;
     branchName = result.branch_name;
@@ -134,7 +134,7 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
     name,
     projectId,
     gitIsolation,
-    baseBranch,
+    baseBranch: baseBranch || undefined,
     branchName,
     worktreePath,
     agentIds: [agentId],
