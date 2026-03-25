@@ -45,6 +45,7 @@ import {
   removeWorktree,
   isGitRepo,
   getBranches,
+  checkoutBranch,
 } from './git.js';
 import { createTask, deleteTask } from './tasks.js';
 import { listAgents } from './agents.js';
@@ -326,6 +327,11 @@ export function registerAllHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.GetCurrentBranch, (_e, args) => {
     validatePath(args.projectRoot, 'projectRoot');
     return getCurrentBranch(args.projectRoot);
+  });
+  ipcMain.handle(IPC.CheckoutBranch, (_e, args) => {
+    validatePath(args.projectRoot, 'projectRoot');
+    validateBranchName(args.branchName, 'branchName');
+    return checkoutBranch(args.projectRoot, args.branchName);
   });
   ipcMain.handle(IPC.CheckIsGitRepo, (_e, args) => {
     validatePath(args.path, 'path');

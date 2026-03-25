@@ -148,7 +148,7 @@ export function TerminalView(props: TerminalViewProps) {
     });
 
     fitAddon.fit();
-    registerTerminal(agentId, containerRef, fitAddon, term);
+    registerTerminal(agentId, containerRef, fitAddon);
 
     if (props.autoFocus) {
       term.focus();

@@ -1,10 +1,8 @@
 import type { FitAddon } from '@xterm/addon-fit';
-import type { Terminal } from '@xterm/xterm';
 
 interface TerminalEntry {
   container: HTMLElement;
   fitAddon: FitAddon;
-  term: Terminal;
   dirty: boolean;
 }
 
@@ -43,19 +41,7 @@ function flush() {
     if (!entry.dirty) continue;
     entry.dirty = false;
 
-    // xterm.js scroll position workaround (xtermjs/xterm.js#5096):
-    // fit() → resize() → Viewport._sync() can reset scrollTop to 0 when
-    // it encounters a transient dimension mismatch. Save the viewport
-    // scroll position before fitting and restore it if clobbered.
-    const buf = entry.term.buffer.active;
-    const wasScrolledUp = buf.viewportY < buf.baseY;
-    const savedViewportY = buf.viewportY;
-
     entry.fitAddon.fit();
-
-    if (wasScrolledUp && buf.viewportY !== savedViewportY) {
-      entry.term.scrollToLine(Math.min(savedViewportY, buf.baseY));
-    }
 
     didWork = true;
   }
@@ -87,13 +73,8 @@ function scheduleFlush() {
   }, THROTTLE_MS);
 }
 
-export function registerTerminal(
-  id: string,
-  container: HTMLElement,
-  fitAddon: FitAddon,
-  term: Terminal,
-): void {
-  entries.set(id, { container, fitAddon, term, dirty: false });
+export function registerTerminal(id: string, container: HTMLElement, fitAddon: FitAddon): void {
+  entries.set(id, { container, fitAddon, dirty: false });
   resizeObserver.observe(container);
   intersectionObserver.observe(container);
 }

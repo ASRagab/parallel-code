@@ -6,6 +6,8 @@ node_modules/
 .worktrees/
 .claude/
 .letta/
+.planning/
+CLAUDE.md
 package-lock.json
 *.AppImage
 *.deb

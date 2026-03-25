@@ -192,79 +192,30 @@ async function getCurrentBranchName(repoRoot: string): Promise<string> {
   return stdout.trim();
 }
 
-/**
- * Resolve a branch name to whichever ref is further ahead for comparisons:
- * local branch or its remote-tracking counterpart.  Using the most advanced
- * ref prevents diffs from showing files already present on the other side.
- * Falls back to the bare name when no remote ref exists (local-only repos).
- *
- * Note: for merge-base computation, use detectMergeBase() directly — it
- * compares both local and remote merge-bases to pick the closest one.
- */
-async function resolveComparisonRef(repoRoot: string, branch: string): Promise<string> {
-  if (branch.includes('/')) return branch;
-  if (!(await remoteTrackingRefExists(repoRoot, branch))) return branch;
-
-  const remote = `origin/${branch}`;
-  try {
-    const { stdout } = await exec('git', ['rev-list', '--count', `${branch}..${remote}`], {
-      cwd: repoRoot,
-    });
-    const originAhead = parseInt(stdout.trim(), 10) || 0;
-    return originAhead > 0 ? remote : branch;
-  } catch {
-    return branch;
-  }
-}
-
 async function detectMergeBase(
   repoRoot: string,
   head?: string,
   baseBranch?: string,
 ): Promise<string> {
-  const branch = baseBranch ?? (await detectMainBranch(repoRoot));
-  const headRef = head ?? 'HEAD';
-  const key = `${cacheKey(repoRoot)}:${branch}`;
+  const mainBranch = baseBranch ?? (await detectMainBranch(repoRoot));
+  const key = `${cacheKey(repoRoot)}:${mainBranch}`;
   const cached = mergeBaseCache.get(key);
   if (cached) {
     if (cached.expiresAt > Date.now()) return cached.value;
     mergeBaseCache.delete(key);
   }
 
-  // When a remote-tracking ref exists, compute merge-base against both the
-  // local branch and origin/<branch>, then pick whichever is closer to HEAD.
-  // This avoids showing extra files when local and remote have diverged.
-  const refs = [branch];
-  if (!branch.includes('/') && (await remoteTrackingRefExists(repoRoot, branch))) {
-    refs.push(`origin/${branch}`);
+  let result: string;
+  try {
+    const { stdout } = await exec('git', ['merge-base', mainBranch, head ?? 'HEAD'], {
+      cwd: repoRoot,
+    });
+    const hash = stdout.trim();
+    result = hash || mainBranch;
+  } catch {
+    result = mainBranch;
   }
 
-  let best: string | null = null;
-  for (const ref of refs) {
-    try {
-      const { stdout } = await exec('git', ['merge-base', ref, headRef], { cwd: repoRoot });
-      const mb = stdout.trim();
-      if (!mb) continue;
-      if (!best) {
-        best = mb;
-        continue;
-      }
-      if (mb === best) continue;
-      // Two different merge-bases: pick the descendant (closer to HEAD).
-      // `--is-ancestor A B` succeeds when A is reachable from B.
-      const aIsAncestor = await exec('git', ['merge-base', '--is-ancestor', best, mb], {
-        cwd: repoRoot,
-      }).then(
-        () => true,
-        () => false,
-      );
-      if (aIsAncestor) best = mb;
-    } catch {
-      /* ref may not resolve — skip */
-    }
-  }
-
-  const result = best || branch;
   mergeBaseCache.set(key, { value: result, expiresAt: Date.now() + MERGE_BASE_TTL });
   return result;
 }
@@ -533,6 +484,10 @@ export async function getCurrentBranch(projectRoot: string): Promise<string> {
   return getCurrentBranchName(projectRoot);
 }
 
+export async function checkoutBranch(projectRoot: string, branchName: string): Promise<void> {
+  await exec('git', ['checkout', branchName], { cwd: projectRoot });
+}
+
 export async function getBranches(projectRoot: string): Promise<string[]> {
   const { stdout } = await exec('git', ['branch', '--list', '--format=%(refname:short)'], {
     cwd: projectRoot,
@@ -722,10 +677,7 @@ export async function getAllFileDiffsFromBranch(
   branchName: string,
   baseBranch?: string,
 ): Promise<string> {
-  const mainBranch = await resolveComparisonRef(
-    projectRoot,
-    baseBranch ?? (await detectMainBranch(projectRoot)),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
   try {
     const { stdout } = await exec('git', ['diff', '-U3', `${mainBranch}...${branchName}`], {
       cwd: projectRoot,
@@ -873,10 +825,7 @@ export async function getWorktreeStatus(
   });
   const hasUncommittedChanges = statusOut.trim().length > 0;
 
-  const mainBranch = await resolveComparisonRef(
-    worktreePath,
-    baseBranch ?? (await detectMainBranch(worktreePath).catch(() => 'HEAD')),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath).catch(() => 'HEAD'));
   let hasCommittedChanges = false;
   try {
     const { stdout: logOut } = await exec('git', ['log', `${mainBranch}..HEAD`, '--oneline'], {
@@ -909,10 +858,7 @@ export async function checkMergeStatus(
   worktreePath: string,
   baseBranch?: string,
 ): Promise<{ main_ahead_count: number; conflicting_files: string[] }> {
-  const mainBranch = await resolveComparisonRef(
-    worktreePath,
-    baseBranch ?? (await detectMainBranch(worktreePath)),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath));
 
   let mainAheadCount = 0;
   try {
@@ -953,10 +899,9 @@ export async function mergeTask(
 
   return withWorktreeLock(lockKey, async () => {
     const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
-    const comparisonRef = await resolveComparisonRef(projectRoot, mainBranch);
     const { linesAdded, linesRemoved } = await computeBranchDiffStats(
       projectRoot,
-      comparisonRef,
+      mainBranch,
       branchName,
     );
 
@@ -971,7 +916,7 @@ export async function mergeTask(
 
     const originalBranch = await getCurrentBranchName(projectRoot).catch(() => null);
 
-    // Checkout main (bare branch name, not remote-tracking ref)
+    // Checkout main
     await exec('git', ['checkout', mainBranch], { cwd: projectRoot });
 
     const restoreBranch = async () => {
@@ -1029,10 +974,7 @@ export async function mergeTask(
 }
 
 export async function getBranchLog(worktreePath: string, baseBranch?: string): Promise<string> {
-  const mainBranch = await resolveComparisonRef(
-    worktreePath,
-    baseBranch ?? (await detectMainBranch(worktreePath).catch(() => 'HEAD')),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath).catch(() => 'HEAD'));
   try {
     const { stdout } = await exec(
       'git',
@@ -1053,10 +995,7 @@ export async function getChangedFilesFromBranch(
   branchName: string,
   baseBranch?: string,
 ): Promise<ChangedFile[]> {
-  const mainBranch = await resolveComparisonRef(
-    projectRoot,
-    baseBranch ?? (await detectMainBranch(projectRoot)),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
 
   let diffStr = '';
   try {
@@ -1095,10 +1034,7 @@ export async function getFileDiffFromBranch(
   filePath: string,
   baseBranch?: string,
 ): Promise<FileDiffResult> {
-  const mainBranch = await resolveComparisonRef(
-    projectRoot,
-    baseBranch ?? (await detectMainBranch(projectRoot)),
-  );
+  const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
 
   let diff = '';
   try {

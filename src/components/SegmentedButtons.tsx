@@ -13,59 +13,17 @@ interface SegmentedButtonsProps<T extends string> {
   onChange: (value: T) => void;
 }
 
-/**
- * Roving-tabindex segmented button group.
- * Only the active option is in the Tab order; Arrow keys move between options.
- */
 export function SegmentedButtons<T extends string>(props: SegmentedButtonsProps<T>) {
-  const btnRefs: HTMLButtonElement[] = [];
-
-  function handleKeyDown(e: KeyboardEvent, idx: number) {
-    const opts = props.options;
-    let nextIdx: number | null = null;
-
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      // Find next non-disabled option
-      for (let i = 1; i <= opts.length; i++) {
-        const candidate = (idx + i) % opts.length;
-        if (!opts[candidate].disabled) {
-          nextIdx = candidate;
-          break;
-        }
-      }
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      for (let i = 1; i <= opts.length; i++) {
-        const candidate = (idx - i + opts.length) % opts.length;
-        if (!opts[candidate].disabled) {
-          nextIdx = candidate;
-          break;
-        }
-      }
-    }
-
-    if (nextIdx !== null) {
-      props.onChange(opts[nextIdx].value);
-      btnRefs[nextIdx]?.focus();
-    }
-  }
-
   return (
-    <div role="radiogroup" style={{ display: 'flex', gap: '4px' }}>
+    <div style={{ display: 'flex', gap: '4px' }}>
       <For each={props.options}>
-        {(opt, i) => {
+        {(opt) => {
           const isActive = () => props.value === opt.value;
           return (
             <button
-              ref={(el) => (btnRefs[i()] = el)}
               type="button"
-              role="radio"
-              aria-checked={isActive()}
               disabled={opt.disabled}
-              tabIndex={isActive() ? 0 : -1}
               onClick={() => !opt.disabled && props.onChange(opt.value)}
-              onKeyDown={(e) => handleKeyDown(e, i())}
               style={{
                 flex: '1',
                 padding: '6px 12px',

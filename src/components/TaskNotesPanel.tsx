@@ -260,7 +260,6 @@ export function TaskNotesPanel(props: TaskNotesPanelProps) {
                 <div style={{ flex: '1', overflow: 'hidden' }}>
                   <ChangedFilesList
                     worktreePath={props.task.worktreePath}
-                    baseBranch={props.task.baseBranch}
                     isActive={props.isActive}
                     onFileClick={(file) => props.onDiffFileClick(file.path)}
                     ref={(el) => (changedFilesRef = el)}
