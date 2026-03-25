@@ -533,6 +533,10 @@ export async function getCurrentBranch(projectRoot: string): Promise<string> {
   return getCurrentBranchName(projectRoot);
 }
 
+export async function checkoutBranch(projectRoot: string, branchName: string): Promise<void> {
+  await exec('git', ['checkout', branchName], { cwd: projectRoot });
+}
+
 export async function getBranches(projectRoot: string): Promise<string[]> {
   const { stdout } = await exec('git', ['branch', '--list', '--format=%(refname:short)'], {
     cwd: projectRoot,
