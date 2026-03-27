@@ -121,7 +121,7 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
     worktreePath = result.worktree_path;
   } else {
     if (hasDirectTask(projectId)) {
-      throw new Error('A direct-mode task already exists for this project');
+      throw new Error('This project already has a task on the current branch');
     }
     taskId = crypto.randomUUID();
     branchName = baseBranch;

@@ -491,8 +491,8 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
             style={{ margin: '0', 'font-size': '12px', color: theme.fgMuted, 'line-height': '1.5' }}
           >
             {gitIsolation() === 'direct'
-              ? 'The AI agent will work directly on your main branch in the project root.'
-              : 'Creates a git branch and worktree so the AI agent can work in isolation without affecting your main branch.'}
+              ? 'The AI agent will work on your current branch in the project root.'
+              : 'Creates a git branch and worktree so the AI agent can work in isolation without affecting your current branch.'}
           </p>
         </div>
 
@@ -631,19 +631,19 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
           <SegmentedButtons
             options={[
               { value: 'worktree', label: 'Worktree' },
-              { value: 'direct', label: 'Direct', disabled: directDisabled() },
+              { value: 'direct', label: 'Current Branch', disabled: directDisabled() },
             ]}
             value={gitIsolation()}
             onChange={setGitIsolation}
           />
           <Show when={directDisabled()}>
             <span style={{ 'font-size': '11px', color: theme.fgSubtle }}>
-              A direct-mode task already exists for this project
+              This project already has a task on the current branch
             </span>
           </Show>
           <Show when={gitIsolation() === 'direct'}>
             <div style={{ ...bannerStyle(theme.warning), 'font-size': '12px' }}>
-              Changes will be made directly on the selected branch without worktree isolation.
+              Changes will be made on the selected branch without worktree isolation.
             </div>
           </Show>
         </div>

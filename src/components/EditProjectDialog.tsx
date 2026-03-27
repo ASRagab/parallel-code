@@ -329,7 +329,7 @@ export function EditProjectDialog(props: EditProjectDialogProps) {
               <SegmentedButtons
                 options={[
                   { value: 'worktree', label: 'Worktree' },
-                  { value: 'direct', label: 'Direct' },
+                  { value: 'direct', label: 'Current Branch' },
                 ]}
                 value={defaultGitIsolation()}
                 onChange={setDefaultGitIsolation}
