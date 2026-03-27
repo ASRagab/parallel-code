@@ -61,6 +61,14 @@ const presetColors: Record<LookPreset, PresetColors> = {
     border: '#2a2a2a',
     accent: '#c8bfa0',
   },
+  zenburnesque: {
+    bgElevated: '#2e2d2a',
+    fg: '#dcdccc',
+    fgMuted: '#a0a090',
+    fgSubtle: '#7f8f7f',
+    border: '#484640',
+    accent: '#9ece9e',
+  },
 };
 
 function buildThemeData(c: PresetColors): monaco.editor.IStandaloneThemeData {

@@ -68,7 +68,9 @@ export function AgentSelector(props: AgentSelectorProps) {
                   border: isSelected() ? `1px solid ${theme.accent}` : `1px solid ${theme.border}`,
                   'border-radius': '8px',
                   color: isSelected()
-                    ? store.themePreset === 'graphite' || store.themePreset === 'minimal'
+                    ? store.themePreset === 'graphite' ||
+                      store.themePreset === 'minimal' ||
+                      store.themePreset === 'zenburnesque'
                       ? '#ffffff'
                       : theme.accentText
                     : theme.fg,

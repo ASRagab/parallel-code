@@ -280,6 +280,32 @@ html[data-look='minimal'] {
   --shadow-pop: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
+html[data-look='zenburnesque'] {
+  --bg: radial-gradient(120% 120% at 40% 10%, #353430 0%, #232220 55%, #181716 100%);
+  --bg-elevated: #2e2d2a;
+  --bg-input: #2a2927;
+  --bg-hover: #3a3936;
+  --bg-selected: #2e3f30;
+  --bg-selected-subtle: #2e3f3040;
+  --border: #484640;
+  --border-subtle: #383634;
+  --border-focus: #9ece9e;
+  --fg: #dcdccc;
+  --fg-muted: #a0a090;
+  --fg-subtle: #7f8f7f;
+  --accent: #9ece9e;
+  --accent-hover: #b4deb4;
+  --accent-text: #0a120a;
+  --link: #b4deb4;
+  --success: #7f9f7f;
+  --error: #cc9393;
+  --warning: #f0dfaf;
+  --island-bg: #262523;
+  --island-border: #484640;
+  --task-container-bg: #212120;
+  --task-panel-bg: #2e2d2a;
+}
+
 .app-shell[data-look='minimal']::before {
   opacity: 0 !important;
   background: none !important;
