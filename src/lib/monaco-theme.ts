@@ -67,7 +67,7 @@ const presetColors: Record<LookPreset, PresetColors> = {
     fgMuted: '#a0a090',
     fgSubtle: '#7f8f7f',
     border: '#484640',
-    accent: '#9ece9e',
+    accent: '#cc9393',
   },
 };
 
