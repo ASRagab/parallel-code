@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -138,7 +138,23 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Grant microphone and clipboard access (deny camera/video)
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback, details) => {
+      if (permission === 'clipboard-read') {
+        return callback(true);
+      }
+      if (permission === 'media') {
+        const types = (details as { mediaTypes?: string[] }).mediaTypes ?? [];
+        return callback(types.every((t) => t === 'audio'));
+      }
+      callback(false);
+    },
+  );
+
+  createWindow();
+});
 
 app.on('before-quit', () => {
   killAllAgents();
