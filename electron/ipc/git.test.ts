@@ -165,6 +165,10 @@ function buildWorktreeMockHandler(opts: {
   showOutputs?: Record<string, string>;
   diffOutput?: string;
   statusPorcelain?: string;
+  /** Files returned by `git diff --name-only <mainTip> <HEAD>` (tip-filter).
+   *  Defaults to '*' (all files pass filter). Set to a newline-separated list
+   *  to simulate files that actually differ from the main branch tip. */
+  tipDiffNameOnly?: string;
 }): MockHandler {
   const mergeBase = opts.mergeBase ?? MERGE_BASE;
 
@@ -198,6 +202,18 @@ function buildWorktreeMockHandler(opts: {
     // merge-base
     if (cmd === 'merge-base') {
       cb(null, mergeBase + '\n', '');
+      return;
+    }
+
+    // diff --name-only <mainTip> [<HEAD>] — tip filter for already-merged files.
+    // Must be checked before --raw/--numstat handlers.
+    if (cmd === 'diff' && args.includes('--name-only')) {
+      if (opts.tipDiffNameOnly !== undefined) {
+        cb(null, opts.tipDiffNameOnly, '');
+      } else {
+        // Default: fail so filesDifferingBetween returns null (skip filtering)
+        cb(new Error('no tip diff configured'), '', '');
+      }
       return;
     }
 
@@ -400,6 +416,28 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
       expect(files).toEqual([]);
     });
 
+    it('should exclude committed files already identical on the main branch tip', async () => {
+      const calls: string[][] = [];
+      setupMock(
+        calls,
+        buildWorktreeMockHandler({
+          // Branch changed both files from merge-base
+          committedRawNumstat: [
+            rawNumstatEntry('branch-only.ts', 10, 2),
+            rawNumstatEntry('already-on-main.ts', 5, 1),
+          ].join(''),
+          // But only branch-only.ts actually differs from main tip
+          tipDiffNameOnly: 'branch-only.ts\n',
+        }),
+      );
+
+      const files = await getChangedFiles(uniqueWorktreePath(), 'main');
+
+      const paths = files.map((f) => f.path);
+      expect(paths).toContain('branch-only.ts');
+      expect(paths).not.toContain('already-on-main.ts');
+    });
+
     it('should diff against merge-base, not branch tip', async () => {
       const calls: string[][] = [];
       setupMock(
@@ -534,6 +572,27 @@ describe('getAllFileDiffs (worktree-based, merge-base diff)', () => {
     const result = await getAllFileDiffs(uniqueWorktreePath(), 'main');
 
     expect(result).toBe('');
+  });
+
+  it('should exclude file diffs already identical on the main branch tip', async () => {
+    const calls: string[][] = [];
+    const diffOutput = [
+      'diff --git a/branch-only.ts b/branch-only.ts\n--- a/branch-only.ts\n+++ b/branch-only.ts\n@@ -1 +1 @@\n-old\n+new\n',
+      'diff --git a/already-on-main.ts b/already-on-main.ts\n--- a/already-on-main.ts\n+++ b/already-on-main.ts\n@@ -1 +1 @@\n-old\n+new\n',
+    ].join('');
+    setupMock(
+      calls,
+      buildWorktreeMockHandler({
+        diffOutput,
+        statusPorcelain: '',
+        tipDiffNameOnly: 'branch-only.ts\n',
+      }),
+    );
+
+    const result = await getAllFileDiffs(uniqueWorktreePath(), 'main');
+
+    expect(result).toContain('diff --git a/branch-only.ts b/branch-only.ts');
+    expect(result).not.toContain('diff --git a/already-on-main.ts b/already-on-main.ts');
   });
 });
 

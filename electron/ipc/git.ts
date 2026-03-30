@@ -237,6 +237,44 @@ async function detectMergeBase(
   return headRef;
 }
 
+/**
+ * Resolve the main branch to whichever ref is most up-to-date (prefers
+ * origin/<branch> over local <branch>). Used to compare the branch HEAD
+ * against the current state of main, not just the merge-base.
+ */
+async function resolveMainTipRef(repoRoot: string, baseBranch?: string): Promise<string> {
+  const branch = baseBranch ?? (await detectMainBranch(repoRoot));
+  if (!branch.includes('/') && (await remoteTrackingRefExists(repoRoot, branch))) {
+    return `origin/${branch}`;
+  }
+  return branch;
+}
+
+/**
+ * Get the set of file paths that actually differ between two refs.
+ * Used to filter merge-base diffs: excludes files where the branch's changes
+ * have already been merged/cherry-picked into main.
+ */
+async function filesDifferingBetween(
+  repoRoot: string,
+  refA: string,
+  refB?: string,
+): Promise<Set<string> | null> {
+  try {
+    const args = ['diff', '--name-only', refA];
+    if (refB) args.push(refB);
+    const { stdout } = await exec('git', args, { cwd: repoRoot, maxBuffer: MAX_BUFFER });
+    return new Set(
+      stdout
+        .split('\n')
+        .map((l) => normalizeStatusPath(l))
+        .filter(Boolean),
+    );
+  } catch {
+    return null; // could not resolve — skip filtering
+  }
+}
+
 async function pinHead(worktreePath: string): Promise<string> {
   try {
     const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { cwd: worktreePath });
@@ -558,6 +596,20 @@ export async function getChangedFiles(
   const { statusMap: committedStatusMap, numstatMap: committedNumstatMap } =
     parseDiffRawNumstat(diffStr);
 
+  // Filter out committed files whose content is already identical on the main
+  // branch tip (e.g. merged or cherry-picked). Only files that still differ
+  // from main should appear in the changed files list.
+  const mainTip = await resolveMainTipRef(worktreePath, baseBranch);
+  const tipDiffFiles = await filesDifferingBetween(worktreePath, mainTip, headHash);
+  if (tipDiffFiles) {
+    for (const p of [...committedNumstatMap.keys()]) {
+      if (!tipDiffFiles.has(p)) committedNumstatMap.delete(p);
+    }
+    for (const p of [...committedStatusMap.keys()]) {
+      if (!tipDiffFiles.has(p)) committedStatusMap.delete(p);
+    }
+  }
+
   // git diff --raw --numstat <headHash> — tracked uncommitted changes (HEAD vs working tree).
   // Compares HEAD tree directly to the working tree, so it does not need the index
   // write lock and works reliably even while an agent holds it.
@@ -664,6 +716,21 @@ export async function getAllFileDiffs(worktreePath: string, baseBranch?: string)
     /* empty */
   }
 
+  // Filter out file diffs already identical on the main branch tip.
+  if (combinedDiff) {
+    const mainTip = await resolveMainTipRef(worktreePath, baseBranch);
+    const tipDiffFiles = await filesDifferingBetween(worktreePath, mainTip);
+    if (tipDiffFiles) {
+      combinedDiff = combinedDiff
+        .split(/^(?=diff --git )/m)
+        .filter((block) => {
+          const m = block.match(/^diff --git a\/(.+?) b\/(.+)$/m);
+          return !m || tipDiffFiles.has(m[2]);
+        })
+        .join('');
+    }
+  }
+
   // Untracked files: build pseudo-diffs
   const untrackedParts: string[] = [];
   try {
@@ -721,6 +788,20 @@ export async function getAllFileDiffsFromBranch(
       cwd: projectRoot,
       maxBuffer: MAX_BUFFER,
     });
+
+    // Filter out file diffs already identical on the main branch tip.
+    const mainTip = await resolveMainTipRef(projectRoot, baseBranch);
+    const tipDiffFiles = await filesDifferingBetween(projectRoot, mainTip, branchName);
+    if (tipDiffFiles) {
+      return stdout
+        .split(/^(?=diff --git )/m)
+        .filter((block) => {
+          const m = block.match(/^diff --git a\/(.+?) b\/(.+)$/m);
+          return !m || tipDiffFiles.has(m[2]);
+        })
+        .join('');
+    }
+
     return stdout;
   } catch {
     return '';
@@ -1072,6 +1153,18 @@ export async function getChangedFilesFromBranch(
   }
 
   const { statusMap, numstatMap } = parseDiffRawNumstat(diffStr);
+
+  // Filter out files already identical on the main branch tip.
+  const mainTip = await resolveMainTipRef(projectRoot, baseBranch);
+  const tipDiffFiles = await filesDifferingBetween(projectRoot, mainTip, branchName);
+  if (tipDiffFiles) {
+    for (const p of [...numstatMap.keys()]) {
+      if (!tipDiffFiles.has(p)) numstatMap.delete(p);
+    }
+    for (const p of [...statusMap.keys()]) {
+      if (!tipDiffFiles.has(p)) statusMap.delete(p);
+    }
+  }
 
   const files: ChangedFile[] = [];
 
