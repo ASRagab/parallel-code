@@ -115,12 +115,8 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     });
   });
 
-  const totalAdded = createMemo(() =>
-    files().reduce((s, f) => s + (f.committed ? f.lines_added : 0), 0),
-  );
-  const totalRemoved = createMemo(() =>
-    files().reduce((s, f) => s + (f.committed ? f.lines_removed : 0), 0),
-  );
+  const totalAdded = createMemo(() => files().reduce((s, f) => s + f.lines_added, 0));
+  const totalRemoved = createMemo(() => files().reduce((s, f) => s + f.lines_removed, 0));
   const uncommittedCount = createMemo(() => files().filter((f) => !f.committed).length);
 
   /** For each file, compute the display filename and an optional disambiguating directory. */

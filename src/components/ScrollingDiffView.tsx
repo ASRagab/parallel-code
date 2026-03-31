@@ -1,6 +1,6 @@
 import { For, Show, createSignal, createEffect, onMount, onCleanup } from 'solid-js';
 import type { JSX } from 'solid-js';
-import { theme } from '../lib/theme';
+import { theme, bannerStyle } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { getStatusColor } from '../lib/status-colors';
 import { openFileInEditor } from '../lib/shell';
@@ -591,7 +591,10 @@ function FileSection(props: {
             padding: '2px 8px',
             'border-radius': '4px',
             color: getStatusColor(props.file.status),
-            background: 'rgba(255,255,255,0.06)',
+            background:
+              props.file.status === 'M'
+                ? 'rgba(255,255,255,0.06)'
+                : `color-mix(in srgb, ${getStatusColor(props.file.status)} 15%, transparent)`,
           }}
         >
           {STATUS_LABELS[props.file.status] ?? props.file.status}
@@ -672,9 +675,23 @@ function FileSection(props: {
           </div>
         </Show>
 
-        <Show when={!props.file.binary}>
+        <Show when={!props.file.binary && props.file.status === 'D'}>
+          <div
+            style={{
+              ...bannerStyle(theme.error),
+              margin: '12px',
+              'font-size': sf(12),
+              'text-align': 'center',
+              'font-weight': '600',
+            }}
+          >
+            This file was deleted
+          </div>
+        </Show>
+
+        <Show when={!props.file.binary && props.file.status !== 'D'}>
           <div style={{ 'padding-bottom': '8px', background: 'rgba(0, 0, 0, 0.15)' }}>
-            <Show when={props.file.hunks.length > 0 && props.file.status !== 'D'}>
+            <Show when={props.file.hunks.length > 0 && props.file.status === 'M'}>
               <GapView
                 startLine={1}
                 endLine={props.file.hunks[0].newStart}
@@ -691,7 +708,7 @@ function FileSection(props: {
             <For each={props.file.hunks}>
               {(hunk, hunkIdx) => (
                 <>
-                  <Show when={hunkIdx() > 0}>
+                  <Show when={hunkIdx() > 0 && props.file.status === 'M'}>
                     <GapView
                       startLine={
                         props.file.hunks[hunkIdx() - 1].newStart +
@@ -777,7 +794,7 @@ function FileSection(props: {
                 </>
               )}
             </For>
-            <Show when={props.file.hunks.length > 0 && props.file.status !== 'D'}>
+            <Show when={props.file.hunks.length > 0 && props.file.status === 'M'}>
               <TrailingGap
                 lastHunk={props.file.hunks[props.file.hunks.length - 1]}
                 lang={lang()}
