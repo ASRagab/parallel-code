@@ -5,6 +5,7 @@ import {
   restartAgent,
   switchAgent,
   setLastPrompt,
+  setPrefillPrompt,
   markAgentOutput,
   getFontScale,
   registerFocusFn,
@@ -85,8 +86,8 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                     : 'No prompts sent yet')
             }
             onDblClick={() => {
-              if (props.task.lastPrompt && props.promptHandle && !props.promptHandle.getText())
-                props.promptHandle.setText(props.task.lastPrompt);
+              if (props.task.lastPrompt && !props.promptHandle?.getText())
+                setPrefillPrompt(props.task.id, props.task.lastPrompt);
             }}
           >
             <span style={{ opacity: props.task.lastPrompt ? 1 : 0.4 }}>
