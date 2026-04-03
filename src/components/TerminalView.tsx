@@ -6,6 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke, fireAndForget, Channel } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { getTerminalFontFamily } from '../lib/fonts';
+import { TERMINAL_SCROLLBACK_LINES } from '../lib/terminalConstants';
 import { getTerminalTheme } from '../lib/theme';
 import { matchesGlobalShortcut } from '../lib/shortcuts';
 import { isMac } from '../lib/platform';
@@ -66,10 +67,6 @@ interface TerminalViewProps {
 // Status parsing only needs recent output. Capping forwarded bytes avoids
 // expensive full-chunk decoding during large terminal bursts.
 const STATUS_ANALYSIS_MAX_BYTES = 8 * 1024;
-
-// Keep substantially more terminal history available for agent review/debugging
-// without turning xterm into a memory landfill.
-const TERMINAL_SCROLLBACK_LINES = 10_000;
 
 export function TerminalView(props: TerminalViewProps) {
   let containerRef!: HTMLDivElement;

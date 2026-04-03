@@ -1,6 +1,7 @@
 import { onMount, onCleanup, createSignal, Show, For } from 'solid-js';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { TERMINAL_SCROLLBACK_LINES } from '../lib/terminalConstants';
 import {
   subscribeAgent,
   unsubscribeAgent,
@@ -95,7 +96,7 @@ export function AgentDetail(props: AgentDetailProps) {
       fontSize: 10,
       fontFamily: "'JetBrains Mono', 'Courier New', monospace",
       theme: { background: '#0b0f14' },
-      scrollback: 10000,
+      scrollback: TERMINAL_SCROLLBACK_LINES,
       cursorBlink: false,
       disableStdin: true,
       convertEol: false,

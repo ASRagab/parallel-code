@@ -12,7 +12,7 @@ import {
   pickAndAddProject,
   closeTerminal,
   setTaskViewportVisibility,
-  getTaskAttentionState,
+  taskNeedsAttention,
 } from '../store/store';
 import { closeTask } from '../store/tasks';
 import { ResizablePanel, type PanelChild, type ResizablePanelHandle } from './ResizablePanel';
@@ -88,8 +88,7 @@ export function TilingLayout() {
       if (!store.tasks[taskId]) continue;
       const visibility = store.taskViewportVisibility[taskId];
       if (!visibility || visibility === 'visible') continue;
-      const attention = getTaskAttentionState(taskId);
-      if (attention !== 'active' && attention !== 'needs_input' && attention !== 'error') continue;
+      if (!taskNeedsAttention(taskId)) continue;
       if (visibility === 'offscreen-left') left = true;
       if (visibility === 'offscreen-right') right = true;
       if (left && right) break;
