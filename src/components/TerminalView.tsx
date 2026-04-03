@@ -67,6 +67,10 @@ interface TerminalViewProps {
 // expensive full-chunk decoding during large terminal bursts.
 const STATUS_ANALYSIS_MAX_BYTES = 8 * 1024;
 
+// Keep substantially more terminal history available for agent review/debugging
+// without turning xterm into a memory landfill.
+const TERMINAL_SCROLLBACK_LINES = 10_000;
+
 export function TerminalView(props: TerminalViewProps) {
   let containerRef!: HTMLDivElement;
   let term: Terminal | undefined;
@@ -85,7 +89,7 @@ export function TerminalView(props: TerminalViewProps) {
       fontFamily: getTerminalFontFamily(store.terminalFont),
       theme: getTerminalTheme(store.themePreset),
       allowProposedApi: true,
-      scrollback: 3000,
+      scrollback: TERMINAL_SCROLLBACK_LINES,
     });
 
     fitAddon = new FitAddon();

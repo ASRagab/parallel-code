@@ -95,7 +95,7 @@ export function AgentDetail(props: AgentDetailProps) {
       fontSize: 10,
       fontFamily: "'JetBrains Mono', 'Courier New', monospace",
       theme: { background: '#0b0f14' },
-      scrollback: 5000,
+      scrollback: 10000,
       cursorBlink: false,
       disableStdin: true,
       convertEol: false,
