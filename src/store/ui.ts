@@ -1,7 +1,7 @@
 import { produce } from 'solid-js/store';
 import { store, setStore } from './core';
 import type { LookPreset } from '../lib/look';
-import type { PersistedWindowState } from './types';
+import type { PersistedWindowState, TaskViewportVisibility } from './types';
 
 // --- Font Scale (per-panel) ---
 
@@ -62,6 +62,14 @@ export function setPanelSizes(entries: Record<string, number>): void {
   for (const [key, value] of Object.entries(entries)) {
     setStore('panelSizes', key, value);
   }
+}
+
+export function getTaskViewportVisibility(taskId: string): TaskViewportVisibility | null {
+  return store.taskViewportVisibility[taskId] ?? null;
+}
+
+export function setTaskViewportVisibility(entries: Record<string, TaskViewportVisibility>): void {
+  setStore('taskViewportVisibility', entries);
 }
 
 // --- Sidebar ---

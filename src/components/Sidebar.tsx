@@ -9,6 +9,8 @@ import {
   toggleSidebar,
   reorderTask,
   getTaskDotStatus,
+  getTaskAttentionState,
+  getTaskViewportVisibility,
   registerFocusFn,
   unregisterFocusFn,
   focusSidebar,
@@ -38,6 +40,31 @@ const SIDEBAR_DEFAULT_WIDTH = 240;
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_SIZE_KEY = 'sidebar:width';
+
+function getAttentionColor(attention: string): string | null {
+  if (attention === 'active') return theme.accent;
+  if (attention === 'needs_input') return theme.warning;
+  if (attention === 'error') return theme.error;
+  return null;
+}
+
+function hasOffscreenAttention(taskId: string): boolean {
+  const visibility = getTaskViewportVisibility(taskId);
+  if (!visibility || visibility === 'visible') return false;
+  const attention = getTaskAttentionState(taskId);
+  return attention === 'active' || attention === 'needs_input' || attention === 'error';
+}
+
+function getOffscreenAttentionLabel(taskId: string): string | null {
+  if (!hasOffscreenAttention(taskId)) return null;
+  const visibility = getTaskViewportVisibility(taskId);
+  const attention = getTaskAttentionState(taskId);
+  const side = visibility === 'offscreen-left' ? 'left' : 'right';
+  const prefix = visibility === 'offscreen-left' ? '←' : '→';
+  if (attention === 'needs_input') return `${prefix} input (${side})`;
+  if (attention === 'error') return `${prefix} error (${side})`;
+  return null;
+}
 
 export function Sidebar() {
   const [confirmRemove, setConfirmRemove] = createSignal<string | null>(null);
@@ -725,6 +752,28 @@ function CurrentBranchBadge(props: { branchName: string }) {
   );
 }
 
+function OffscreenAttentionBadge(props: { taskId: string }) {
+  const label = () => getOffscreenAttentionLabel(props.taskId);
+  const color = () => getAttentionColor(getTaskAttentionState(props.taskId)) ?? theme.fgSubtle;
+  return (
+    <Show when={label()}>
+      {(text) => (
+        <span
+          class="sidebar-offscreen-attention-badge"
+          title={text()}
+          style={{
+            color: color(),
+            border: `1px solid color-mix(in srgb, ${color()} 30%, transparent)`,
+            background: `color-mix(in srgb, ${color()} 10%, transparent)`,
+          }}
+        >
+          {text()}
+        </span>
+      )}
+    </Show>
+  );
+}
+
 function CollapsedTaskRow(props: { taskId: string }) {
   const task = () => store.tasks[props.taskId];
   return (
@@ -746,29 +795,42 @@ function CollapsedTaskRow(props: { taskId: string }) {
           style={{
             padding: '7px 10px',
             'border-radius': '6px',
-            background: 'transparent',
-            color: theme.fgSubtle,
+            background: hasOffscreenAttention(props.taskId)
+              ? `color-mix(in srgb, ${getAttentionColor(getTaskAttentionState(props.taskId)) ?? theme.accent} 10%, transparent)`
+              : 'transparent',
+            color: hasOffscreenAttention(props.taskId) ? theme.fg : theme.fgSubtle,
             'font-size': sf(12),
             'font-weight': '400',
             cursor: 'pointer',
             'white-space': 'nowrap',
             overflow: 'hidden',
             'text-overflow': 'ellipsis',
-            opacity: '0.6',
+            opacity: hasOffscreenAttention(props.taskId) ? '1' : '0.6',
             display: 'flex',
             'align-items': 'center',
             gap: '6px',
             border:
               store.sidebarFocused && store.sidebarFocusedTaskId === props.taskId
                 ? `1.5px solid var(--border-focus)`
-                : '1.5px solid transparent',
+                : hasOffscreenAttention(props.taskId)
+                  ? `1.5px solid color-mix(in srgb, ${getAttentionColor(getTaskAttentionState(props.taskId)) ?? theme.accent} 38%, transparent)`
+                  : '1.5px solid transparent',
           }}
         >
-          <StatusDot status={getTaskDotStatus(props.taskId)} size="sm" />
+          <StatusDot
+            status={getTaskDotStatus(props.taskId)}
+            size="sm"
+            attention={
+              hasOffscreenAttention(props.taskId) ? getTaskAttentionState(props.taskId) : undefined
+            }
+          />
           <Show when={t().gitIsolation === 'direct'}>
             <CurrentBranchBadge branchName={t().branchName} />
           </Show>
-          <span style={{ overflow: 'hidden', 'text-overflow': 'ellipsis' }}>{t().name}</span>
+          <span style={{ flex: '1', overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
+            {t().name}
+          </span>
+          <OffscreenAttentionBadge taskId={props.taskId} />
         </div>
       )}
     </Show>
@@ -802,10 +864,18 @@ function TaskRow(props: TaskRowProps) {
             style={{
               padding: '7px 10px',
               'border-radius': '6px',
-              background: 'transparent',
-              color: store.activeTaskId === props.taskId ? theme.fg : theme.fgMuted,
+              background: hasOffscreenAttention(props.taskId)
+                ? `color-mix(in srgb, ${getAttentionColor(getTaskAttentionState(props.taskId)) ?? theme.accent} 10%, transparent)`
+                : 'transparent',
+              color:
+                store.activeTaskId === props.taskId || hasOffscreenAttention(props.taskId)
+                  ? theme.fg
+                  : theme.fgMuted,
               'font-size': sf(12),
-              'font-weight': store.activeTaskId === props.taskId ? '500' : '400',
+              'font-weight':
+                store.activeTaskId === props.taskId || hasOffscreenAttention(props.taskId)
+                  ? '500'
+                  : '400',
               cursor: props.dragFromIndex() !== null ? 'grabbing' : 'pointer',
               'white-space': 'nowrap',
               overflow: 'hidden',
@@ -817,10 +887,20 @@ function TaskRow(props: TaskRowProps) {
               border:
                 store.sidebarFocused && store.sidebarFocusedTaskId === props.taskId
                   ? `1.5px solid var(--border-focus)`
-                  : '1.5px solid transparent',
+                  : hasOffscreenAttention(props.taskId)
+                    ? `1.5px solid color-mix(in srgb, ${getAttentionColor(getTaskAttentionState(props.taskId)) ?? theme.accent} 38%, transparent)`
+                    : '1.5px solid transparent',
             }}
           >
-            <StatusDot status={getTaskDotStatus(props.taskId)} size="sm" />
+            <StatusDot
+              status={getTaskDotStatus(props.taskId)}
+              size="sm"
+              attention={
+                hasOffscreenAttention(props.taskId)
+                  ? getTaskAttentionState(props.taskId)
+                  : undefined
+              }
+            />
             <Show when={t().gitIsolation === 'direct'}>
               <span
                 style={{
@@ -837,7 +917,10 @@ function TaskRow(props: TaskRowProps) {
                 {t().branchName}
               </span>
             </Show>
-            <span style={{ overflow: 'hidden', 'text-overflow': 'ellipsis' }}>{t().name}</span>
+            <span style={{ flex: '1', overflow: 'hidden', 'text-overflow': 'ellipsis' }}>
+              {t().name}
+            </span>
+            <OffscreenAttentionBadge taskId={props.taskId} />
           </div>
         </>
       )}

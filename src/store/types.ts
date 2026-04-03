@@ -3,6 +3,8 @@ import type { LookPreset } from '../lib/look';
 
 export type GitIsolationMode = 'worktree' | 'direct';
 
+export type TaskViewportVisibility = 'visible' | 'offscreen-left' | 'offscreen-right';
+
 export interface TerminalBookmark {
   id: string;
   command: string;
@@ -168,6 +170,7 @@ export interface AppStore {
   panelSizes: Record<string, number>;
   globalScale: number;
   taskGitStatus: Record<string, WorktreeStatus>;
+  taskViewportVisibility: Record<string, TaskViewportVisibility>;
   focusedPanel: Record<string, PanelId>;
   sidebarFocused: boolean;
   sidebarFocusedProjectId: string | null;

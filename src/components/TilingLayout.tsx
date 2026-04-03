@@ -7,7 +7,13 @@ import {
   onCleanup,
   ErrorBoundary,
 } from 'solid-js';
-import { store, pickAndAddProject, closeTerminal } from '../store/store';
+import {
+  store,
+  pickAndAddProject,
+  closeTerminal,
+  setTaskViewportVisibility,
+  getTaskAttentionState,
+} from '../store/store';
 import { closeTask } from '../store/tasks';
 import { ResizablePanel, type PanelChild, type ResizablePanelHandle } from './ResizablePanel';
 import { TaskPanel } from './TaskPanel';
@@ -17,16 +23,38 @@ import { theme } from '../lib/theme';
 import { mod } from '../lib/platform';
 import { createCtrlShiftWheelResizeHandler } from '../lib/wheelZoom';
 
+const VIEWPORT_EPSILON_PX = 4;
+
 export function TilingLayout() {
   let containerRef: HTMLDivElement | undefined;
   let panelHandle: ResizablePanelHandle | undefined;
   const [hasOverflowLeft, setHasOverflowLeft] = createSignal(false);
   const [hasOverflowRight, setHasOverflowRight] = createSignal(false);
 
-  const updateOverflowAffordance = () => {
+  const syncTaskViewportVisibility = (
+    entries: Record<string, 'visible' | 'offscreen-left' | 'offscreen-right'>,
+  ) => {
+    const current = store.taskViewportVisibility;
+    const currentKeys = Object.keys(current);
+    const nextKeys = Object.keys(entries);
+    if (currentKeys.length === nextKeys.length) {
+      let changed = false;
+      for (const key of nextKeys) {
+        if (current[key] !== entries[key]) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return;
+    }
+    setTaskViewportVisibility(entries);
+  };
+
+  const updateViewportState = () => {
     if (!containerRef) {
       setHasOverflowLeft(false);
       setHasOverflowRight(false);
+      syncTaskViewportVisibility({});
       return;
     }
 
@@ -34,29 +62,63 @@ export function TilingLayout() {
     const isOverflowing = maxScrollLeft > 1;
     setHasOverflowLeft(isOverflowing && containerRef.scrollLeft > 1);
     setHasOverflowRight(isOverflowing && containerRef.scrollLeft < maxScrollLeft - 1);
+
+    const containerRect = containerRef.getBoundingClientRect();
+    const nextVisibility: Record<string, 'visible' | 'offscreen-left' | 'offscreen-right'> = {};
+    const taskEls = containerRef.querySelectorAll<HTMLElement>('[data-task-id]');
+    for (const el of taskEls) {
+      const taskId = el.dataset.taskId;
+      if (!taskId || !store.tasks[taskId]) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.right <= containerRect.left + VIEWPORT_EPSILON_PX) {
+        nextVisibility[taskId] = 'offscreen-left';
+      } else if (rect.left >= containerRect.right - VIEWPORT_EPSILON_PX) {
+        nextVisibility[taskId] = 'offscreen-right';
+      } else {
+        nextVisibility[taskId] = 'visible';
+      }
+    }
+    syncTaskViewportVisibility(nextVisibility);
   };
+
+  const offscreenAttention = createMemo(() => {
+    let left = false;
+    let right = false;
+    for (const taskId of store.taskOrder) {
+      if (!store.tasks[taskId]) continue;
+      const visibility = store.taskViewportVisibility[taskId];
+      if (!visibility || visibility === 'visible') continue;
+      const attention = getTaskAttentionState(taskId);
+      if (attention !== 'active' && attention !== 'needs_input' && attention !== 'error') continue;
+      if (visibility === 'offscreen-left') left = true;
+      if (visibility === 'offscreen-right') right = true;
+      if (left && right) break;
+    }
+    return { left, right };
+  });
 
   onMount(() => {
     if (!containerRef) return;
     const handleWheel = createCtrlShiftWheelResizeHandler((deltaPx) => {
       panelHandle?.resizeAll(deltaPx);
+      requestAnimationFrame(() => updateViewportState());
     });
-    const handleScroll = () => updateOverflowAffordance();
+    const handleScroll = () => updateViewportState();
     let resizeObserver: ResizeObserver | undefined;
     const observeStrip = () => {
       resizeObserver?.disconnect();
       if (!containerRef) return;
-      resizeObserver = new ResizeObserver(() => updateOverflowAffordance());
+      resizeObserver = new ResizeObserver(() => updateViewportState());
       resizeObserver.observe(containerRef);
       const content = containerRef.firstElementChild;
       if (content instanceof HTMLElement) resizeObserver.observe(content);
-      updateOverflowAffordance();
+      updateViewportState();
     };
     const mutationObserver = new MutationObserver(() => observeStrip());
 
     containerRef.addEventListener('wheel', handleWheel, { passive: false });
     containerRef.addEventListener('scroll', handleScroll, { passive: true });
-    mutationObserver.observe(containerRef, { childList: true });
+    mutationObserver.observe(containerRef, { childList: true, subtree: true });
     observeStrip();
 
     onCleanup(() => {
@@ -64,7 +126,14 @@ export function TilingLayout() {
       containerRef?.removeEventListener('scroll', handleScroll);
       mutationObserver.disconnect();
       resizeObserver?.disconnect();
+      setTaskViewportVisibility({});
     });
+  });
+
+  // Recompute viewport state when panel order/structure changes.
+  createEffect(() => {
+    void store.taskOrder.join('|');
+    requestAnimationFrame(() => updateViewportState());
   });
 
   // Scroll the active task panel into view when selection changes
@@ -72,13 +141,13 @@ export function TilingLayout() {
     const activeId = store.activeTaskId;
     if (!containerRef) return;
     if (!activeId) {
-      updateOverflowAffordance();
+      updateViewportState();
       return;
     }
 
     const el = containerRef.querySelector<HTMLElement>(`[data-task-id="${CSS.escape(activeId)}"]`);
     el?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
-    requestAnimationFrame(() => updateOverflowAffordance());
+    requestAnimationFrame(() => updateViewportState());
   });
   // Cache PanelChild objects by ID so <For> sees stable references
   // and doesn't unmount/remount panels when taskOrder changes.
@@ -391,11 +460,21 @@ export function TilingLayout() {
       </div>
 
       <Show when={hasOverflowLeft()}>
-        <div class="tiling-layout-scroll-affordance tiling-layout-scroll-affordance-left" />
+        <div
+          class={`tiling-layout-scroll-affordance tiling-layout-scroll-affordance-left${offscreenAttention().left ? ' tiling-layout-scroll-affordance-attention' : ''}`}
+          title={
+            offscreenAttention().left ? 'Tasks need attention off-screen to the left' : undefined
+          }
+        />
       </Show>
 
       <Show when={hasOverflowRight()}>
-        <div class="tiling-layout-scroll-affordance tiling-layout-scroll-affordance-right" />
+        <div
+          class={`tiling-layout-scroll-affordance tiling-layout-scroll-affordance-right${offscreenAttention().right ? ' tiling-layout-scroll-affordance-attention' : ''}`}
+          title={
+            offscreenAttention().right ? 'Tasks need attention off-screen to the right' : undefined
+          }
+        />
       </Show>
     </div>
   );

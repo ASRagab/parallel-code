@@ -3,6 +3,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Mock the SolidJS store before importing the module under test.
 let mockAutoTrustFolders = false;
 let mockActiveTaskId: string | null = null;
+let mockTasks: Record<string, unknown> = {};
+let mockAgents: Record<string, unknown> = {};
+let mockTaskGitStatus: Record<string, unknown> = {};
 vi.mock('./core', () => ({
   store: new Proxy(
     {},
@@ -10,6 +13,9 @@ vi.mock('./core', () => ({
       get(_target, prop) {
         if (prop === 'autoTrustFolders') return mockAutoTrustFolders;
         if (prop === 'activeTaskId') return mockActiveTaskId;
+        if (prop === 'tasks') return mockTasks;
+        if (prop === 'agents') return mockAgents;
+        if (prop === 'taskGitStatus') return mockTaskGitStatus;
         return undefined;
       },
     },
@@ -47,19 +53,47 @@ import {
   looksLikeQuestion,
   isTrustQuestionAutoHandled,
   isAutoTrustSettling,
+  isAgentAskingQuestion,
+  getTaskAttentionState,
+  taskNeedsAttention,
   markAgentSpawned,
   markAgentOutput,
   clearAgentActivity,
 } from './taskStatus';
 
+function setMockTask(taskId: string, overrides: Record<string, unknown> = {}): void {
+  mockTasks[taskId] = {
+    id: taskId,
+    name: taskId,
+    agentIds: [],
+    shellAgentIds: [],
+    ...overrides,
+  };
+}
+
+function setMockAgent(agentId: string, overrides: Record<string, unknown> = {}): void {
+  mockAgents[agentId] = {
+    id: agentId,
+    status: 'running',
+    exitCode: null,
+    signal: null,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   mockAutoTrustFolders = false;
   mockActiveTaskId = 'task-1';
+  mockTasks = {};
+  mockAgents = {};
+  mockTaskGitStatus = {};
 });
 
 afterEach(() => {
-  clearAgentActivity('agent-1');
+  for (const agentId of ['agent-1', 'agent-2', 'agent-3', 'shell-1']) {
+    clearAgentActivity(agentId);
+  }
   vi.useRealTimers();
 });
 
@@ -262,5 +296,69 @@ describe('isAutoTrustSettling', () => {
     vi.advanceTimersByTime(4100);
 
     expect(isAutoTrustSettling('agent-1')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// task attention
+// ---------------------------------------------------------------------------
+describe('task attention state', () => {
+  it('returns ready for committed clean tasks without active attention', () => {
+    setMockTask('task-1', { agentIds: ['agent-1'] });
+    setMockAgent('agent-1', { status: 'running' });
+    mockTaskGitStatus['task-1'] = {
+      has_committed_changes: true,
+      has_uncommitted_changes: false,
+    };
+
+    expect(getTaskAttentionState('task-1')).toBe('ready');
+    expect(taskNeedsAttention('task-1')).toBe(false);
+  });
+
+  it('returns active when a running task agent is currently producing output', () => {
+    setMockTask('task-1', { agentIds: ['agent-1'] });
+    setMockAgent('agent-1', { status: 'running' });
+
+    markAgentSpawned('agent-1');
+
+    expect(getTaskAttentionState('task-1')).toBe('active');
+    expect(taskNeedsAttention('task-1')).toBe(true);
+  });
+
+  it('returns error when a task agent exits non-zero', () => {
+    setMockTask('task-1', { agentIds: ['agent-1'] });
+    setMockAgent('agent-1', { status: 'exited', exitCode: 1, signal: null });
+
+    expect(getTaskAttentionState('task-1')).toBe('error');
+    expect(taskNeedsAttention('task-1')).toBe(true);
+  });
+
+  it('detects question state for background task agents', () => {
+    mockActiveTaskId = 'task-1';
+    setMockTask('task-2', { agentIds: ['agent-2'] });
+    setMockAgent('agent-2', { status: 'running' });
+
+    const question = new TextEncoder().encode('Continue? [Y/n]');
+    markAgentOutput('agent-2', question, 'task-2');
+
+    expect(isAgentAskingQuestion('agent-2')).toBe(true);
+    expect(getTaskAttentionState('task-2')).toBe('needs_input');
+    expect(taskNeedsAttention('task-2')).toBe(true);
+  });
+
+  it('preserves question state for throttled background prompt transitions', () => {
+    mockActiveTaskId = 'task-1';
+    setMockTask('task-2', { agentIds: ['agent-2'] });
+    setMockAgent('agent-2', { status: 'running' });
+
+    markAgentOutput('agent-2', new TextEncoder().encode('Building project...'), 'task-2');
+    expect(getTaskAttentionState('task-2')).toBe('active');
+
+    vi.advanceTimersByTime(300);
+    markAgentOutput('agent-2', new TextEncoder().encode('Continue? [Y/n]'), 'task-2');
+
+    expect(isAgentAskingQuestion('agent-2')).toBe(true);
+    expect(getTaskAttentionState('task-2')).toBe('needs_input');
+    expect(taskNeedsAttention('task-2')).toBe(true);
   });
 });

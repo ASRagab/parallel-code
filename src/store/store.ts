@@ -79,7 +79,7 @@ export {
   sendActivePrompt,
   setSidebarFocusedProjectId,
 } from './focus';
-export type { PanelId, PendingAction } from './types';
+export type { PanelId, PendingAction, TaskViewportVisibility } from './types';
 export { saveState, loadState } from './persistence';
 export {
   getFontScale,
@@ -90,6 +90,8 @@ export {
   resetGlobalScale,
   getPanelSize,
   setPanelSizes,
+  getTaskViewportVisibility,
+  setTaskViewportVisibility,
   toggleSidebar,
   toggleArena,
   setTerminalFont,
@@ -106,6 +108,8 @@ export {
 } from './ui';
 export {
   getTaskDotStatus,
+  getTaskAttentionState,
+  taskNeedsAttention,
   markAgentOutput,
   clearAgentActivity,
   getAgentOutputTail,
@@ -121,7 +125,7 @@ export {
   stopTaskStatusPolling,
   rescheduleTaskStatusPolling,
 } from './taskStatus';
-export type { TaskDotStatus } from './taskStatus';
+export type { TaskAttentionState, TaskDotStatus } from './taskStatus';
 export { showNotification, clearNotification } from './notification';
 export { getCompletedTasksTodayCount, getMergedLineTotals } from './completion';
 export {
