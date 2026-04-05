@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { BrowserWindow } from 'electron';
 import { RingBuffer } from '../remote/ring-buffer.js';
+import { resolveUserShell } from '../user-shell.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -102,7 +103,7 @@ export function spawnAgent(
   },
 ): void {
   const channelId = args.onOutput.__CHANNEL_ID__;
-  const command = args.command || process.env.SHELL || '/bin/sh';
+  const command = args.command || resolveUserShell();
   const cwd = args.cwd || process.env.HOME || '/';
 
   // Reject commands with shell metacharacters (node-pty uses execvp, but

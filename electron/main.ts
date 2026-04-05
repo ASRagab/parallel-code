@@ -7,6 +7,7 @@ import { registerAllHandlers } from './ipc/register.js';
 import { killAllAgents } from './ipc/pty.js';
 import { stopAllPlanWatchers } from './ipc/plans.js';
 import { IPC } from './ipc/channels.js';
+import { resolveUserShell } from './user-shell.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,7 +27,7 @@ const __dirname = path.dirname(__filename);
 function fixPath(): void {
   if (process.platform === 'win32') return;
   try {
-    const loginShell = process.env.SHELL || '/bin/sh';
+    const loginShell = resolveUserShell();
     const sentinel = '__PCODE_PATH__';
     const result = execFileSync(loginShell, ['-ilc', `printf "${sentinel}%s${sentinel}" "$PATH"`], {
       encoding: 'utf8',
