@@ -470,17 +470,25 @@ export function getAgentCols(agentId: string): number {
  * (custom API keys, feature flags, tool config, etc.) without needing an
  * ever-growing allowlist.
  */
-/** Home directory inside the Docker container (writable by uid 1000). */
-const DOCKER_CONTAINER_HOME = '/home/agent';
+/**
+ * Writable HOME inside the Docker container.
+ *
+ * Docker tasks run as the host user's uid/gid so files created in the mounted
+ * project worktree stay owned by the host user. On macOS that is often 501:20,
+ * which cannot write to the image-owned /home/agent directory. Using /tmp keeps
+ * HOME writable for arbitrary host-mapped users and avoids agents hanging
+ * during startup while trying to initialize config under an unwritable home.
+ */
+export const DOCKER_CONTAINER_HOME = '/tmp';
 
 const DOCKER_ENV_BLOCK_LIST = new Set([
   // Host PATH must not override the container's PATH — agent CLIs like
   // `claude` are installed at /usr/local/bin inside the image and won't be
   // found if the host PATH (pointing at host-only dirs) is forwarded.
   'PATH',
-  // Host HOME points to a non-writable directory inside the container
-  // (created by Docker for read-only credential mounts). Agents need a
-  // writable HOME for config files — we set HOME=/home/agent explicitly.
+  // Host HOME points to a non-writable directory inside the container when we
+  // run as the host user's uid/gid. Agents need a writable HOME for config
+  // files, so Docker mode sets HOME to DOCKER_CONTAINER_HOME explicitly.
   'HOME',
   // Display / desktop session
   'DISPLAY',

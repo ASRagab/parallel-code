@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { validateCommand } from './pty.js';
+import { validateCommand, DOCKER_CONTAINER_HOME } from './pty.js';
+
+describe('DOCKER_CONTAINER_HOME', () => {
+  it('uses a home directory writable by arbitrary host-mapped docker users', () => {
+    expect(DOCKER_CONTAINER_HOME).toBe('/tmp');
+  });
+});
 
 describe('validateCommand', () => {
   it('does not throw for a command found in PATH', () => {
