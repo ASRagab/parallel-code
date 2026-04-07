@@ -382,6 +382,15 @@ export function SettingsDialog(props: SettingsDialogProps) {
               Docker image used when "Run in Docker container" is enabled for a task. The agent runs
               inside the container with only the project directory mounted.
             </span>
+            <div style={{ 'font-size': '11px', color: theme.fgMuted, 'margin-top': '4px' }}>
+              Projects with a{' '}
+              <code
+                style={{ 'font-family': "'JetBrains Mono', monospace", 'font-size': '11px' }}
+              >
+                .parallel-code/Dockerfile
+              </code>{' '}
+              will use a project-specific image instead.
+            </div>
           </div>
         </div>
       </Show>
