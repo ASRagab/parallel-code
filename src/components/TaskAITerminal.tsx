@@ -34,29 +34,50 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
 
   const dockerOverlayLabel = () => getTaskDockerOverlayLabel(props.task.dockerImage);
 
-  // --- Markdown file viewer ---
   const [mdViewerContent, setMdViewerContent] = createSignal('');
   const [mdViewerFileName, setMdViewerFileName] = createSignal('');
   const [mdViewerOpen, setMdViewerOpen] = createSignal(false);
-
-  function handleFileLink(filePath: string) {
-    invoke<string>(IPC.ReadFileText, { filePath })
-      .then((content) => {
-        setMdViewerContent(content);
-        setMdViewerFileName(filePath.split('/').pop() ?? filePath);
-        setMdViewerOpen(true);
-      })
-      .catch((err) => {
-        setMdViewerContent(`**Error loading file:** ${String(err)}`);
-        setMdViewerFileName(filePath.split('/').pop() ?? filePath);
-        setMdViewerOpen(true);
-      });
-  }
 
   const firstAgent = () => {
     const ids = props.task.agentIds;
     return ids.length > 0 ? store.agents[ids[0]] : undefined;
   };
+
+  const fileNameFromPath = (filePath: string) => filePath.split('/').pop() ?? filePath;
+
+  const infoBarStatus = () => {
+    if (firstAgent()?.status === 'exited' && props.task.initialPrompt) {
+      return {
+        title: 'Agent exited before prompt was sent',
+        text: 'Agent exited before prompt was sent',
+      };
+    }
+
+    if (props.task.dockerMode && props.task.initialPrompt) {
+      return {
+        title: 'Starting Docker container…',
+        text: 'Starting Docker container…',
+      };
+    }
+
+    return props.task.initialPrompt
+      ? { title: 'Waiting to send prompt…', text: 'Waiting to send prompt…' }
+      : { title: 'No prompts sent yet', text: 'No prompts sent' };
+  };
+
+  function handleFileLink(filePath: string) {
+    invoke<string>(IPC.ReadFileText, { filePath })
+      .then((content) => {
+        setMdViewerContent(content);
+        setMdViewerFileName(fileNameFromPath(filePath));
+        setMdViewerOpen(true);
+      })
+      .catch((err) => {
+        setMdViewerContent(`**Error loading file:** ${String(err)}`);
+        setMdViewerFileName(fileNameFromPath(filePath));
+        setMdViewerOpen(true);
+      });
+  }
 
   return (
     <>
@@ -73,31 +94,14 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
         onClick={() => setTaskFocusedPanel(props.task.id, 'ai-terminal')}
       >
         <InfoBar
-          title={
-            props.task.lastPrompt ||
-            (firstAgent()?.status === 'exited' && props.task.initialPrompt
-              ? 'Agent exited before prompt was sent'
-              : props.task.dockerMode && props.task.initialPrompt
-                ? 'Starting Docker container…'
-                : props.task.initialPrompt
-                  ? 'Waiting to send prompt…'
-                  : 'No prompts sent yet')
-          }
+          title={props.task.lastPrompt || infoBarStatus().title}
           onDblClick={() => {
             if (props.task.lastPrompt && props.promptHandle && !props.promptHandle.getText())
               props.promptHandle.setText(props.task.lastPrompt);
           }}
         >
           <span style={{ opacity: props.task.lastPrompt ? 1 : 0.4 }}>
-            {props.task.lastPrompt
-              ? `> ${props.task.lastPrompt}`
-              : firstAgent()?.status === 'exited' && props.task.initialPrompt
-                ? 'Agent exited before prompt was sent'
-                : props.task.dockerMode && props.task.initialPrompt
-                  ? 'Starting Docker container…'
-                  : props.task.initialPrompt
-                    ? 'Waiting to send prompt…'
-                    : 'No prompts sent'}
+            {props.task.lastPrompt ? `> ${props.task.lastPrompt}` : infoBarStatus().text}
           </span>
         </InfoBar>
         <div style={{ flex: '1', position: 'relative', overflow: 'hidden' }}>

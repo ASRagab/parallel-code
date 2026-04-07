@@ -78,6 +78,7 @@ vi.mock('node-pty', () => ({
 
 import {
   DOCKER_CONTAINER_HOME,
+  dockerImageExists,
   hashDockerfile,
   killAllAgents,
   projectImageTag,
@@ -330,5 +331,24 @@ describe('hashDockerfile', () => {
   it('returns null for a non-existent file', () => {
     const hash = hashDockerfile('/nonexistent/Dockerfile');
     expect(hash).toBeNull();
+  });
+});
+
+describe('dockerImageExists', () => {
+  it('fails closed when a custom dockerfile path is unreadable', async () => {
+    mockExecFile.mockImplementationOnce(
+      (
+        _command: string,
+        _args: string[],
+        _options: { encoding: string; timeout: number },
+        callback: (err: Error | null, stdout: string) => void,
+      ) => callback(null, 'stored-hash'),
+    );
+
+    await expect(
+      dockerImageExists('parallel-code-project:test', {
+        dockerfilePath: '/nonexistent/Dockerfile',
+      }),
+    ).resolves.toBe(false);
   });
 });

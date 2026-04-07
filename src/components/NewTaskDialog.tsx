@@ -29,6 +29,7 @@ import { BranchPrefixField } from './BranchPrefixField';
 import { ProjectSelect } from './ProjectSelect';
 import { SymlinkDirPicker } from './SymlinkDirPicker';
 import type { AgentDef } from '../ipc/types';
+import { DEFAULT_DOCKER_IMAGE, PROJECT_DOCKERFILE_RELATIVE_PATH } from '../lib/docker';
 
 interface NewTaskDialogProps {
   open: boolean;
@@ -295,44 +296,67 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
       setProjectDockerfile(null);
       return;
     }
+
     const pid = selectedProjectId();
     if (!pid) {
       setProjectDockerfile(null);
       return;
     }
+
     const projectRoot = getProjectPath(pid);
     if (!projectRoot) {
       setProjectDockerfile(null);
       return;
     }
+
+    let cancelled = false;
     invoke<{ dockerfilePath: string; imageTag: string } | null>(IPC.ResolveProjectDockerfile, {
       projectRoot,
     }).then(
-      (result) => setProjectDockerfile(result),
-      () => setProjectDockerfile(null),
+      (result) => {
+        if (!cancelled) setProjectDockerfile(result);
+      },
+      () => {
+        if (!cancelled) setProjectDockerfile(null);
+      },
     );
+
+    onCleanup(() => {
+      cancelled = true;
+    });
   });
 
   // Check if the Docker image exists when Docker mode is enabled (debounced)
   let checkTimer: ReturnType<typeof setTimeout>;
   createEffect(() => {
     if (!dockerMode() || !store.dockerAvailable) {
+      clearTimeout(checkTimer);
       setDockerImageReady(null);
       return;
     }
+
     const projDocker = projectDockerfile();
-    const image = projDocker
-      ? projDocker.imageTag
-      : store.dockerImage || 'parallel-code-agent:latest';
+    const image = projDocker ? projDocker.imageTag : store.dockerImage || DEFAULT_DOCKER_IMAGE;
     const checkArgs: Record<string, string> = { image };
     if (projDocker) checkArgs.dockerfilePath = projDocker.dockerfilePath;
+
+    let cancelled = false;
     clearTimeout(checkTimer);
     checkTimer = setTimeout(() => {
       invoke<boolean>(IPC.CheckDockerImageExists, checkArgs).then(
-        (exists) => setDockerImageReady(exists),
-        () => setDockerImageReady(false),
+        (exists) => {
+          if (!cancelled) setDockerImageReady(exists);
+        },
+        () => {
+          if (!cancelled) setDockerImageReady(false);
+        },
       );
     }, 300);
+
+    onCleanup(() => {
+      cancelled = true;
+      clearTimeout(checkTimer);
+    });
   });
 
   // Auto-scroll build output to bottom
@@ -847,7 +871,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
                     <span>📁</span>
                     Using project Dockerfile:{' '}
                     <code style={{ 'font-family': "'JetBrains Mono', monospace" }}>
-                      .parallel-code/Dockerfile
+                      {PROJECT_DOCKERFILE_RELATIVE_PATH}
                     </code>
                   </div>
                 </Show>
@@ -862,7 +886,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
                       type="text"
                       value={store.dockerImage}
                       onInput={(e) => setDockerImage(e.currentTarget.value)}
-                      placeholder="parallel-code-agent:latest"
+                      placeholder={DEFAULT_DOCKER_IMAGE}
                       style={{
                         flex: '1',
                         background: theme.bgInput,
@@ -891,7 +915,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
                     <Show
                       when={
                         projectDockerfile() ||
-                        store.dockerImage === 'parallel-code-agent:latest' ||
+                        store.dockerImage === DEFAULT_DOCKER_IMAGE ||
                         !store.dockerImage
                       }
                     >

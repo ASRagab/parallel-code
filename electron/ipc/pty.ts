@@ -465,12 +465,6 @@ export function getAgentCols(agentId: string): number {
 // --- Docker mode helpers ---
 
 /**
- * Env vars that are desktop/host-specific and must NOT be forwarded into the
- * container. Everything else is forwarded so agents can use arbitrary vars
- * (custom API keys, feature flags, tool config, etc.) without needing an
- * ever-growing allowlist.
- */
-/**
  * Writable HOME inside the Docker container.
  *
  * Docker tasks run as the host user's uid/gid so files created in the mounted
@@ -480,6 +474,13 @@ export function getAgentCols(agentId: string): number {
  * during startup while trying to initialize config under an unwritable home.
  */
 export const DOCKER_CONTAINER_HOME = '/tmp';
+
+/**
+ * Env vars that are desktop/host-specific and must NOT be forwarded into the
+ * container. Everything else is forwarded so agents can use arbitrary vars
+ * (custom API keys, feature flags, tool config, etc.) without needing an
+ * ever-growing allowlist.
+ */
 
 const DOCKER_ENV_BLOCK_LIST = new Set([
   // Host PATH must not override the container's PATH — agent CLIs like
@@ -556,8 +557,6 @@ function buildDockerCredentialMounts(): string[] {
   const home = process.env.HOME;
   if (!home) return mounts;
 
-  const containerHome = DOCKER_CONTAINER_HOME;
-
   /** Mount a host path read-only into the container home. Skips if absent. */
   const mountIfExists = (hostPath: string, containerPath: string): void => {
     try {
@@ -569,19 +568,19 @@ function buildDockerCredentialMounts(): string[] {
   };
 
   // SSH keys for git push/pull
-  mountIfExists(`${home}/.ssh`, `${containerHome}/.ssh`);
+  mountIfExists(`${home}/.ssh`, `${DOCKER_CONTAINER_HOME}/.ssh`);
 
   // Git identity / config
-  mountIfExists(`${home}/.gitconfig`, `${containerHome}/.gitconfig`);
+  mountIfExists(`${home}/.gitconfig`, `${DOCKER_CONTAINER_HOME}/.gitconfig`);
 
   // GitHub CLI auth tokens (~/.config/gh/)
-  mountIfExists(`${home}/.config/gh`, `${containerHome}/.config/gh`);
+  mountIfExists(`${home}/.config/gh`, `${DOCKER_CONTAINER_HOME}/.config/gh`);
 
   // npm auth token
-  mountIfExists(`${home}/.npmrc`, `${containerHome}/.npmrc`);
+  mountIfExists(`${home}/.npmrc`, `${DOCKER_CONTAINER_HOME}/.npmrc`);
 
   // General HTTP/git HTTPS credentials (used by git credential helper)
-  mountIfExists(`${home}/.netrc`, `${containerHome}/.netrc`);
+  mountIfExists(`${home}/.netrc`, `${DOCKER_CONTAINER_HOME}/.netrc`);
 
   // Google Application Credentials file (for Vertex AI / gcloud) — mounted
   // at its original path since the env var points there.
@@ -686,7 +685,11 @@ export async function dockerImageExists(
     ? hashDockerfile(customPath)
     : image === DOCKER_DEFAULT_IMAGE
       ? getDockerfileHash()
-      : null; // non-default image with no custom path → skip hash check
+      : null;
+
+  if (customPath && !expectedHash) {
+    return false;
+  }
 
   return new Promise((resolve) => {
     execFile(
@@ -704,8 +707,6 @@ export async function dockerImageExists(
           resolve(false);
           return;
         }
-        // If we can't compute the expected hash (Dockerfile missing/unreadable),
-        // accept any existing image
         if (!expectedHash) {
           resolve(true);
           return;

@@ -23,6 +23,7 @@ import {
 } from '../store/store';
 import { CustomAgentEditor } from './CustomAgentEditor';
 import { mod } from '../lib/platform';
+import { DEFAULT_DOCKER_IMAGE, PROJECT_DOCKERFILE_RELATIVE_PATH } from '../lib/docker';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -364,7 +365,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 type="text"
                 value={store.dockerImage}
                 onInput={(e) => setDockerImage(e.currentTarget.value)}
-                placeholder="parallel-code-agent:latest"
+                placeholder={DEFAULT_DOCKER_IMAGE}
                 style={{
                   flex: '1',
                   background: theme.taskPanelBg,
@@ -384,10 +385,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
             </span>
             <div style={{ 'font-size': '11px', color: theme.fgMuted, 'margin-top': '4px' }}>
               Projects with a{' '}
-              <code
-                style={{ 'font-family': "'JetBrains Mono', monospace", 'font-size': '11px' }}
-              >
-                .parallel-code/Dockerfile
+              <code style={{ 'font-family': "'JetBrains Mono', monospace", 'font-size': '11px' }}>
+                {PROJECT_DOCKERFILE_RELATIVE_PATH}
               </code>{' '}
               will use a project-specific image instead.
             </div>
