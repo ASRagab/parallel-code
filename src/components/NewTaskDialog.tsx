@@ -55,6 +55,10 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   const [dockerBuilding, setDockerBuilding] = createSignal(false);
   const [dockerBuildOutput, setDockerBuildOutput] = createSignal('');
   const [dockerBuildError, setDockerBuildError] = createSignal('');
+  const [projectDockerfile, setProjectDockerfile] = createSignal<{
+    dockerfilePath: string;
+    imageTag: string;
+  } | null>(null);
   const [branchPrefix, setBranchPrefix] = createSignal('');
   let promptRef!: HTMLTextAreaElement;
   let formRef!: HTMLFormElement;
@@ -124,6 +128,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     setDockerBuilding(false);
     setDockerBuildOutput('');
     setDockerBuildError('');
+    setProjectDockerfile(null);
 
     void (async () => {
       // Check Docker availability in background
@@ -284,21 +289,50 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     setGitIsolation(proj?.defaultGitIsolation ?? 'worktree');
   });
 
-  // Check if the default Docker image exists when Docker mode is enabled (debounced)
+  // Detect per-project Dockerfile when Docker mode is enabled
+  createEffect(() => {
+    if (!dockerMode() || !store.dockerAvailable) {
+      setProjectDockerfile(null);
+      return;
+    }
+    const pid = selectedProjectId();
+    if (!pid) {
+      setProjectDockerfile(null);
+      return;
+    }
+    const projectRoot = getProjectPath(pid);
+    if (!projectRoot) {
+      setProjectDockerfile(null);
+      return;
+    }
+    invoke<{ dockerfilePath: string; imageTag: string } | null>(IPC.ResolveProjectDockerfile, {
+      projectRoot,
+    }).then(
+      (result) => setProjectDockerfile(result),
+      () => setProjectDockerfile(null),
+    );
+  });
+
+  // Check if the Docker image exists when Docker mode is enabled (debounced)
   let checkTimer: ReturnType<typeof setTimeout>;
   createEffect(() => {
-    if (dockerMode() && store.dockerAvailable) {
-      const image = store.dockerImage || 'parallel-code-agent:latest';
-      clearTimeout(checkTimer);
-      checkTimer = setTimeout(() => {
-        invoke<boolean>(IPC.CheckDockerImageExists, { image }).then(
-          (exists) => setDockerImageReady(exists),
-          () => setDockerImageReady(false),
-        );
-      }, 300);
-    } else {
+    if (!dockerMode() || !store.dockerAvailable) {
       setDockerImageReady(null);
+      return;
     }
+    const projDocker = projectDockerfile();
+    const image = projDocker
+      ? projDocker.imageTag
+      : store.dockerImage || 'parallel-code-agent:latest';
+    const checkArgs: Record<string, string> = { image };
+    if (projDocker) checkArgs.dockerfilePath = projDocker.dockerfilePath;
+    clearTimeout(checkTimer);
+    checkTimer = setTimeout(() => {
+      invoke<boolean>(IPC.CheckDockerImageExists, checkArgs).then(
+        (exists) => setDockerImageReady(exists),
+        () => setDockerImageReady(false),
+      );
+    }, 300);
   });
 
   // Auto-scroll build output to bottom
@@ -322,9 +356,13 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     });
 
     try {
-      const result = await invoke<{ ok: boolean; error?: string }>(IPC.BuildDockerImage, {
-        onOutputChannel: `channel:${channelId}`,
-      });
+      const projDocker = projectDockerfile();
+      const buildArgs: Record<string, string> = { onOutputChannel: `channel:${channelId}` };
+      if (projDocker) {
+        buildArgs.dockerfilePath = projDocker.dockerfilePath;
+        buildArgs.imageTag = projDocker.imageTag;
+      }
+      const result = await invoke<{ ok: boolean; error?: string }>(IPC.BuildDockerImage, buildArgs);
       if (result.ok) {
         setDockerImageReady(true);
         setDockerBuildOutput((prev) => prev + '\nImage built successfully!');
@@ -441,7 +479,9 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         stepsEnabled: stepsEnabled(),
         skipPermissions: agentSupportsSkipPermissions() && skipPermissions(),
         dockerMode: dockerMode() || undefined,
-        dockerImage: dockerMode() ? store.dockerImage : undefined,
+        dockerImage: dockerMode()
+          ? (projectDockerfile()?.imageTag ?? store.dockerImage)
+          : undefined,
       });
       // Drop flow: prefill prompt without auto-sending
       if (isFromDrop && p) {
@@ -794,30 +834,49 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
                   The agent will run inside a Docker container. Only the project directory is
                   mounted — files outside the project are protected from accidental deletion.
                 </div>
-                <div style={{ display: 'flex', 'align-items': 'center', gap: '8px' }}>
-                  <label
-                    style={{ 'font-size': '12px', color: theme.fgMuted, 'white-space': 'nowrap' }}
-                  >
-                    Image:
-                  </label>
-                  <input
-                    type="text"
-                    value={store.dockerImage}
-                    onInput={(e) => setDockerImage(e.currentTarget.value)}
-                    placeholder="parallel-code-agent:latest"
+                <Show when={projectDockerfile()}>
+                  <div
                     style={{
-                      flex: '1',
-                      background: theme.bgInput,
-                      border: `1px solid ${theme.border}`,
-                      'border-radius': '6px',
-                      padding: '5px 10px',
-                      color: theme.fg,
-                      'font-size': '13px',
-                      'font-family': "'JetBrains Mono', monospace",
-                      outline: 'none',
+                      'font-size': '12px',
+                      color: theme.accent,
+                      display: 'flex',
+                      'align-items': 'center',
+                      gap: '4px',
                     }}
-                  />
-                </div>
+                  >
+                    <span>📁</span>
+                    Using project Dockerfile:{' '}
+                    <code style={{ 'font-family': "'JetBrains Mono', monospace" }}>
+                      .parallel-code/Dockerfile
+                    </code>
+                  </div>
+                </Show>
+                <Show when={!projectDockerfile()}>
+                  <div style={{ display: 'flex', 'align-items': 'center', gap: '8px' }}>
+                    <label
+                      style={{ 'font-size': '12px', color: theme.fgMuted, 'white-space': 'nowrap' }}
+                    >
+                      Image:
+                    </label>
+                    <input
+                      type="text"
+                      value={store.dockerImage}
+                      onInput={(e) => setDockerImage(e.currentTarget.value)}
+                      placeholder="parallel-code-agent:latest"
+                      style={{
+                        flex: '1',
+                        background: theme.bgInput,
+                        border: `1px solid ${theme.border}`,
+                        'border-radius': '6px',
+                        padding: '5px 10px',
+                        color: theme.fg,
+                        'font-size': '13px',
+                        'font-family': "'JetBrains Mono', monospace",
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+                </Show>
                 <Show when={dockerImageReady() === false && !dockerBuilding()}>
                   <div
                     style={{
@@ -831,7 +890,9 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
                     <span>Image not found locally.</span>
                     <Show
                       when={
-                        store.dockerImage === 'parallel-code-agent:latest' || !store.dockerImage
+                        projectDockerfile() ||
+                        store.dockerImage === 'parallel-code-agent:latest' ||
+                        !store.dockerImage
                       }
                     >
                       <button
@@ -892,7 +953,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
                 </Show>
                 <Show when={dockerImageReady() === true && !dockerBuilding()}>
                   <div style={{ 'font-size': '12px', color: theme.success ?? theme.accent }}>
-                    Image ready.
+                    {projectDockerfile() ? 'Project image ready.' : 'Image ready.'}
                   </div>
                 </Show>
               </Show>
