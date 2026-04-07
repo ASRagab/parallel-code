@@ -17,6 +17,7 @@ import { Dialog } from './Dialog';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { invoke } from '../lib/ipc';
+import { getTaskDockerOverlayLabel } from '../lib/docker';
 import { IPC } from '../../electron/ipc/channels';
 import { createHighlightedMarkdown } from '../lib/marked-shiki';
 import type { Task } from '../store/types';
@@ -30,6 +31,8 @@ interface TaskAITerminalProps {
 
 export function TaskAITerminal(props: TaskAITerminalProps) {
   onCleanup(() => unregisterFocusFn(`${props.task.id}:ai-terminal`));
+
+  const dockerOverlayLabel = () => getTaskDockerOverlayLabel(props.task.dockerImage);
 
   // --- Markdown file viewer ---
   const [mdViewerContent, setMdViewerContent] = createSignal('');
@@ -100,6 +103,7 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
         <div style={{ flex: '1', position: 'relative', overflow: 'hidden' }}>
           <Show when={props.task.dockerMode}>
             <div
+              title={props.task.dockerImage}
               style={{
                 position: 'absolute',
                 top: '8px',
@@ -114,7 +118,7 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                 'pointer-events': 'none',
               }}
             >
-              docker
+              {dockerOverlayLabel()}
             </div>
           </Show>
           <Show when={firstAgent()}>

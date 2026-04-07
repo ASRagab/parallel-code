@@ -13,6 +13,7 @@ import { StatusDot } from './StatusDot';
 import { theme } from '../lib/theme';
 import { badgeStyle } from '../lib/badgeStyle';
 import { handleDragReorder } from '../lib/dragReorder';
+import { getTaskDockerBadgeLabel } from '../lib/docker';
 import type { Task } from '../store/types';
 
 interface TaskTitleBarProps {
@@ -27,6 +28,8 @@ interface TaskTitleBarProps {
 }
 
 export function TaskTitleBar(props: TaskTitleBarProps) {
+  const dockerBadgeLabel = () => getTaskDockerBadgeLabel(props.task.dockerImage);
+
   function handleTitleMouseDown(e: MouseEvent) {
     handleDragReorder(e, {
       itemId: props.task.id,
@@ -67,7 +70,9 @@ export function TaskTitleBar(props: TaskTitleBarProps) {
           <span style={badgeStyle(theme.warning)}>{props.task.branchName}</span>
         </Show>
         <Show when={props.task.dockerMode}>
-          <span style={badgeStyle(theme.fgMuted)}>Docker</span>
+          <span style={badgeStyle(theme.fgMuted)} title={props.task.dockerImage}>
+            {dockerBadgeLabel()}
+          </span>
         </Show>
         <EditableText
           value={props.task.name}
