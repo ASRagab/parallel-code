@@ -76,7 +76,15 @@ vi.mock('node-pty', () => ({
   spawn: mockPtySpawn,
 }));
 
-import { DOCKER_CONTAINER_HOME, killAllAgents, spawnAgent, validateCommand } from './pty.js';
+import {
+  DOCKER_CONTAINER_HOME,
+  hashDockerfile,
+  killAllAgents,
+  projectImageTag,
+  resolveProjectDockerfile,
+  spawnAgent,
+  validateCommand,
+} from './pty.js';
 
 let tempPaths: string[] = [];
 let agentCounter = 0;
@@ -261,5 +269,66 @@ describe('validateCommand', () => {
 
   it('throws for a whitespace-only command string', () => {
     expect(() => validateCommand('   ')).toThrow(/must not be empty/);
+  });
+});
+
+describe('resolveProjectDockerfile', () => {
+  it('returns absolute path when .parallel-code/Dockerfile exists in project root', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-resolve-'));
+    tempPaths.push(projectRoot);
+    const dockerDir = path.join(projectRoot, '.parallel-code');
+    fs.mkdirSync(dockerDir, { recursive: true });
+    fs.writeFileSync(path.join(dockerDir, 'Dockerfile'), 'FROM node:20\n');
+
+    const result = resolveProjectDockerfile(projectRoot);
+    expect(result).toBe(path.join(projectRoot, '.parallel-code', 'Dockerfile'));
+  });
+
+  it('returns null when .parallel-code/Dockerfile does not exist', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-resolve-'));
+    tempPaths.push(projectRoot);
+
+    const result = resolveProjectDockerfile(projectRoot);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when project root does not exist', () => {
+    const result = resolveProjectDockerfile('/nonexistent/path/to/project');
+    expect(result).toBeNull();
+  });
+});
+
+describe('projectImageTag', () => {
+  it('returns a tag in the format parallel-code-project:<12-char-hash>', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-tag-'));
+    tempPaths.push(tmpDir);
+    const dockerfilePath = path.join(tmpDir, 'Dockerfile');
+    fs.writeFileSync(dockerfilePath, 'FROM node:20\nRUN echo hello\n');
+
+    const tag = projectImageTag(dockerfilePath);
+    expect(tag).toMatch(/^parallel-code-project:[a-f0-9]{12}$/);
+  });
+
+  it('returns parallel-code-project:unknown for non-existent Dockerfile path', () => {
+    const tag = projectImageTag('/nonexistent/Dockerfile');
+    expect(tag).toBe('parallel-code-project:unknown');
+  });
+});
+
+describe('hashDockerfile', () => {
+  it('returns a SHA-256 hex string for a real file', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-hash-'));
+    tempPaths.push(tmpDir);
+    const dockerfilePath = path.join(tmpDir, 'Dockerfile');
+    fs.writeFileSync(dockerfilePath, 'FROM ubuntu:22.04\n');
+
+    const hash = hashDockerfile(dockerfilePath);
+    expect(hash).not.toBeNull();
+    expect(hash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('returns null for a non-existent file', () => {
+    const hash = hashDockerfile('/nonexistent/Dockerfile');
+    expect(hash).toBeNull();
   });
 });
