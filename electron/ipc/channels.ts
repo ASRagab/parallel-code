@@ -102,6 +102,7 @@ export enum IPC {
   CheckDockerAvailable = 'check_docker_available',
   CheckDockerImageExists = 'check_docker_image_exists',
   BuildDockerImage = 'build_docker_image',
+  ResolveProjectDockerfile = 'resolve_project_dockerfile',
 
   // System
   GetSystemFonts = 'get_system_fonts',

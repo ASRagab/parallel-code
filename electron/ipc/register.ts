@@ -16,6 +16,8 @@ import {
   isDockerAvailable,
   dockerImageExists,
   buildDockerImage,
+  resolveProjectDockerfile,
+  projectImageTag,
 } from './pty.js';
 import {
   ensurePlansDirectory,
@@ -196,11 +198,25 @@ export function registerAllHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.CheckDockerAvailable, () => isDockerAvailable());
   ipcMain.handle(IPC.CheckDockerImageExists, (_e, args) => {
     assertString(args.image, 'image');
-    return dockerImageExists(args.image);
+    const opts: { dockerfilePath?: string } = {};
+    if (typeof args.dockerfilePath === 'string') opts.dockerfilePath = args.dockerfilePath;
+    return dockerImageExists(args.image, Object.keys(opts).length ? opts : undefined);
   });
   ipcMain.handle(IPC.BuildDockerImage, (_e, args) => {
     assertString(args.onOutputChannel, 'onOutputChannel');
-    return buildDockerImage(win, args.onOutputChannel);
+    const opts: { dockerfilePath?: string; imageTag?: string } = {};
+    if (typeof args.dockerfilePath === 'string') opts.dockerfilePath = args.dockerfilePath;
+    if (typeof args.imageTag === 'string') opts.imageTag = args.imageTag;
+    return buildDockerImage(win, args.onOutputChannel, Object.keys(opts).length ? opts : undefined);
+  });
+  ipcMain.handle(IPC.ResolveProjectDockerfile, (_e, args) => {
+    assertString(args.projectRoot, 'projectRoot');
+    const dockerfilePath = resolveProjectDockerfile(args.projectRoot);
+    if (!dockerfilePath) return null;
+    return {
+      dockerfilePath,
+      imageTag: projectImageTag(dockerfilePath),
+    };
   });
 
   // --- Task commands ---
