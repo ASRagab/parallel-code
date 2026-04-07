@@ -634,20 +634,60 @@ function resolveDockerfilePath(): string | null {
   return fs.existsSync(p) ? p : null;
 }
 
-/** SHA-256 hex digest of the current Dockerfile, or null if not found. */
+/** SHA-256 hex digest of an arbitrary Dockerfile, or null if unreadable. */
+export function hashDockerfile(dockerfilePath: string): string | null {
+  try {
+    return crypto.createHash('sha256').update(fs.readFileSync(dockerfilePath)).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
+/** SHA-256 hex digest of the bundled Dockerfile, or null if not found. */
 function getDockerfileHash(): string | null {
   const p = resolveDockerfilePath();
   if (!p) return null;
-  return crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+  return hashDockerfile(p);
+}
+
+/**
+ * Check if a project has a local Dockerfile at .parallel-code/Dockerfile.
+ * Returns the absolute path if found, null otherwise.
+ */
+export function resolveProjectDockerfile(projectRoot: string): string | null {
+  const p = path.join(projectRoot, '.parallel-code', 'Dockerfile');
+  return fs.existsSync(p) ? p : null;
+}
+
+/**
+ * Derive a deterministic image tag for a project Dockerfile.
+ * Tag format: parallel-code-project:<first-12-of-sha256>
+ */
+export function projectImageTag(dockerfilePath: string): string {
+  const hash = hashDockerfile(dockerfilePath);
+  return `parallel-code-project:${(hash ?? 'unknown').slice(0, 12)}`;
 }
 
 /**
  * Check if a Docker image exists locally **and** matches the current Dockerfile.
  * Returns false when the image is missing or was built from a different Dockerfile,
  * so the UI will prompt the user to (re)build.
+ *
+ * When `opts.dockerfilePath` is provided, hash that file for the staleness check.
+ * When the image is not the default and no `dockerfilePath` is given, skip the hash
+ * check entirely (just verify the image exists).
  */
-export async function dockerImageExists(image: string): Promise<boolean> {
-  const expectedHash = getDockerfileHash();
+export async function dockerImageExists(
+  image: string,
+  opts?: { dockerfilePath?: string },
+): Promise<boolean> {
+  const customPath = opts?.dockerfilePath;
+  const expectedHash = customPath
+    ? hashDockerfile(customPath)
+    : image === DOCKER_DEFAULT_IMAGE
+      ? getDockerfileHash()
+      : null; // non-default image with no custom path → skip hash check
+
   return new Promise((resolve) => {
     execFile(
       'docker',
@@ -664,7 +704,8 @@ export async function dockerImageExists(image: string): Promise<boolean> {
           resolve(false);
           return;
         }
-        // If we can't compute the expected hash (Dockerfile missing), accept any existing image
+        // If we can't compute the expected hash (Dockerfile missing/unreadable),
+        // accept any existing image
         if (!expectedHash) {
           resolve(true);
           return;
@@ -679,32 +720,42 @@ export async function dockerImageExists(image: string): Promise<boolean> {
 let activeBuild: Promise<{ ok: boolean; error?: string }> | null = null;
 
 /**
- * Build the bundled Dockerfile into parallel-code-agent:latest.
+ * Build a Dockerfile into a Docker image.
  * Streams build output to the renderer via an IPC channel so the user can see progress.
  * Returns a promise that resolves on success, rejects on failure.
- * Concurrent calls return the same in-flight promise.
+ *
+ * When no `opts` are given, builds the bundled Dockerfile into the default image
+ * (backward compatible). Concurrent calls for the default image share the same
+ * in-flight promise; custom builds are never deduplicated.
  */
 export function buildDockerImage(
   win: BrowserWindow,
   onOutputChannel: string,
+  opts?: { dockerfilePath?: string; imageTag?: string },
 ): Promise<{ ok: boolean; error?: string }> {
-  if (activeBuild !== null) {
+  const isDefaultBuild = !opts?.dockerfilePath && !opts?.imageTag;
+
+  // Only dedup when building the default image
+  if (isDefaultBuild && activeBuild !== null) {
     return activeBuild;
   }
 
-  activeBuild = new Promise((resolve) => {
+  const buildPromise = new Promise<{ ok: boolean; error?: string }>((resolve) => {
     const finish = (result: { ok: boolean; error?: string }) => {
-      activeBuild = null;
+      if (isDefaultBuild) {
+        activeBuild = null;
+      }
       resolve(result);
     };
 
-    const dockerfilePath = resolveDockerfilePath();
-    if (!dockerfilePath) {
+    const resolvedDockerfilePath = opts?.dockerfilePath ?? resolveDockerfilePath();
+    if (!resolvedDockerfilePath) {
       finish({ ok: false, error: 'Dockerfile not found' });
       return;
     }
-    const dockerDir = path.dirname(dockerfilePath);
-    const hash = getDockerfileHash() ?? 'unknown';
+    const dockerDir = path.dirname(resolvedDockerfilePath);
+    const hash = hashDockerfile(resolvedDockerfilePath) ?? 'unknown';
+    const imageTag = opts?.imageTag ?? DOCKER_DEFAULT_IMAGE;
 
     const send = (text: string) => {
       if (!win.isDestroyed()) {
@@ -717,11 +768,11 @@ export function buildDockerImage(
       [
         'build',
         '-t',
-        DOCKER_DEFAULT_IMAGE,
+        imageTag,
         '--label',
         `${DOCKERFILE_HASH_LABEL}=${hash}`,
         '-f',
-        dockerfilePath,
+        resolvedDockerfilePath,
         dockerDir,
       ],
       {
@@ -745,5 +796,9 @@ export function buildDockerImage(
     });
   });
 
-  return activeBuild;
+  if (isDefaultBuild) {
+    activeBuild = buildPromise;
+  }
+
+  return buildPromise;
 }
