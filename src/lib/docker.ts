@@ -1,15 +1,19 @@
+export type DockerSource = 'default' | 'project' | 'custom';
+
 export const DEFAULT_DOCKER_IMAGE = 'parallel-code-agent:latest';
 export const PROJECT_DOCKER_IMAGE_PREFIX = 'parallel-code-project:';
 export const PROJECT_DOCKERFILE_RELATIVE_PATH = '.parallel-code/Dockerfile';
 
-export function isProjectDockerImage(image?: string): boolean {
-  return Boolean(image?.startsWith(PROJECT_DOCKER_IMAGE_PREFIX));
+export function inferDockerSource(image?: string): DockerSource {
+  if (image?.startsWith(PROJECT_DOCKER_IMAGE_PREFIX)) return 'project';
+  if (image && image !== DEFAULT_DOCKER_IMAGE) return 'custom';
+  return 'default';
 }
 
-export function getTaskDockerBadgeLabel(image?: string): string {
-  return isProjectDockerImage(image) ? 'Docker (project)' : 'Docker';
+export function getTaskDockerBadgeLabel(source?: DockerSource): string {
+  return source === 'project' ? 'Docker (project)' : 'Docker';
 }
 
-export function getTaskDockerOverlayLabel(image?: string): string {
-  return isProjectDockerImage(image) ? 'project dockerfile' : 'docker';
+export function getTaskDockerOverlayLabel(source?: DockerSource): string {
+  return source === 'project' ? 'project dockerfile' : 'docker';
 }

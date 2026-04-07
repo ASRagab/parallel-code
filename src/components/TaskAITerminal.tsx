@@ -32,7 +32,7 @@ interface TaskAITerminalProps {
 export function TaskAITerminal(props: TaskAITerminalProps) {
   onCleanup(() => unregisterFocusFn(`${props.task.id}:ai-terminal`));
 
-  const dockerOverlayLabel = () => getTaskDockerOverlayLabel(props.task.dockerImage);
+  const dockerOverlayLabel = () => getTaskDockerOverlayLabel(props.task.dockerSource);
 
   const [mdViewerContent, setMdViewerContent] = createSignal('');
   const [mdViewerFileName, setMdViewerFileName] = createSignal('');

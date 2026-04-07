@@ -102,6 +102,12 @@ function getOptionalDockerfilePath(value: unknown): string | undefined {
   return value;
 }
 
+function getOptionalBuildContext(value: unknown): string | undefined {
+  assertOptionalString(value, 'buildContext');
+  if (value !== undefined) validatePath(value, 'buildContext');
+  return value;
+}
+
 function getOptionalImageTag(value: unknown): string | undefined {
   assertOptionalString(value, 'imageTag');
   const imageTag = value?.trim();
@@ -217,11 +223,14 @@ export function registerAllHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.BuildDockerImage, (_e, args) => {
     assertString(args.onOutputChannel, 'onOutputChannel');
     const dockerfilePath = getOptionalDockerfilePath(args.dockerfilePath);
+    const buildContext = getOptionalBuildContext(args.buildContext);
     const imageTag = getOptionalImageTag(args.imageTag);
     return buildDockerImage(
       win,
       args.onOutputChannel,
-      dockerfilePath || imageTag ? { dockerfilePath, imageTag } : undefined,
+      dockerfilePath || buildContext || imageTag
+        ? { dockerfilePath, buildContext, imageTag }
+        : undefined,
     );
   });
   ipcMain.handle(IPC.ResolveProjectDockerfile, (_e, args) => {
@@ -231,6 +240,7 @@ export function registerAllHandlers(win: BrowserWindow): void {
     return {
       dockerfilePath,
       imageTag: projectImageTag(dockerfilePath),
+      buildContext: args.projectRoot,
     };
   });
 

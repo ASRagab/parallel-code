@@ -77,6 +77,7 @@ vi.mock('node-pty', () => ({
 }));
 
 import {
+  buildDockerImage,
   DOCKER_CONTAINER_HOME,
   dockerImageExists,
   hashDockerfile,
@@ -350,5 +351,27 @@ describe('dockerImageExists', () => {
         dockerfilePath: '/nonexistent/Dockerfile',
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe('buildDockerImage', () => {
+  it('uses the provided build context for a project dockerfile', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-build-context-'));
+    tempPaths.push(projectRoot);
+    const dockerDir = path.join(projectRoot, '.parallel-code');
+    fs.mkdirSync(dockerDir, { recursive: true });
+    const dockerfilePath = path.join(dockerDir, 'Dockerfile');
+    fs.writeFileSync(dockerfilePath, 'FROM node:20\n');
+
+    buildDockerImage(createMockWindow(), 'channel:build-test', {
+      dockerfilePath,
+      imageTag: 'parallel-code-project:test',
+      buildContext: projectRoot,
+    } as unknown as Parameters<typeof buildDockerImage>[2]);
+
+    const lastCall = mockChildProcessSpawn.mock.lastCall;
+    expect(lastCall).toBeTruthy();
+    const args = ((lastCall as unknown as [string, string[]])?.[1] ?? []) as string[];
+    expect(args[args.length - 1]).toBe(projectRoot);
   });
 });

@@ -59,6 +59,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   const [projectDockerfile, setProjectDockerfile] = createSignal<{
     dockerfilePath: string;
     imageTag: string;
+    buildContext: string;
   } | null>(null);
   const [branchPrefix, setBranchPrefix] = createSignal('');
   let promptRef!: HTMLTextAreaElement;
@@ -310,9 +311,10 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     }
 
     let cancelled = false;
-    invoke<{ dockerfilePath: string; imageTag: string } | null>(IPC.ResolveProjectDockerfile, {
-      projectRoot,
-    }).then(
+    invoke<{ dockerfilePath: string; imageTag: string; buildContext: string } | null>(
+      IPC.ResolveProjectDockerfile,
+      { projectRoot },
+    ).then(
       (result) => {
         if (!cancelled) setProjectDockerfile(result);
       },
@@ -385,6 +387,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
       if (projDocker) {
         buildArgs.dockerfilePath = projDocker.dockerfilePath;
         buildArgs.imageTag = projDocker.imageTag;
+        buildArgs.buildContext = projDocker.buildContext;
       }
       const result = await invoke<{ ok: boolean; error?: string }>(IPC.BuildDockerImage, buildArgs);
       if (result.ok) {
@@ -490,6 +493,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         }
       }
 
+      const projDocker = projectDockerfile();
       const taskId = await createTask({
         name: n,
         agentDef: agent,
@@ -503,8 +507,15 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         stepsEnabled: stepsEnabled(),
         skipPermissions: agentSupportsSkipPermissions() && skipPermissions(),
         dockerMode: dockerMode() || undefined,
+        dockerSource: dockerMode()
+          ? projDocker
+            ? 'project'
+            : store.dockerImage && store.dockerImage !== DEFAULT_DOCKER_IMAGE
+              ? 'custom'
+              : 'default'
+          : undefined,
         dockerImage: dockerMode()
-          ? (projectDockerfile()?.imageTag ?? store.dockerImage)
+          ? (projDocker?.imageTag ?? (store.dockerImage || DEFAULT_DOCKER_IMAGE))
           : undefined,
       });
       // Drop flow: prefill prompt without auto-sending

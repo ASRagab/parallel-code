@@ -732,9 +732,9 @@ let activeBuild: Promise<{ ok: boolean; error?: string }> | null = null;
 export function buildDockerImage(
   win: BrowserWindow,
   onOutputChannel: string,
-  opts?: { dockerfilePath?: string; imageTag?: string },
+  opts?: { dockerfilePath?: string; buildContext?: string; imageTag?: string },
 ): Promise<{ ok: boolean; error?: string }> {
-  const isDefaultBuild = !opts?.dockerfilePath && !opts?.imageTag;
+  const isDefaultBuild = !opts?.dockerfilePath && !opts?.buildContext && !opts?.imageTag;
 
   // Only dedup when building the default image
   if (isDefaultBuild && activeBuild !== null) {
@@ -754,7 +754,7 @@ export function buildDockerImage(
       finish({ ok: false, error: 'Dockerfile not found' });
       return;
     }
-    const dockerDir = path.dirname(resolvedDockerfilePath);
+    const buildContext = opts?.buildContext ?? path.dirname(resolvedDockerfilePath);
     const hash = hashDockerfile(resolvedDockerfilePath) ?? 'unknown';
     const imageTag = opts?.imageTag ?? DOCKER_DEFAULT_IMAGE;
 
@@ -774,7 +774,7 @@ export function buildDockerImage(
         `${DOCKERFILE_HASH_LABEL}=${hash}`,
         '-f',
         resolvedDockerfilePath,
-        dockerDir,
+        buildContext,
       ],
       {
         stdio: ['ignore', 'pipe', 'pipe'],

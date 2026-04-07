@@ -28,7 +28,7 @@ interface TaskTitleBarProps {
 }
 
 export function TaskTitleBar(props: TaskTitleBarProps) {
-  const dockerBadgeLabel = () => getTaskDockerBadgeLabel(props.task.dockerImage);
+  const dockerBadgeLabel = () => getTaskDockerBadgeLabel(props.task.dockerSource);
 
   function handleTitleMouseDown(e: MouseEvent) {
     handleDragReorder(e, {

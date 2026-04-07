@@ -14,6 +14,7 @@ import type {
   Project,
 } from './types';
 import type { AgentDef } from '../ipc/types';
+import { inferDockerSource } from '../lib/docker';
 import { DEFAULT_TERMINAL_FONT } from '../lib/fonts';
 import { isLookPreset } from '../lib/look';
 import { syncTerminalCounter } from './terminals';
@@ -80,6 +81,7 @@ export async function saveState(): Promise<void> {
       baseBranch: task.baseBranch,
       skipPermissions: task.skipPermissions,
       dockerMode: task.dockerMode,
+      dockerSource: task.dockerSource,
       dockerImage: task.dockerImage,
       githubUrl: task.githubUrl,
       savedInitialPrompt: task.savedInitialPrompt,
@@ -108,6 +110,7 @@ export async function saveState(): Promise<void> {
       baseBranch: task.baseBranch,
       skipPermissions: task.skipPermissions,
       dockerMode: task.dockerMode,
+      dockerSource: task.dockerSource,
       dockerImage: task.dockerImage,
       githubUrl: task.githubUrl,
       savedInitialPrompt: task.savedInitialPrompt,
@@ -378,6 +381,11 @@ export async function loadState(): Promise<void> {
           baseBranch: legacy.baseBranch || undefined,
           skipPermissions: pt.skipPermissions === true,
           dockerMode: pt.dockerMode === true ? true : undefined,
+          dockerSource:
+            pt.dockerMode === true
+              ? (pt.dockerSource ??
+                inferDockerSource(typeof pt.dockerImage === 'string' ? pt.dockerImage : undefined))
+              : undefined,
           dockerImage: typeof pt.dockerImage === 'string' ? pt.dockerImage : undefined,
           githubUrl: pt.githubUrl,
           savedInitialPrompt: pt.savedInitialPrompt,
@@ -441,6 +449,11 @@ export async function loadState(): Promise<void> {
           baseBranch: legacyCollapsed.baseBranch || undefined,
           skipPermissions: pt.skipPermissions === true,
           dockerMode: pt.dockerMode === true ? true : undefined,
+          dockerSource:
+            pt.dockerMode === true
+              ? (pt.dockerSource ??
+                inferDockerSource(typeof pt.dockerImage === 'string' ? pt.dockerImage : undefined))
+              : undefined,
           dockerImage: typeof pt.dockerImage === 'string' ? pt.dockerImage : undefined,
           githubUrl: pt.githubUrl,
           savedInitialPrompt: pt.savedInitialPrompt,

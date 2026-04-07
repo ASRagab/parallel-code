@@ -1,4 +1,5 @@
 import type { AgentDef, StepEntry, WorktreeStatus } from '../ipc/types';
+import type { DockerSource } from '../lib/docker';
 import type { LookPreset } from '../lib/look';
 
 export type GitIsolationMode = 'worktree' | 'direct';
@@ -53,6 +54,7 @@ export interface Task {
   baseBranch?: string;
   skipPermissions?: boolean;
   dockerMode?: boolean;
+  dockerSource?: DockerSource;
   dockerImage?: string;
   githubUrl?: string;
   collapsed?: boolean;
@@ -85,6 +87,7 @@ export interface PersistedTask {
   baseBranch?: string;
   skipPermissions?: boolean;
   dockerMode?: boolean;
+  dockerSource?: DockerSource;
   dockerImage?: string;
   githubUrl?: string;
   savedInitialPrompt?: string;

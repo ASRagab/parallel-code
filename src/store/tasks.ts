@@ -17,6 +17,7 @@ import { recordMergedLines, recordTaskCompleted } from './completion';
 import type { AgentDef, CreateTaskResult, MergeResult, StepEntry } from '../ipc/types';
 import { parseGitHubUrl, taskNameFromGitHubUrl } from '../lib/github-url';
 import type { Agent, Task, GitIsolationMode } from './types';
+import type { DockerSource } from '../lib/docker';
 
 function initTaskInStore(
   taskId: string,
@@ -97,6 +98,7 @@ export interface CreateTaskOptions {
   githubUrl?: string;
   skipPermissions?: boolean;
   dockerMode?: boolean;
+  dockerSource?: DockerSource;
   dockerImage?: string;
   stepsEnabled?: boolean;
 }
@@ -113,6 +115,7 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
     githubUrl,
     skipPermissions,
     dockerMode,
+    dockerSource,
     dockerImage,
   } = opts;
   const projectRoot = getProjectPath(projectId);
@@ -174,6 +177,7 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
     stepsEnabled: stepsEnabled || undefined,
     skipPermissions: skipPermissions ?? undefined,
     dockerMode: dockerMode ?? undefined,
+    dockerSource: dockerSource ?? undefined,
     dockerImage: dockerImage ?? undefined,
     githubUrl,
   };
