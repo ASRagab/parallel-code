@@ -92,6 +92,7 @@ const ALLOWED_CHANNELS = new Set([
   'check_docker_available',
   'check_docker_image_exists',
   'build_docker_image',
+  'resolve_project_dockerfile',
   // Ask about code
   'ask_about_code',
   'cancel_ask_about_code',
