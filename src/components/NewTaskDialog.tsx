@@ -283,13 +283,6 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     setGitIsolation(proj?.defaultGitIsolation ?? 'worktree');
   });
 
-  // Auto-enable Docker when skip-permissions is turned on and Docker is available
-  createEffect(() => {
-    if (skipPermissions() && store.dockerAvailable) {
-      setDockerMode(true);
-    }
-  });
-
   // Check if the default Docker image exists when Docker mode is enabled (debounced)
   let checkTimer: ReturnType<typeof setTimeout>;
   createEffect(() => {
