@@ -8,6 +8,11 @@ const mockUserInfo = {
   homedir: '/home/test-user',
 };
 
+const allowShells =
+  (...shells: string[]) =>
+  (shell: string) =>
+    shells.includes(shell);
+
 describe('resolveUserShell', () => {
   it('prefers the OS account shell over the inherited SHELL env var', () => {
     const shell = resolveUserShell({
@@ -17,6 +22,7 @@ describe('resolveUserShell', () => {
       }),
       env: { SHELL: '/bin/bash' },
       platform: 'darwin',
+      canUseShell: allowShells('/bin/zsh', '/bin/bash'),
     });
 
     expect(shell).toBe('/bin/zsh');
@@ -30,6 +36,7 @@ describe('resolveUserShell', () => {
       }),
       env: { SHELL: '/opt/homebrew/bin/bash' },
       platform: 'darwin',
+      canUseShell: allowShells('/opt/homebrew/bin/bash'),
     });
 
     expect(shell).toBe('/opt/homebrew/bin/bash');
@@ -42,19 +49,35 @@ describe('resolveUserShell', () => {
       },
       env: { SHELL: '/bin/zsh' },
       platform: 'linux',
+      canUseShell: allowShells('/bin/zsh'),
     });
 
     expect(shell).toBe('/bin/zsh');
   });
 
-  it('falls back to /bin/sh on POSIX when neither OS nor env provides a shell', () => {
+  it('falls back to SHELL when the OS shell is not executable', () => {
     const shell = resolveUserShell({
       userInfo: () => ({
         ...mockUserInfo,
-        shell: '   ',
+        shell: '/missing/zsh',
       }),
-      env: {},
+      env: { SHELL: '/bin/bash' },
       platform: 'linux',
+      canUseShell: allowShells('/bin/bash'),
+    });
+
+    expect(shell).toBe('/bin/bash');
+  });
+
+  it('falls back to /bin/sh on POSIX when neither OS nor env provides a usable shell', () => {
+    const shell = resolveUserShell({
+      userInfo: () => ({
+        ...mockUserInfo,
+        shell: '/missing/zsh',
+      }),
+      env: { SHELL: '/missing/bash' },
+      platform: 'linux',
+      canUseShell: allowShells(),
     });
 
     expect(shell).toBe('/bin/sh');
