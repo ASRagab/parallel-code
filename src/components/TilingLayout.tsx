@@ -102,7 +102,15 @@ export function TilingLayout() {
       panelHandle?.resizeAll(deltaPx);
       requestAnimationFrame(() => updateViewportState());
     });
-    const handleScroll = () => updateViewportState();
+    let scrollRafPending = false;
+    const handleScroll = () => {
+      if (scrollRafPending) return;
+      scrollRafPending = true;
+      requestAnimationFrame(() => {
+        scrollRafPending = false;
+        updateViewportState();
+      });
+    };
     let resizeObserver: ResizeObserver | undefined;
     const observeStrip = () => {
       resizeObserver?.disconnect();
@@ -117,7 +125,7 @@ export function TilingLayout() {
 
     containerRef.addEventListener('wheel', handleWheel, { passive: false });
     containerRef.addEventListener('scroll', handleScroll, { passive: true });
-    mutationObserver.observe(containerRef, { childList: true, subtree: true });
+    mutationObserver.observe(containerRef, { childList: true });
     observeStrip();
 
     onCleanup(() => {

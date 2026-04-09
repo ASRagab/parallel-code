@@ -10,7 +10,6 @@ import {
   reorderTask,
   getTaskDotStatus,
   getTaskAttentionState,
-  taskNeedsAttention,
   getTaskViewportVisibility,
   registerFocusFn,
   unregisterFocusFn,
@@ -58,8 +57,9 @@ interface OffscreenAttentionInfo {
 
 function getOffscreenAttentionInfo(taskId: string): OffscreenAttentionInfo | null {
   const visibility = getTaskViewportVisibility(taskId);
-  if (!visibility || visibility === 'visible' || !taskNeedsAttention(taskId)) return null;
+  if (!visibility || visibility === 'visible') return null;
   const attention = getTaskAttentionState(taskId);
+  if (attention === 'idle' || attention === 'ready') return null;
   const color = getAttentionColor(attention) ?? theme.accent;
   const side = visibility === 'offscreen-left' ? 'left' : 'right';
   const prefix = visibility === 'offscreen-left' ? '←' : '→';
