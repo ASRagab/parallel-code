@@ -215,7 +215,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                 'align-items': 'center',
                 gap: '6px',
                 padding: '2px 8px',
-                'padding-left': `${8 + row().depth * 10}px`,
+                'padding-left': `${8 + row().depth * 8}px`,
                 'white-space': 'nowrap',
                 cursor: 'pointer',
                 'border-radius': '3px',
