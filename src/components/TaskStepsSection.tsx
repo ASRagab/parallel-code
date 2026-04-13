@@ -75,6 +75,27 @@ function FileBadge(props: { file: string; onFileClick?: (file: string) => void }
   );
 }
 
+function WaitingIndicator(props: { fontSize: string }) {
+  return (
+    <>
+      <span
+        class="status-dot-pulse"
+        style={{
+          width: '5px',
+          height: '5px',
+          'border-radius': '50%',
+          background: theme.fgSubtle,
+          display: 'inline-block',
+          'flex-shrink': '0',
+        }}
+      />
+      <span style={{ 'font-size': props.fontSize, color: theme.fgSubtle }}>
+        Waiting for next step
+      </span>
+    </>
+  );
+}
+
 export function TaskStepsSection(props: TaskStepsSectionProps) {
   const [expandedHistory, setExpandedHistory] = createSignal<Set<number>>(new Set());
   let scrollRef!: HTMLDivElement;
@@ -84,10 +105,10 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
   });
 
   const steps = () => props.task.stepsContent ?? [];
-  const latestStep = () => {
+  const latestStep = createMemo(() => {
     const s = steps();
     return s.length > 0 ? s[s.length - 1] : null;
-  };
+  });
   const historySteps = createMemo(() => {
     const s = steps();
     if (s.length <= 1) return [];
@@ -98,7 +119,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
     if (!li) return false;
     const last = latestStep();
     if (!last) return true;
-    return new Date(li) > new Date(normalizeIsoTimestamp(last.timestamp));
+    return Date.parse(li) > Date.parse(normalizeIsoTimestamp(last.timestamp));
   });
 
   createEffect(() => {
@@ -160,20 +181,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                 <span style={{ 'font-size': sf(10), color: theme.fgSubtle }}>waiting...</span>
               }
             >
-              <span
-                class="status-dot-pulse"
-                style={{
-                  width: '5px',
-                  height: '5px',
-                  'border-radius': '50%',
-                  background: theme.fgSubtle,
-                  display: 'inline-block',
-                  'flex-shrink': '0',
-                }}
-              />
-              <span style={{ 'font-size': sf(10), color: theme.fgSubtle }}>
-                Waiting for next step
-              </span>
+              <WaitingIndicator fontSize={sf(10)} />
             </Show>
           </div>
         </Show>
@@ -388,20 +396,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                   padding: '4px 2px 2px',
                 }}
               >
-                <span
-                  class="status-dot-pulse"
-                  style={{
-                    width: '5px',
-                    height: '5px',
-                    'border-radius': '50%',
-                    background: theme.fgSubtle,
-                    display: 'inline-block',
-                    'flex-shrink': '0',
-                  }}
-                />
-                <span style={{ 'font-size': sf(9), color: theme.fgSubtle }}>
-                  Waiting for next step
-                </span>
+                <WaitingIndicator fontSize={sf(9)} />
               </div>
             </Show>
           </div>
