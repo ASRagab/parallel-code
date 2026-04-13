@@ -683,6 +683,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         {/* Steps tracking toggle */}
         <div data-nav-field="steps-enabled">
           <label
+            title="Instructs the agent to append progress entries to .claude/steps.json. Each entry is shown live in the Steps panel as the agent works."
             style={{
               display: 'flex',
               'align-items': 'center',
