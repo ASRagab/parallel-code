@@ -171,7 +171,9 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                   'flex-shrink': '0',
                 }}
               />
-              <span style={{ 'font-size': sf(10), color: theme.fgSubtle }}>Interacting...</span>
+              <span style={{ 'font-size': sf(10), color: theme.fgSubtle }}>
+                Waiting for next step
+              </span>
             </Show>
           </div>
         </Show>
@@ -397,7 +399,9 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                     'flex-shrink': '0',
                   }}
                 />
-                <span style={{ 'font-size': sf(9), color: theme.fgSubtle }}>Interacting...</span>
+                <span style={{ 'font-size': sf(9), color: theme.fgSubtle }}>
+                  Waiting for next step
+                </span>
               </div>
             </Show>
           </div>
