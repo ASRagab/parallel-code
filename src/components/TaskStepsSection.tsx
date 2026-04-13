@@ -8,6 +8,7 @@ import { setTaskFocusedPanel } from '../store/store';
 import type { Task } from '../store/types';
 
 const STATUS_COLORS: Record<string, string> = {
+  starting: '#fb923c',
   investigating: '#60a5fa',
   implementing: '#c084fc',
   testing: '#e5a800',

@@ -65,7 +65,7 @@ export interface FileDiffResult {
 export interface StepEntry {
   summary: string;
   detail?: string;
-  status: 'investigating' | 'implementing' | 'testing' | 'awaiting_review' | 'done';
+  status: 'starting' | 'investigating' | 'implementing' | 'testing' | 'awaiting_review' | 'done';
   files_touched?: string[];
   timestamp: string;
 }
