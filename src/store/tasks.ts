@@ -139,7 +139,7 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
   // Inject steps instruction into the first prompt so the agent maintains steps.json.
   // Appended after a separator for recency bias; savedInitialPrompt keeps the original clean text.
   const stepsInstruction =
-    'Maintain .claude/steps.json throughout this task — a JSON array tracking your progress. ' +
+    'IMPORTANT: Maintain .claude/steps.json throughout this task — a JSON array tracking your progress. ' +
     'Append a new entry after each major step (never modify previous entries): ' +
     '{"summary":"one-liner","status":"investigating|implementing|testing|awaiting_review|done","detail":"optional","files_touched":["path/to/file.ts"],"timestamp":"ISO8601"}. ' +
     'When you want the user to review your work: write an entry with status "awaiting_review" and pause. Resume appending entries when the user continues.';
