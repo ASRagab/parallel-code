@@ -250,7 +250,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                       flex: '1',
                       overflow: 'hidden',
                       'text-overflow': 'ellipsis',
-                      color: theme.fg,
+                      color: theme.fgMuted,
                     }}
                     title={row().node.path}
                   >
