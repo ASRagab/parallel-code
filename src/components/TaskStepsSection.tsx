@@ -20,6 +20,11 @@ function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? theme.fgMuted;
 }
 
+function truncate(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max - 1) + '…';
+}
+
 /** Append Z when no timezone is present — ISO strings without TZ are parsed as local time. */
 function normalizeIsoTimestamp(ts: string): string {
   return ts.endsWith('Z') || /[+-]\d{2}:/.test(ts.slice(-6)) ? ts : ts + 'Z';
@@ -150,7 +155,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
           height: '100%',
           display: 'flex',
           'flex-direction': 'column',
-          background: 'transparent',
+          background: theme.taskPanelBg,
           'border-radius': '6px',
         }}
       >
@@ -278,7 +283,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                               flex: '1',
                             }}
                           >
-                            {step.summary}
+                            {truncate(step.summary, 140)}
                           </span>
                         </div>
 
@@ -293,7 +298,9 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                             }}
                           >
                             <Show when={step.detail}>
-                              <div style={{ 'margin-bottom': '4px' }}>{step.detail}</div>
+                              <div style={{ 'margin-bottom': '4px' }}>
+                                {truncate(step.detail ?? '', 280)}
+                              </div>
                             </Show>
                             <Show when={step.files_touched && step.files_touched.length > 0}>
                               <div
@@ -347,7 +354,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                         flex: '1',
                       }}
                     >
-                      {step().summary}
+                      {truncate(step().summary, 140)}
                     </span>
                     <Show when={step().timestamp}>
                       <span
@@ -366,7 +373,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                         'line-height': '1.4',
                       }}
                     >
-                      {step().detail}
+                      {truncate(step().detail ?? '', 280)}
                     </div>
                   </Show>
                   <Show when={(step().files_touched ?? []).length > 0}>

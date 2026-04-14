@@ -256,22 +256,24 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                   >
                     {row().node.name}/
                   </span>
-                  <span
-                    style={{
-                      color: theme.fg,
-                      'font-size': sf(10),
-                      'flex-shrink': '0',
-                    }}
-                  >
-                    {row().node.fileCount}
-                  </span>
-                  <Show when={row().node.linesAdded > 0 || row().node.linesRemoved > 0}>
-                    <span style={{ color: theme.success, 'flex-shrink': '0' }}>
-                      +{row().node.linesAdded}
+                  <Show when={collapsed().has(row().node.path)}>
+                    <span
+                      style={{
+                        color: theme.fg,
+                        'font-size': sf(10),
+                        'flex-shrink': '0',
+                      }}
+                    >
+                      {row().node.fileCount}
                     </span>
-                    <span style={{ color: theme.error, 'flex-shrink': '0' }}>
-                      -{row().node.linesRemoved}
-                    </span>
+                    <Show when={row().node.linesAdded > 0 || row().node.linesRemoved > 0}>
+                      <span style={{ color: theme.success, 'flex-shrink': '0' }}>
+                        +{row().node.linesAdded}
+                      </span>
+                      <span style={{ color: theme.error, 'flex-shrink': '0' }}>
+                        -{row().node.linesRemoved}
+                      </span>
+                    </Show>
                   </Show>
                 </>
               ) : (

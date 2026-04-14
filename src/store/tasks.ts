@@ -359,6 +359,11 @@ export function updateTaskNotes(taskId: string, notes: string): void {
 }
 
 export async function sendPrompt(taskId: string, agentId: string, text: string): Promise<void> {
+  // Send a Focus In escape sequence before the prompt text.  When the user focuses
+  // the PromptInput textarea, the xterm.js terminal loses DOM focus.  For agents
+  // that enable focus tracking (\x1b[?1004h), xterm.js sends \x1b[O (Focus Out)
+  // to the PTY, which may suspend readline input processing; \x1b[I re-activates it.
+  await writeToAgentWhenReady(agentId, '\x1b[I');
   // Send text and Enter separately so TUI apps (Claude Code, Codex)
   // don't treat the \r as part of a pasted block
   setTaskLastInputAt(taskId);

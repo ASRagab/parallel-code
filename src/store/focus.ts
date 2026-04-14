@@ -58,7 +58,7 @@ function buildGrid(panelId: string): string[][] {
       grid.push(task.shellAgentIds.map((_, i) => `shell:${i}`));
     }
     grid.push(['ai-terminal']);
-    if (task.stepsEnabled) {
+    if (task.stepsEnabled && task.stepsContent?.length) {
       grid.push(['steps']);
     }
     if (store.showPromptInput) {
