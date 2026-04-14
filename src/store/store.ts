@@ -49,6 +49,9 @@ export {
   setNewTaskDropUrl,
   setNewTaskPrefillPrompt,
   setPlanContent,
+  setStepsContent,
+  setTaskStepsEnabled,
+  setTaskLastInputAt,
 } from './tasks';
 export {
   setActiveTask,
@@ -99,6 +102,7 @@ export {
   setAutoTrustFolders,
   setShowPlans,
   setShowPromptInput,
+  setFontSmoothing,
   setDesktopNotificationsEnabled,
   setInactiveColumnOpacity,
   setEditorCommand,

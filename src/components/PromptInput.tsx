@@ -19,6 +19,7 @@ import {
   isAgentAskingQuestion,
   getTaskFocusedPanel,
   setTaskFocusedPanel,
+  setTaskLastInputAt,
 } from '../store/store';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
@@ -327,6 +328,7 @@ export function PromptInput(props: PromptInputProps) {
     if (!val) {
       if (mode === 'auto') return;
       fireAndForget(IPC.WriteToAgent, { agentId: props.agentId, data: '\r' });
+      setTaskLastInputAt(props.taskId);
       return;
     }
 

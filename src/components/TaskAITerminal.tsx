@@ -1,4 +1,5 @@
 import { Show, For, createSignal, onMount, onCleanup } from 'solid-js';
+
 import {
   store,
   markAgentExited,
@@ -188,6 +189,7 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                           : []),
                       ]}
                       cwd={props.task.worktreePath}
+                      stepsEnabled={props.task.stepsEnabled}
                       dockerMode={props.task.dockerMode}
                       dockerImage={props.task.dockerImage}
                       onExit={(code) => markAgentExited(a().id, code)}

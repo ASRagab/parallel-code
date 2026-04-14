@@ -89,7 +89,7 @@ function clearAutoTrustState(agentId: string): void {
   }
 }
 
-export type TaskDotStatus = 'busy' | 'waiting' | 'ready';
+export type TaskDotStatus = 'busy' | 'waiting' | 'ready' | 'review';
 export type TaskAttentionState = 'idle' | 'active' | 'needs_input' | 'error' | 'ready';
 
 // --- Prompt detection helpers ---
@@ -643,6 +643,12 @@ export function getTaskDotStatus(taskId: string): TaskDotStatus {
     return a?.status === 'running' && active.has(id);
   });
   if (hasActive) return 'busy';
+
+  const steps = task.stepsContent;
+  if (steps && steps.length > 0) {
+    const latest = steps[steps.length - 1];
+    if (latest.status === 'awaiting_review') return 'review';
+  }
 
   if (isTaskReady(taskId)) return 'ready';
   return 'waiting';

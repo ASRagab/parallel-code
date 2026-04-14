@@ -43,6 +43,7 @@ import {
   setNewTaskDropUrl,
   validateProjectPaths,
   setPlanContent,
+  setStepsContent,
   setDockerAvailable,
 } from './store/store';
 import { isGitHubUrl } from './lib/github-url';
@@ -235,6 +236,11 @@ function App() {
     document.documentElement.dataset.look = store.themePreset;
   });
 
+  // Toggle font smoothing CSS class on body
+  createEffect(() => {
+    document.body.classList.toggle('font-smoothing', store.fontSmoothing);
+  });
+
   onMount(async () => {
     if (isMac) {
       await appWindow.setTitleBarStyle('overlay').catch((error) => {
@@ -310,6 +316,21 @@ function App() {
         });
     }
 
+    // Restore steps content for tasks that had steps before restart
+    for (const taskId of [...store.taskOrder, ...store.collapsedTaskOrder]) {
+      const task = store.tasks[taskId];
+      if (!task?.worktreePath || !task.stepsEnabled) continue;
+      invoke<unknown[] | null>(IPC.ReadStepsContent, {
+        worktreePath: task.worktreePath,
+      })
+        .then((result) => {
+          if (result) setStepsContent(taskId, result);
+        })
+        .catch((err) => {
+          console.warn(`Failed to restore steps for task ${taskId}:`, err);
+        });
+    }
+
     await validateProjectPaths();
     await restoreWindowState();
     await captureWindowState();
@@ -323,6 +344,15 @@ function App() {
       const msg = data as { taskId: string; content: string | null; fileName: string | null };
       if (msg.taskId && store.tasks[msg.taskId]) {
         setPlanContent(msg.taskId, msg.content, msg.fileName);
+      }
+    });
+
+    // Listen for steps content pushed from backend steps watcher
+    const offStepsContent = window.electron.ipcRenderer.on(IPC.StepsContent, (data: unknown) => {
+      if (!data || typeof data !== 'object') return;
+      const msg = data as { taskId: string; steps: unknown[] | null };
+      if (msg.taskId && store.tasks[msg.taskId]) {
+        setStepsContent(msg.taskId, msg.steps);
       }
     });
 
@@ -584,6 +614,7 @@ function App() {
       stopTaskStatusPolling();
       stopNotificationWatcher();
       offPlanContent();
+      offStepsContent();
       unlistenFocusChanged?.();
       unlistenResized?.();
       unlistenMoved?.();
