@@ -12,5 +12,3 @@ package-lock.json
 *.AppImage
 *.deb
 *.dmg
-CLAUDE.local.md
-.enzyme/
