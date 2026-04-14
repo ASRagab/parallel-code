@@ -265,12 +265,14 @@ export function TaskNotesPanel(props: TaskNotesPanelProps) {
                 >
                   <span style={{ 'flex-shrink': '0' }}>Changed Files</span>
                   <span style={{ flex: '1' }} />
-                  <CommitNavBar
-                    commits={props.commitList}
-                    selectedCommitHash={props.selectedCommit}
-                    onNavigate={props.onCommitNavigate}
-                    compact={true}
-                  />
+                  <Show when={props.commitList.length > 0}>
+                    <CommitNavBar
+                      commits={props.commitList}
+                      selectedCommitHash={props.selectedCommit}
+                      onNavigate={props.onCommitNavigate}
+                      compact={true}
+                    />
+                  </Show>
                 </div>
                 <div style={{ flex: '1', overflow: 'hidden' }}>
                   <ChangedFilesList

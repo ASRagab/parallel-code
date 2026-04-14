@@ -240,7 +240,10 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                 'white-space': 'nowrap',
                 cursor: 'pointer',
                 'border-radius': '3px',
-                opacity: row().isDir || row().node.file?.committed ? '0.45' : '1',
+                opacity:
+                  !props.selectedCommit && (row().isDir || row().node.file?.committed)
+                    ? '0.45'
+                    : '1',
                 background: selectedIndex() === i ? theme.bgHover : 'transparent',
               }}
               onClick={() => {
