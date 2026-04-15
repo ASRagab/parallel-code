@@ -45,6 +45,18 @@ function relativeTime(timestamp: string): string {
   return `${days}d ago`;
 }
 
+/** Compute elapsed time between two ISO timestamps. Returns "45s", "2m", "1h". */
+function stepDuration(fromTs: string, toTs: string): string {
+  const from = new Date(normalizeIsoTimestamp(fromTs)).getTime();
+  const to = new Date(normalizeIsoTimestamp(toTs)).getTime();
+  if (isNaN(from) || isNaN(to)) return '';
+  const secs = Math.floor(Math.max(0, to - from) / 1_000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h`;
+}
+
 interface TaskStepsSectionProps {
   task: Task;
   isActive: boolean;
@@ -284,8 +296,34 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                               flex: '1',
                             }}
                           >
-                            {truncate(step.summary ?? '', 140)}
+                            {truncate(step.summary ?? '', 60)}
                           </span>
+                          <Show when={step.timestamp}>
+                            <span
+                              style={{
+                                'font-size': sf(9),
+                                color: theme.fgSubtle,
+                                'flex-shrink': '0',
+                              }}
+                            >
+                              {stepDuration(
+                                step.timestamp,
+                                steps()[idx() + 1]?.timestamp ?? new Date().toISOString(),
+                              )}
+                            </span>
+                          </Show>
+                          <Show when={(step.files_touched?.length ?? 0) > 0}>
+                            <span
+                              style={{
+                                'font-size': sf(9),
+                                color: theme.fgSubtle,
+                                'flex-shrink': '0',
+                              }}
+                            >
+                              {step.files_touched?.length ?? 0}{' '}
+                              {(step.files_touched?.length ?? 0) === 1 ? 'file' : 'files'}
+                            </span>
+                          </Show>
                         </div>
 
                         <Show when={isExpanded()}>
@@ -298,6 +336,17 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                               'border-left': `2px solid ${theme.border}`,
                             }}
                           >
+                            <Show when={step.timestamp}>
+                              <div
+                                style={{
+                                  'font-size': sf(9),
+                                  color: theme.fgSubtle,
+                                  'margin-bottom': '4px',
+                                }}
+                              >
+                                {relativeTime(step.timestamp)}
+                              </div>
+                            </Show>
                             <Show when={step.detail}>
                               <div style={{ 'margin-bottom': '4px' }}>
                                 {truncate(step.detail ?? '', 280)}

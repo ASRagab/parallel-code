@@ -141,9 +141,15 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
   // Appended after a separator for recency bias; savedInitialPrompt keeps the original clean text.
   const stepsInstruction =
     'IMPORTANT: Maintain .claude/steps.json throughout this task — a JSON array tracking your progress. ' +
-    'Before beginning each major step, append an entry with status "starting" so the user can see what you are about to do. ' +
+    'Before beginning each major step, append an entry with status "starting". ' +
     'After completing the step, append a follow-up entry with the appropriate status (never modify previous entries). ' +
-    'Format: {"summary":"one-liner","status":"starting|investigating|implementing|testing|awaiting_review|done","detail":"optional","files_touched":["path/to/file.ts"],"timestamp":"ISO8601"}. ' +
+    'Rules for each field:\n' +
+    '  summary: ≤60 chars, start with an action verb (e.g. "Add JWT middleware", "Fix token refresh bug"). No filler words like "Successfully", "Now", or "Going to".\n' +
+    '  detail: one sentence max, only if it adds context the summary cannot carry — omit the field entirely otherwise.\n' +
+    '  files_touched: only files you actually wrote or modified in this step, not files you read.\n' +
+    '  status: starting | investigating | implementing | testing | awaiting_review | done.\n' +
+    '  timestamp: ISO 8601.\n' +
+    'Example: {"summary":"Add JWT validation middleware","status":"implementing","detail":"Wraps every protected route handler.","files_touched":["src/middleware/auth.ts"],"timestamp":"2024-01-15T10:30:00Z"}. ' +
     'When you want the user to review your work: write an entry with status "awaiting_review" and pause. Resume appending entries when the user continues.';
   const effectivePrompt =
     stepsEnabled && initialPrompt ? `${initialPrompt}\n\n---\n${stepsInstruction}` : initialPrompt;
