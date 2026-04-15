@@ -6,6 +6,8 @@ import { createDialogScroll } from '../lib/dialog-scroll';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { parseUnifiedDiff } from '../lib/unified-diff-parser';
+import { adjustFontScale, getFontScale, resetFontScale } from '../store/ui';
+import { createCtrlWheelZoomHandler } from '../lib/wheelZoom';
 import { evictStaleAnnotations } from '../lib/review-eviction';
 import { ScrollingDiffView } from './ScrollingDiffView';
 import { CommitNavBar } from './CommitNavBar';
@@ -106,6 +108,16 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
   let fetchGeneration = 0;
   let searchInputRef: HTMLInputElement | undefined;
   let diffScrollRef: HTMLDivElement | undefined;
+  let containerRef: HTMLDivElement | undefined;
+
+  const wheelZoomHandler = createCtrlWheelZoomHandler(
+    (delta) => adjustFontScale('diff-dialog', delta),
+    { stopPropagation: true },
+  );
+
+  createEffect(() => {
+    containerRef?.style.setProperty('--font-scale', String(getFontScale('diff-dialog')));
+  });
 
   createDialogScroll(
     () => diffScrollRef,
@@ -119,6 +131,10 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         e.preventDefault();
         searchInputRef?.focus();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+        e.preventDefault();
+        resetFontScale('diff-dialog');
       }
     };
     document.addEventListener('keydown', handler);
@@ -217,7 +233,11 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
   };
 
   return (
-    <>
+    <div
+      ref={containerRef}
+      style={{ display: 'flex', 'flex-direction': 'column', height: '100%' }}
+      onWheel={wheelZoomHandler}
+    >
       {/* Header */}
       <div
         style={{
@@ -373,6 +393,6 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
 
         <ReviewSidebarPanel />
       </div>
-    </>
+    </div>
   );
 }
