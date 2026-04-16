@@ -23,6 +23,7 @@ import {
   stopPlanWatcher,
   readPlanForWorktree,
 } from './plans.js';
+import { startStepsWatcher, stopStepsWatcher, readStepsForWorktree } from './steps.js';
 import { startRemoteServer } from '../remote/server.js';
 import {
   getGitIgnoredDirs,
@@ -47,6 +48,9 @@ import {
   isGitRepo,
   getBranches,
   checkoutBranch,
+  getBranchCommits,
+  getCommitChangedFiles,
+  getCommitDiffs,
 } from './git.js';
 import { createTask, deleteTask } from './tasks.js';
 import { listAgents } from './agents.js';
@@ -82,6 +86,12 @@ function validateRelativePath(p: unknown, label: string): void {
 function validateBranchName(name: unknown, label: string): void {
   if (typeof name !== 'string' || !name) throw new Error(`${label} must be a non-empty string`);
   if (name.startsWith('-')) throw new Error(`${label} must not start with "-"`);
+}
+
+/** Reject commit hashes that are not valid hex strings. */
+function validateCommitHash(hash: unknown, label: string): void {
+  if (typeof hash !== 'string') throw new Error(`${label} must be a string`);
+  if (!/^[0-9a-f]{4,40}$/i.test(hash)) throw new Error(`${label} must be a valid hex commit hash`);
 }
 
 /**
@@ -129,6 +139,7 @@ export function registerAllHandlers(win: BrowserWindow): void {
     assertInt(args.rows, 'rows');
     assertOptionalBoolean(args.dockerMode, 'dockerMode');
     assertOptionalString(args.dockerImage, 'dockerImage');
+    assertOptionalBoolean(args.stepsEnabled, 'stepsEnabled');
     if (args.cwd) validatePath(args.cwd, 'cwd');
     if (!args.isShell && args.cwd) {
       try {
@@ -143,6 +154,13 @@ export function registerAllHandlers(win: BrowserWindow): void {
         startPlanWatcher(win, args.taskId, args.cwd);
       } catch (err) {
         console.warn('Failed to start plan watcher:', err);
+      }
+      if (args.stepsEnabled) {
+        try {
+          startStepsWatcher(win, args.taskId, args.cwd);
+        } catch (err) {
+          console.warn('Failed to start steps watcher:', err);
+        }
       }
     }
     return result;
@@ -309,6 +327,22 @@ export function registerAllHandlers(win: BrowserWindow): void {
     if (baseBranch) validateBranchName(baseBranch, 'baseBranch');
     return getBranchLog(args.worktreePath, baseBranch);
   });
+  ipcMain.handle(IPC.GetBranchCommits, (_e, args) => {
+    validatePath(args.worktreePath, 'worktreePath');
+    const baseBranch = args.baseBranch || undefined;
+    if (baseBranch) validateBranchName(baseBranch, 'baseBranch');
+    return getBranchCommits(args.worktreePath, baseBranch);
+  });
+  ipcMain.handle(IPC.GetCommitChangedFiles, (_e, args) => {
+    validatePath(args.worktreePath, 'worktreePath');
+    validateCommitHash(args.commitHash, 'commitHash');
+    return getCommitChangedFiles(args.worktreePath, args.commitHash);
+  });
+  ipcMain.handle(IPC.GetCommitDiffs, (_e, args) => {
+    validatePath(args.worktreePath, 'worktreePath');
+    validateCommitHash(args.commitHash, 'commitHash');
+    return getCommitDiffs(args.worktreePath, args.commitHash);
+  });
   ipcMain.handle(IPC.PushTask, (_e, args) => {
     validatePath(args.projectRoot, 'projectRoot');
     validateBranchName(args.branchName, 'branchName');
@@ -434,6 +468,18 @@ export function registerAllHandlers(win: BrowserWindow): void {
     return readPlanForWorktree(args.worktreePath, fileName);
   });
 
+  // --- Steps watcher cleanup ---
+  ipcMain.handle(IPC.StopStepsWatcher, (_e, args) => {
+    assertString(args.taskId, 'taskId');
+    stopStepsWatcher(args.taskId);
+  });
+
+  // --- Steps content (one-shot read) ---
+  ipcMain.handle(IPC.ReadStepsContent, (_e, args) => {
+    validatePath(args.worktreePath, 'worktreePath');
+    return readStepsForWorktree(args.worktreePath);
+  });
+
   // --- Ask about code ---
   ipcMain.handle(IPC.AskAboutCode, (_e, args) => {
     assertString(args.requestId, 'requestId');
@@ -485,7 +531,8 @@ export function registerAllHandlers(win: BrowserWindow): void {
       const buf = img.toPNG();
       await fs.promises.writeFile(clipboardImagePath, buf);
       return clipboardImagePath;
-    } catch {
+    } catch (e) {
+      console.error('[clipboard] Failed to save clipboard image:', e);
       return null;
     }
   });

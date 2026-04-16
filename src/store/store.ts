@@ -49,6 +49,9 @@ export {
   setNewTaskDropUrl,
   setNewTaskPrefillPrompt,
   setPlanContent,
+  setStepsContent,
+  setTaskStepsEnabled,
+  setTaskLastInputAt,
 } from './tasks';
 export {
   setActiveTask,
@@ -82,9 +85,6 @@ export {
 export type { PanelId, PendingAction, TaskViewportVisibility } from './types';
 export { saveState, loadState } from './persistence';
 export {
-  getFontScale,
-  adjustFontScale,
-  resetFontScale,
   getGlobalScale,
   adjustGlobalScale,
   resetGlobalScale,
@@ -99,6 +99,7 @@ export {
   setAutoTrustFolders,
   setShowPlans,
   setShowPromptInput,
+  setFontSmoothing,
   setDesktopNotificationsEnabled,
   setInactiveColumnOpacity,
   setEditorCommand,
@@ -117,6 +118,7 @@ export {
   onAgentReady,
   offAgentReady,
   normalizeForComparison,
+  normalizeCurrentFrame,
   looksLikeQuestion,
   isTrustQuestionAutoHandled,
   isAutoTrustSettling,

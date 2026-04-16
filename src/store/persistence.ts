@@ -39,7 +39,6 @@ export async function saveState(): Promise<void> {
     tasks: {},
     activeTaskId: store.activeTaskId,
     sidebarVisible: store.sidebarVisible,
-    fontScales: { ...store.fontScales },
     panelSizes: { ...store.panelSizes },
     globalScale: store.globalScale,
     completedTaskDate: store.completedTaskDate,
@@ -49,9 +48,11 @@ export async function saveState(): Promise<void> {
     terminalFont: store.terminalFont,
     themePreset: store.themePreset,
     showPromptInput: store.showPromptInput,
+    fontSmoothing: store.fontSmoothing,
     windowState: store.windowState ? { ...store.windowState } : undefined,
     autoTrustFolders: store.autoTrustFolders,
     showPlans: store.showPlans,
+    showSteps: store.showSteps,
     desktopNotificationsEnabled: store.desktopNotificationsEnabled,
     inactiveColumnOpacity: store.inactiveColumnOpacity,
     editorCommand: store.editorCommand || undefined,
@@ -83,6 +84,7 @@ export async function saveState(): Promise<void> {
       githubUrl: task.githubUrl,
       savedInitialPrompt: task.savedInitialPrompt,
       planFileName: task.planFileName,
+      stepsEnabled: task.stepsEnabled,
     };
   }
 
@@ -110,6 +112,7 @@ export async function saveState(): Promise<void> {
       githubUrl: task.githubUrl,
       savedInitialPrompt: task.savedInitialPrompt,
       planFileName: task.planFileName,
+      stepsEnabled: task.stepsEnabled,
       collapsed: true,
     };
   }
@@ -179,7 +182,6 @@ interface LegacyPersistedState {
   activeTaskId: string | null;
   sidebarVisible: boolean;
   // Fields that may be present in newer state files (validated at runtime)
-  fontScales?: unknown;
   panelSizes?: unknown;
   globalScale?: unknown;
   completedTaskDate?: unknown;
@@ -189,9 +191,11 @@ interface LegacyPersistedState {
   terminalFont?: unknown;
   themePreset?: unknown;
   showPromptInput?: unknown;
+  fontSmoothing?: unknown;
   windowState?: unknown;
   autoTrustFolders?: unknown;
   showPlans?: unknown;
+  showSteps?: unknown;
   desktopNotificationsEnabled?: unknown;
   inactiveColumnOpacity?: unknown;
   editorCommand?: unknown;
@@ -267,7 +271,6 @@ export async function loadState(): Promise<void> {
       s.taskOrder = raw.taskOrder;
       s.activeTaskId = raw.activeTaskId;
       s.sidebarVisible = raw.sidebarVisible;
-      s.fontScales = isStringNumberRecord(raw.fontScales) ? raw.fontScales : {};
       s.panelSizes = isStringNumberRecord(raw.panelSizes) ? raw.panelSizes : {};
       s.globalScale = typeof raw.globalScale === 'number' ? raw.globalScale : 1;
       const completedTaskDate =
@@ -300,9 +303,11 @@ export async function loadState(): Promise<void> {
           : DEFAULT_TERMINAL_FONT;
       s.themePreset = isLookPreset(raw.themePreset) ? raw.themePreset : 'minimal';
       s.showPromptInput = typeof raw.showPromptInput === 'boolean' ? raw.showPromptInput : true;
+      s.fontSmoothing = typeof raw.fontSmoothing === 'boolean' ? raw.fontSmoothing : true;
       s.windowState = parsePersistedWindowState(raw.windowState);
       s.autoTrustFolders = typeof raw.autoTrustFolders === 'boolean' ? raw.autoTrustFolders : false;
       s.showPlans = typeof raw.showPlans === 'boolean' ? raw.showPlans : true;
+      s.showSteps = typeof raw.showSteps === 'boolean' ? raw.showSteps : false;
       s.desktopNotificationsEnabled =
         typeof raw.desktopNotificationsEnabled === 'boolean'
           ? raw.desktopNotificationsEnabled
@@ -377,6 +382,7 @@ export async function loadState(): Promise<void> {
           githubUrl: pt.githubUrl,
           savedInitialPrompt: pt.savedInitialPrompt,
           planFileName: pt.planFileName,
+          stepsEnabled: pt.stepsEnabled,
         };
 
         s.tasks[taskId] = task;
@@ -439,6 +445,7 @@ export async function loadState(): Promise<void> {
           githubUrl: pt.githubUrl,
           savedInitialPrompt: pt.savedInitialPrompt,
           planFileName: pt.planFileName,
+          stepsEnabled: pt.stepsEnabled,
           collapsed: true,
           savedAgentDef: agentDef ?? undefined,
         };

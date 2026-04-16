@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 // Allowlist of valid IPC channels.
 // IMPORTANT: This list MUST stay in sync with the IPC enum in electron/ipc/channels.ts.
@@ -31,6 +31,9 @@ const ALLOWED_CHANNELS = new Set([
   'check_merge_status',
   'merge_task',
   'get_branch_log',
+  'get_branch_commits',
+  'get_commit_changed_files',
+  'get_commit_diffs',
   'push_task',
   'rebase_task',
   'get_main_branch',
@@ -81,6 +84,10 @@ const ALLOWED_CHANNELS = new Set([
   'plan_content',
   'read_plan_content',
   'stop_plan_watcher',
+  // Steps
+  'steps_content',
+  'read_steps_content',
+  'stop_steps_watcher',
   // Docker
   'check_docker_available',
   'check_docker_image_exists',
@@ -121,4 +128,5 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.removeAllListeners(channel);
     },
   },
+  setZoomFactor: (factor) => webFrame.setZoomFactor(factor),
 });

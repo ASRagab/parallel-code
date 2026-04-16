@@ -49,7 +49,7 @@ export function CloseTaskDialog(props: CloseTaskDialogProps) {
                   <div
                     style={{
                       ...bannerStyle(theme.warning),
-                      'font-size': '12px',
+                      'font-size': '13px',
                       'font-weight': '600',
                     }}
                   >
@@ -60,7 +60,7 @@ export function CloseTaskDialog(props: CloseTaskDialogProps) {
                   <div
                     style={{
                       ...bannerStyle(theme.warning),
-                      'font-size': '12px',
+                      'font-size': '13px',
                       'font-weight': '600',
                     }}
                   >

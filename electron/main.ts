@@ -6,7 +6,9 @@ import { execFileSync } from 'child_process';
 import { registerAllHandlers } from './ipc/register.js';
 import { killAllAgents } from './ipc/pty.js';
 import { stopAllPlanWatchers } from './ipc/plans.js';
+import { stopAllStepsWatchers } from './ipc/steps.js';
 import { IPC } from './ipc/channels.js';
+import { resolveUserShell } from './user-shell.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,7 +28,7 @@ const __dirname = path.dirname(__filename);
 function fixPath(): void {
   if (process.platform === 'win32') return;
   try {
-    const loginShell = process.env.SHELL || '/bin/sh';
+    const loginShell = resolveUserShell();
     const sentinel = '__PCODE_PATH__';
     const result = execFileSync(loginShell, ['-ilc', `printf "${sentinel}%s${sentinel}" "$PATH"`], {
       encoding: 'utf8',
@@ -50,7 +52,9 @@ function verifyPreloadAllowlist(): void {
     const preloadPath = path.join(__dirname, '..', 'electron', 'preload.cjs');
     const preloadSrc = fs.readFileSync(preloadPath, 'utf8');
     const enumValues = new Set(Object.values(IPC));
-    const missing = [...enumValues].filter((v) => !preloadSrc.includes(`"${v}"`));
+    const hasChannel = (channel: string) =>
+      preloadSrc.includes(`'${channel}'`) || preloadSrc.includes(`"${channel}"`);
+    const missing = [...enumValues].filter((v) => !hasChannel(v));
     if (missing.length > 0) {
       console.warn(
         `[preload-sync] IPC channels missing from preload.cjs ALLOWED_CHANNELS: ${missing.join(', ')}`,
@@ -93,7 +97,9 @@ function createWindow() {
   // Open links in external browser instead of inside Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http:') || url.startsWith('https:')) {
-      shell.openExternal(url).catch(() => {});
+      shell
+        .openExternal(url)
+        .catch((e: unknown) => console.warn('[main] Failed to open external URL:', e));
     }
     return { action: 'deny' };
   });
@@ -111,7 +117,9 @@ function createWindow() {
     if (url.startsWith('file://')) return;
     event.preventDefault();
     if (url.startsWith('http:') || url.startsWith('https:')) {
-      shell.openExternal(url).catch(() => {});
+      shell
+        .openExternal(url)
+        .catch((e: unknown) => console.warn('[main] Failed to open external URL:', e));
     }
   });
 
@@ -159,6 +167,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   killAllAgents();
   stopAllPlanWatchers();
+  stopAllStepsWatchers();
 });
 
 app.on('window-all-closed', () => {

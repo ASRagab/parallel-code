@@ -48,6 +48,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   const [baseBranch, setBaseBranch] = createSignal('');
   const [branches, setBranches] = createSignal<string[]>([]);
   const [branchesLoading, setBranchesLoading] = createSignal(false);
+  const [stepsEnabled, setStepsEnabled] = createSignal(store.showSteps);
   const [skipPermissions, setSkipPermissions] = createSignal(false);
   const [dockerMode, setDockerMode] = createSignal(false);
   const [dockerImageReady, setDockerImageReady] = createSignal<boolean | null>(null); // null = unknown
@@ -283,13 +284,6 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     setGitIsolation(proj?.defaultGitIsolation ?? 'worktree');
   });
 
-  // Auto-enable Docker when skip-permissions is turned on and Docker is available
-  createEffect(() => {
-    if (skipPermissions() && store.dockerAvailable) {
-      setDockerMode(true);
-    }
-  });
-
   // Check if the default Docker image exists when Docker mode is enabled (debounced)
   let checkTimer: ReturnType<typeof setTimeout>;
   createEffect(() => {
@@ -444,6 +438,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         branchPrefixOverride: gitIsolation() === 'worktree' ? prefix : undefined,
         initialPrompt: isFromDrop ? undefined : p,
         githubUrl: ghUrl,
+        stepsEnabled: stepsEnabled(),
         skipPermissions: agentSupportsSkipPermissions() && skipPermissions(),
         dockerMode: dockerMode() || undefined,
         dockerImage: dockerMode() ? store.dockerImage : undefined,
@@ -464,7 +459,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     <Dialog
       open={props.open}
       onClose={props.onClose}
-      width={store.availableAgents.length > 8 ? '540px' : '420px'}
+      width={store.availableAgents.length > 8 ? '620px' : '520px'}
       panelStyle={{ gap: '20px' }}
     >
       <form
@@ -479,21 +474,14 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
         <div>
           <h2
             style={{
-              margin: '0 0 6px',
-              'font-size': '16px',
+              margin: '0',
+              'font-size': '17px',
               color: theme.fg,
               'font-weight': '600',
             }}
           >
             New Task
           </h2>
-          <p
-            style={{ margin: '0', 'font-size': '12px', color: theme.fgMuted, 'line-height': '1.5' }}
-          >
-            {gitIsolation() === 'direct'
-              ? 'The AI agent will work on your current branch in the project root.'
-              : 'Creates a git branch and worktree so the AI agent can work in isolation without affecting your current branch.'}
-          </p>
         </div>
 
         {/* Project selector */}
@@ -533,7 +521,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
               'border-radius': '8px',
               padding: '10px 14px',
               color: theme.fg,
-              'font-size': '13px',
+              'font-size': '14px',
               'font-family': "'JetBrains Mono', monospace",
               outline: 'none',
               resize: 'vertical',
@@ -563,14 +551,14 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
               'border-radius': '8px',
               padding: '10px 14px',
               color: theme.fg,
-              'font-size': '13px',
+              'font-size': '14px',
               outline: 'none',
             }}
           />
           <Show when={gitIsolation() === 'direct' && selectedProjectPath()}>
             <div
               style={{
-                'font-size': '11px',
+                'font-size': '12px',
                 'font-family': "'JetBrains Mono', monospace",
                 color: theme.fgSubtle,
                 display: 'flex',
@@ -630,19 +618,29 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
           <label style={sectionLabelStyle}>Git Isolation</label>
           <SegmentedButtons
             options={[
-              { value: 'worktree', label: 'Worktree' },
-              { value: 'direct', label: 'Current Branch', disabled: directDisabled() },
+              {
+                value: 'worktree',
+                label: 'Worktree',
+                title:
+                  'Creates a git branch and worktree so the AI agent can work in isolation without affecting your current branch.',
+              },
+              {
+                value: 'direct',
+                label: 'Current Branch',
+                disabled: directDisabled(),
+                title: 'The AI agent will work on your current branch in the project root.',
+              },
             ]}
             value={gitIsolation()}
             onChange={setGitIsolation}
           />
           <Show when={directDisabled()}>
-            <span style={{ 'font-size': '11px', color: theme.fgSubtle }}>
+            <span style={{ 'font-size': '12px', color: theme.fgSubtle }}>
               This project already has a task on the current branch
             </span>
           </Show>
           <Show when={gitIsolation() === 'direct'}>
-            <div style={{ ...bannerStyle(theme.warning), 'font-size': '12px' }}>
+            <div style={{ ...bannerStyle(theme.warning), 'font-size': '13px' }}>
               Changes will be made on the selected branch without worktree isolation.
             </div>
           </Show>
@@ -675,7 +673,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
               'border-radius': '8px',
               padding: '10px 14px',
               color: theme.fg,
-              'font-size': '13px',
+              'font-size': '14px',
               'font-family': "'JetBrains Mono', monospace",
               outline: 'none',
               opacity: branchesLoading() ? '0.5' : '1',
@@ -685,194 +683,223 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
           </select>
         </div>
 
-        {/* Skip permissions toggle */}
-        <Show when={agentSupportsSkipPermissions()}>
-          <div
-            data-nav-field="skip-permissions"
-            style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}
-          >
+        {/* Checkboxes group */}
+        <div style={{ display: 'flex', 'flex-direction': 'column', gap: '10px' }}>
+          {/* Steps tracking toggle */}
+          <div data-nav-field="steps-enabled">
             <label
+              title="Instructs the agent to append progress entries to .claude/steps.json. Each entry is shown live in the Steps panel as the agent works."
               style={{
                 display: 'flex',
                 'align-items': 'center',
                 gap: '8px',
-                'font-size': '12px',
+                'font-size': '13px',
                 color: theme.fg,
                 cursor: 'pointer',
               }}
             >
               <input
                 type="checkbox"
-                checked={skipPermissions()}
-                onChange={(e) => setSkipPermissions(e.currentTarget.checked)}
+                checked={stepsEnabled()}
+                onChange={(e) => setStepsEnabled(e.currentTarget.checked)}
                 style={{ 'accent-color': theme.accent, cursor: 'inherit' }}
               />
-              Dangerously skip all confirms
+              Steps tracking
             </label>
-            <Show when={skipPermissions()}>
-              <div
-                style={{
-                  ...bannerStyle(theme.warning),
-                  'font-size': '12px',
-                }}
-              >
-                The agent will run without asking for confirmation. It can read, write, and delete
-                files, and execute commands without your approval.
-              </div>
-              <Show when={!dockerMode() && store.dockerAvailable}>
-                <div style={{ 'font-size': '11px', color: theme.fgMuted }}>
-                  Tip: Enable Docker isolation to limit the blast radius of skip-permissions mode.
-                </div>
-              </Show>
-              <Show when={!store.dockerAvailable}>
-                <div style={{ 'font-size': '11px', color: theme.fgMuted }}>
-                  Install Docker to enable container isolation for safer skip-permissions mode.
-                </div>
-              </Show>
-            </Show>
           </div>
-        </Show>
 
-        {/* Docker isolation toggle */}
-        <Show when={store.dockerAvailable}>
-          <div
-            data-nav-field="docker-mode"
-            style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}
-          >
-            <label
-              style={{
-                display: 'flex',
-                'align-items': 'center',
-                gap: '8px',
-                'font-size': '12px',
-                color: theme.fg,
-                cursor: 'pointer',
-              }}
+          {/* Skip permissions toggle */}
+          <Show when={agentSupportsSkipPermissions()}>
+            <div
+              data-nav-field="skip-permissions"
+              style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}
             >
-              <input
-                type="checkbox"
-                checked={dockerMode()}
-                onChange={(e) => setDockerMode(e.currentTarget.checked)}
-                style={{ 'accent-color': theme.accent, cursor: 'inherit' }}
-              />
-              Run in Docker container
-            </label>
-            <Show when={dockerMode()}>
-              <div
+              <label
                 style={{
-                  'font-size': '12px',
-                  color: theme.success ?? theme.accent,
-                  background: `color-mix(in srgb, ${theme.success ?? theme.accent} 8%, transparent)`,
-                  padding: '8px 12px',
-                  'border-radius': '8px',
-                  border: `1px solid color-mix(in srgb, ${theme.success ?? theme.accent} 20%, transparent)`,
+                  display: 'flex',
+                  'align-items': 'center',
+                  gap: '8px',
+                  'font-size': '13px',
+                  color: theme.fg,
+                  cursor: 'pointer',
                 }}
               >
-                The agent will run inside a Docker container. Only the project directory is mounted
-                — files outside the project are protected from accidental deletion.
-              </div>
-              <div style={{ display: 'flex', 'align-items': 'center', gap: '8px' }}>
-                <label
-                  style={{ 'font-size': '11px', color: theme.fgMuted, 'white-space': 'nowrap' }}
-                >
-                  Image:
-                </label>
                 <input
-                  type="text"
-                  value={store.dockerImage}
-                  onInput={(e) => setDockerImage(e.currentTarget.value)}
-                  placeholder="parallel-code-agent:latest"
-                  style={{
-                    flex: '1',
-                    background: theme.bgInput,
-                    border: `1px solid ${theme.border}`,
-                    'border-radius': '6px',
-                    padding: '5px 10px',
-                    color: theme.fg,
-                    'font-size': '12px',
-                    'font-family': "'JetBrains Mono', monospace",
-                    outline: 'none',
-                  }}
+                  type="checkbox"
+                  checked={skipPermissions()}
+                  onChange={(e) => setSkipPermissions(e.currentTarget.checked)}
+                  style={{ 'accent-color': theme.accent, cursor: 'inherit' }}
                 />
-              </div>
-              <Show when={dockerImageReady() === false && !dockerBuilding()}>
+                Dangerously skip all confirms
+              </label>
+              <Show when={skipPermissions()}>
                 <div
                   style={{
-                    display: 'flex',
-                    'align-items': 'center',
-                    gap: '8px',
-                    'font-size': '11px',
-                    color: theme.fgMuted,
+                    ...bannerStyle(theme.warning),
+                    'font-size': '13px',
                   }}
                 >
-                  <span>Image not found locally.</span>
-                  <Show
-                    when={store.dockerImage === 'parallel-code-agent:latest' || !store.dockerImage}
-                  >
-                    <button
-                      type="button"
-                      onClick={handleBuildImage}
-                      style={{
-                        background: theme.accent,
-                        color: theme.accentText,
-                        border: 'none',
-                        'border-radius': '4px',
-                        padding: '3px 10px',
-                        'font-size': '11px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Build Image
-                    </button>
-                  </Show>
+                  The agent will run without asking for confirmation. It can read, write, and delete
+                  files, and execute commands without your approval.
                 </div>
-              </Show>
-              <Show when={dockerBuilding()}>
-                <div
-                  style={{
-                    'font-size': '11px',
-                    color: theme.fgMuted,
-                    display: 'flex',
-                    'align-items': 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <span class="inline-spinner" aria-hidden="true" />
-                  Building image... this may take a few minutes.
-                </div>
-                <Show when={dockerBuildOutput()}>
-                  <pre
-                    ref={buildOutputRef}
-                    style={{
-                      'font-size': '10px',
-                      color: theme.fgSubtle,
-                      background: theme.bgInput,
-                      'border-radius': '4px',
-                      padding: '6px 8px',
-                      'max-height': '120px',
-                      'overflow-y': 'auto',
-                      'white-space': 'pre-wrap',
-                      'word-break': 'break-all',
-                      margin: '0',
-                    }}
-                  >
-                    {dockerBuildOutput()}
-                  </pre>
+                <Show when={!dockerMode() && store.dockerAvailable}>
+                  <div style={{ 'font-size': '12px', color: theme.fgMuted }}>
+                    Tip: Enable Docker isolation to limit the blast radius of skip-permissions mode.
+                  </div>
+                </Show>
+                <Show when={!store.dockerAvailable}>
+                  <div style={{ 'font-size': '12px', color: theme.fgMuted }}>
+                    Install Docker to enable container isolation for safer skip-permissions mode.
+                  </div>
                 </Show>
               </Show>
-              <Show when={dockerBuildError()}>
-                <div style={{ 'font-size': '11px', color: theme.error }}>
-                  Build failed: {dockerBuildError()}
+            </div>
+          </Show>
+
+          {/* Docker isolation toggle */}
+          <Show when={store.dockerAvailable}>
+            <div
+              data-nav-field="docker-mode"
+              style={{ display: 'flex', 'flex-direction': 'column', gap: '8px' }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  'align-items': 'center',
+                  gap: '8px',
+                  'font-size': '13px',
+                  color: theme.fg,
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={dockerMode()}
+                  onChange={(e) => setDockerMode(e.currentTarget.checked)}
+                  style={{ 'accent-color': theme.accent, cursor: 'inherit' }}
+                />
+                Run in Docker container
+              </label>
+              <Show when={dockerMode()}>
+                <div
+                  style={{
+                    'font-size': '13px',
+                    color: theme.success ?? theme.accent,
+                    background: `color-mix(in srgb, ${theme.success ?? theme.accent} 8%, transparent)`,
+                    padding: '8px 12px',
+                    'border-radius': '8px',
+                    border: `1px solid color-mix(in srgb, ${theme.success ?? theme.accent} 20%, transparent)`,
+                  }}
+                >
+                  The agent will run inside a Docker container. Only the project directory is
+                  mounted — files outside the project are protected from accidental deletion.
                 </div>
-              </Show>
-              <Show when={dockerImageReady() === true && !dockerBuilding()}>
-                <div style={{ 'font-size': '11px', color: theme.success ?? theme.accent }}>
-                  Image ready.
+                <div style={{ display: 'flex', 'align-items': 'center', gap: '8px' }}>
+                  <label
+                    style={{ 'font-size': '12px', color: theme.fgMuted, 'white-space': 'nowrap' }}
+                  >
+                    Image:
+                  </label>
+                  <input
+                    type="text"
+                    value={store.dockerImage}
+                    onInput={(e) => setDockerImage(e.currentTarget.value)}
+                    placeholder="parallel-code-agent:latest"
+                    style={{
+                      flex: '1',
+                      background: theme.bgInput,
+                      border: `1px solid ${theme.border}`,
+                      'border-radius': '6px',
+                      padding: '5px 10px',
+                      color: theme.fg,
+                      'font-size': '13px',
+                      'font-family': "'JetBrains Mono', monospace",
+                      outline: 'none',
+                    }}
+                  />
                 </div>
+                <Show when={dockerImageReady() === false && !dockerBuilding()}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      'align-items': 'center',
+                      gap: '8px',
+                      'font-size': '12px',
+                      color: theme.fgMuted,
+                    }}
+                  >
+                    <span>Image not found locally.</span>
+                    <Show
+                      when={
+                        store.dockerImage === 'parallel-code-agent:latest' || !store.dockerImage
+                      }
+                    >
+                      <button
+                        type="button"
+                        onClick={handleBuildImage}
+                        style={{
+                          background: theme.accent,
+                          color: theme.accentText,
+                          border: 'none',
+                          'border-radius': '4px',
+                          padding: '3px 10px',
+                          'font-size': '12px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Build Image
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={dockerBuilding()}>
+                  <div
+                    style={{
+                      'font-size': '12px',
+                      color: theme.fgMuted,
+                      display: 'flex',
+                      'align-items': 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span class="inline-spinner" aria-hidden="true" />
+                    Building image... this may take a few minutes.
+                  </div>
+                  <Show when={dockerBuildOutput()}>
+                    <pre
+                      ref={buildOutputRef}
+                      style={{
+                        'font-size': '11px',
+                        color: theme.fgSubtle,
+                        background: theme.bgInput,
+                        'border-radius': '4px',
+                        padding: '6px 8px',
+                        'max-height': '120px',
+                        'overflow-y': 'auto',
+                        'white-space': 'pre-wrap',
+                        'word-break': 'break-all',
+                        margin: '0',
+                      }}
+                    >
+                      {dockerBuildOutput()}
+                    </pre>
+                  </Show>
+                </Show>
+                <Show when={dockerBuildError()}>
+                  <div style={{ 'font-size': '12px', color: theme.error }}>
+                    Build failed: {dockerBuildError()}
+                  </div>
+                </Show>
+                <Show when={dockerImageReady() === true && !dockerBuilding()}>
+                  <div style={{ 'font-size': '12px', color: theme.success ?? theme.accent }}>
+                    Image ready.
+                  </div>
+                </Show>
               </Show>
-            </Show>
-          </div>
-        </Show>
+            </div>
+          </Show>
+        </div>
+        {/* end checkboxes group */}
 
         <Show when={ignoredDirs().length > 0 && gitIsolation() === 'worktree'}>
           <SymlinkDirPicker
@@ -891,7 +918,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
           <div
             style={{
               ...bannerStyle(theme.error),
-              'font-size': '12px',
+              'font-size': '13px',
             }}
           >
             {error()}
@@ -918,7 +945,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
               'border-radius': '8px',
               color: theme.fgMuted,
               cursor: 'pointer',
-              'font-size': '13px',
+              'font-size': '14px',
             }}
           >
             Cancel
@@ -934,7 +961,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
               'border-radius': '8px',
               color: theme.accentText,
               cursor: 'pointer',
-              'font-size': '13px',
+              'font-size': '14px',
               'font-weight': '500',
               opacity: !canSubmit() ? '0.4' : '1',
               display: 'inline-flex',

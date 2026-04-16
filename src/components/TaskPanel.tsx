@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup } from 'solid-js';
+import { createSignal, createEffect, onMount, onCleanup, batch } from 'solid-js';
 import {
   store,
   retryCloseTask,
@@ -15,7 +15,6 @@ import { useFocusRegistration } from '../lib/focus-registration';
 import { ResizablePanel, type PanelChild } from './ResizablePanel';
 import type { EditableTextHandle } from './EditableText';
 import { PromptInput, type PromptInputHandle } from './PromptInput';
-import { ScalablePanel } from './ScalablePanel';
 import { CloseTaskDialog } from './CloseTaskDialog';
 import { MergeDialog } from './MergeDialog';
 import { PushDialog } from './PushDialog';
@@ -26,10 +25,14 @@ import { TaskTitleBar } from './TaskTitleBar';
 import { TaskBranchInfoBar } from './TaskBranchInfoBar';
 import { TaskNotesPanel } from './TaskNotesPanel';
 import { TaskShellSection } from './TaskShellSection';
+import { TaskStepsSection } from './TaskStepsSection';
 import { TaskAITerminal } from './TaskAITerminal';
 import { TaskClosingOverlay } from './TaskClosingOverlay';
+import { invoke } from '../lib/ipc';
+import { IPC } from '../../electron/ipc/channels';
 import { theme } from '../lib/theme';
 import type { Task } from '../store/types';
+import type { CommitInfo } from '../ipc/types';
 
 interface TaskPanelProps {
   task: Task;
@@ -47,6 +50,8 @@ export function TaskPanel(props: TaskPanelProps) {
   let pushSuccessTimer: ReturnType<typeof setTimeout> | undefined;
   onCleanup(() => clearTimeout(pushSuccessTimer));
   const [diffScrollTarget, setDiffScrollTarget] = createSignal<string | null>(null);
+  const [commitList, setCommitList] = createSignal<CommitInfo[]>([]);
+  const [selectedCommit, setSelectedCommit] = createSignal<string | null>(null);
   const [editingProjectId, setEditingProjectId] = createSignal<string | null>(null);
   let panelRef!: HTMLDivElement;
   let promptRef: HTMLTextAreaElement | undefined;
@@ -115,6 +120,42 @@ export function TaskPanel(props: TaskPanelProps) {
     }
   });
 
+  // Poll for branch commits for all worktree-isolated tasks (not just the active one),
+  // so CommitNavBar shows correct state regardless of which column is focused.
+  createEffect(() => {
+    const worktreePath = props.task.worktreePath;
+    const baseBranch = props.task.baseBranch;
+    if (props.task.gitIsolation !== 'worktree') return;
+    let cancelled = false;
+
+    async function fetchCommits() {
+      try {
+        const result = await invoke<CommitInfo[]>(IPC.GetBranchCommits, {
+          worktreePath,
+          baseBranch,
+        });
+        if (cancelled) return;
+        batch(() => {
+          setCommitList(result);
+          // Reset selection if the selected commit no longer exists
+          const sel = selectedCommit();
+          if (sel !== null && !result.some((c) => c.hash === sel)) {
+            setSelectedCommit(null);
+          }
+        });
+      } catch {
+        /* worktree may not exist yet */
+      }
+    }
+
+    void fetchCommits();
+    const timer = setInterval(() => void fetchCommits(), 5000);
+    onCleanup(() => {
+      cancelled = true;
+      clearInterval(timer);
+    });
+  });
+
   const firstAgentId = () => props.task.agentIds[0] ?? '';
 
   function titleBar(): PanelChild {
@@ -148,6 +189,25 @@ export function TaskPanel(props: TaskPanelProps) {
     };
   }
 
+  function stepsSection(): PanelChild {
+    return {
+      id: 'steps-section',
+      initialSize: 28,
+      minSize: 28,
+      get fixed() {
+        return !props.task.stepsContent?.length;
+      },
+      requestSize: () => (props.task.stepsContent?.length ? 110 : 28),
+      content: () => (
+        <TaskStepsSection
+          task={props.task}
+          isActive={props.isActive}
+          onFileClick={(file) => setDiffScrollTarget(file)}
+        />
+      ),
+    };
+  }
+
   function notesAndFiles(): PanelChild {
     return {
       id: 'notes-files',
@@ -157,6 +217,9 @@ export function TaskPanel(props: TaskPanelProps) {
         <TaskNotesPanel
           task={props.task}
           isActive={props.isActive}
+          commitList={commitList()}
+          selectedCommit={selectedCommit()}
+          onCommitNavigate={setSelectedCommit}
           onPlanFullscreen={() => setPlanFullscreen(true)}
           onDiffFileClick={(path) => setDiffScrollTarget(path)}
         />
@@ -195,25 +258,23 @@ export function TaskPanel(props: TaskPanelProps) {
       minSize: 54,
       maxSize: 300,
       content: () => (
-        <ScalablePanel panelId={`${props.task.id}:prompt`}>
-          <div
-            onClick={() => setTaskFocusedPanel(props.task.id, 'prompt')}
-            style={{ height: '100%' }}
-          >
-            <PromptInput
-              taskId={props.task.id}
-              agentId={firstAgentId()}
-              initialPrompt={props.task.initialPrompt}
-              prefillPrompt={props.task.prefillPrompt}
-              onSend={() => {
-                if (props.task.initialPrompt) clearInitialPrompt(props.task.id);
-              }}
-              onPrefillConsumed={() => clearPrefillPrompt(props.task.id)}
-              ref={(el) => (promptRef = el)}
-              handle={(h) => (promptHandle = h)}
-            />
-          </div>
-        </ScalablePanel>
+        <div
+          onClick={() => setTaskFocusedPanel(props.task.id, 'prompt')}
+          style={{ height: '100%' }}
+        >
+          <PromptInput
+            taskId={props.task.id}
+            agentId={firstAgentId()}
+            initialPrompt={props.task.initialPrompt}
+            prefillPrompt={props.task.prefillPrompt}
+            onSend={() => {
+              if (props.task.initialPrompt) clearInitialPrompt(props.task.id);
+            }}
+            onPrefillConsumed={() => clearPrefillPrompt(props.task.id)}
+            ref={(el) => (promptRef = el)}
+            handle={(h) => (promptHandle = h)}
+          />
+        </div>
       ),
     };
   }
@@ -248,6 +309,7 @@ export function TaskPanel(props: TaskPanelProps) {
           notesAndFiles(),
           shellSection(),
           aiTerminal(),
+          ...(props.task.stepsEnabled ? [stepsSection()] : []),
           ...(store.showPromptInput ? [promptInput()] : []),
         ]}
       />
@@ -296,6 +358,10 @@ export function TaskPanel(props: TaskPanelProps) {
         onClose={() => setDiffScrollTarget(null)}
         taskId={props.task.id}
         agentId={props.task.agentIds[0]}
+        commitList={commitList()}
+        selectedCommit={selectedCommit()}
+        onCommitNavigate={setSelectedCommit}
+        gitIsolation={props.task.gitIsolation}
       />
       <EditProjectDialog project={editingProject()} onClose={() => setEditingProjectId(null)} />
       <PlanViewerDialog

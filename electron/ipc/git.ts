@@ -147,6 +147,18 @@ async function remoteTrackingRefExists(repoRoot: string, branch: string): Promis
   }
 }
 
+/** Check whether a local branch ref exists. */
+async function localBranchExists(repoRoot: string, branch: string): Promise<boolean> {
+  try {
+    await exec('git', ['rev-parse', '--verify', `refs/heads/${branch}`], {
+      cwd: repoRoot,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function detectMainBranchUncached(repoRoot: string): Promise<string> {
   // Try remote HEAD reference first
   const branch = await resolveOriginHead(repoRoot);
@@ -168,9 +180,12 @@ async function detectMainBranchUncached(repoRoot: string): Promise<string> {
     }
   }
 
-  // Check common default branch names
+  // Check common default branch names (remote-tracking first, then local)
   for (const candidate of ['main', 'master']) {
     if (await remoteTrackingRefExists(repoRoot, candidate)) return candidate;
+  }
+  for (const candidate of ['main', 'master']) {
+    if (await localBranchExists(repoRoot, candidate)) return candidate;
   }
 
   // Empty repo (no commits yet) — use configured default branch or fall back to "main"
@@ -391,6 +406,26 @@ export async function createWorktree(
     } catch {
       // Branch doesn't exist — fine
     }
+  }
+
+  // Validate the start-point ref exists before attempting worktree creation
+  const startRef = baseBranch || 'HEAD';
+  try {
+    await exec('git', ['rev-parse', '--verify', startRef], { cwd: repoRoot });
+  } catch {
+    const isEmptyRepo = await exec('git', ['rev-list', '-n1', '--all'], { cwd: repoRoot })
+      .then(({ stdout }) => !stdout.trim())
+      .catch(() => true);
+    if (isEmptyRepo) {
+      throw new Error(
+        'Cannot create a worktree in a repository with no commits. ' +
+          'Please make an initial commit first.',
+      );
+    }
+    throw new Error(
+      `Branch "${startRef}" does not exist. ` +
+        'Please select a valid base branch or create the branch first.',
+    );
   }
 
   // Create fresh worktree with new branch
@@ -1194,5 +1229,83 @@ export async function isGitRepo(dirPath: string): Promise<boolean> {
     return toplevel === resolved;
   } catch {
     return false;
+  }
+}
+
+// --- Per-commit operations ---
+
+export interface CommitInfo {
+  hash: string;
+  message: string;
+}
+
+export async function getBranchCommits(
+  worktreePath: string,
+  baseBranch?: string,
+): Promise<CommitInfo[]> {
+  const mergeBase = await detectMergeBase(worktreePath, 'HEAD', baseBranch);
+  try {
+    const { stdout } = await exec(
+      'git',
+      ['log', `${mergeBase}..HEAD`, '--pretty=format:%H%x00%s', '--reverse'],
+      { cwd: worktreePath, maxBuffer: MAX_BUFFER },
+    );
+    if (!stdout.trim()) return [];
+    return stdout
+      .trim()
+      .split('\n')
+      .map((line) => {
+        const sep = line.indexOf('\0');
+        return {
+          hash: sep >= 0 ? line.slice(0, sep) : line,
+          message: sep >= 0 ? line.slice(sep + 1) : '',
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+export async function getCommitChangedFiles(
+  worktreePath: string,
+  commitHash: string,
+): Promise<ChangedFile[]> {
+  let diffStr = '';
+  try {
+    const { stdout } = await exec(
+      'git',
+      ['diff', '--raw', '--numstat', `${commitHash}^..${commitHash}`],
+      { cwd: worktreePath, maxBuffer: MAX_BUFFER },
+    );
+    diffStr = stdout;
+  } catch {
+    return [];
+  }
+
+  const { statusMap, numstatMap } = parseDiffRawNumstat(diffStr);
+
+  const files: ChangedFile[] = [];
+  for (const [p, [added, removed]] of numstatMap) {
+    const status = statusMap.get(p) ?? 'M';
+    files.push({ path: p, lines_added: added, lines_removed: removed, status, committed: true });
+  }
+  for (const [p, status] of statusMap) {
+    if (numstatMap.has(p)) continue;
+    files.push({ path: p, lines_added: 0, lines_removed: 0, status, committed: true });
+  }
+
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return files;
+}
+
+export async function getCommitDiffs(worktreePath: string, commitHash: string): Promise<string> {
+  try {
+    const { stdout } = await exec('git', ['diff', '-U3', `${commitHash}^..${commitHash}`], {
+      cwd: worktreePath,
+      maxBuffer: MAX_BUFFER,
+    });
+    return stdout;
+  } catch {
+    return '';
   }
 }

@@ -2,6 +2,7 @@ import { produce } from 'solid-js/store';
 import { invoke, Channel } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { store, setStore, cleanupPanelEntries } from './core';
+import { saveState } from './persistence';
 import { setTaskFocusedPanel } from './focus';
 import { getProject, getProjectPath, getProjectBranchPrefix, isProjectMissing } from './projects';
 import { setPendingShellCommand } from '../lib/bookmarks';
@@ -13,7 +14,7 @@ import {
   rescheduleTaskStatusPolling,
 } from './taskStatus';
 import { recordMergedLines, recordTaskCompleted } from './completion';
-import type { AgentDef, CreateTaskResult, MergeResult } from '../ipc/types';
+import type { AgentDef, CreateTaskResult, MergeResult, StepEntry } from '../ipc/types';
 import { parseGitHubUrl, taskNameFromGitHubUrl } from '../lib/github-url';
 import type { Agent, Task, GitIsolationMode } from './types';
 
@@ -83,6 +84,7 @@ export interface CreateTaskOptions {
   skipPermissions?: boolean;
   dockerMode?: boolean;
   dockerImage?: string;
+  stepsEnabled?: boolean;
 }
 
 export async function createTask(opts: CreateTaskOptions): Promise<string> {
@@ -129,6 +131,29 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
   }
 
   const agentId = crypto.randomUUID();
+
+  // Per-task steps tracking — explicit opt-in from dialog, or fall back to last-used preference
+  const stepsEnabled = opts.stepsEnabled ?? store.showSteps;
+  // Remember this choice so the dialog defaults to it next time
+  if (stepsEnabled !== store.showSteps) setStore('showSteps', stepsEnabled);
+
+  // Inject steps instruction into the first prompt so the agent maintains steps.json.
+  // Appended after a separator for recency bias; savedInitialPrompt keeps the original clean text.
+  const stepsInstruction =
+    'IMPORTANT: Maintain .claude/steps.json throughout this task — a JSON array tracking your progress. ' +
+    'Before beginning each major step, append an entry with status "starting". ' +
+    'After completing the step, append a follow-up entry with the appropriate status (never modify previous entries). ' +
+    'Rules for each field:\n' +
+    '  summary: ≤60 chars, start with an action verb (e.g. "Add JWT middleware", "Fix token refresh bug"). No filler words like "Successfully", "Now", or "Going to".\n' +
+    '  detail: one sentence max, only if it adds context the summary cannot carry — omit the field entirely otherwise.\n' +
+    '  files_touched: only files you actually wrote or modified in this step, not files you read.\n' +
+    '  status: starting | investigating | implementing | testing | awaiting_review | done.\n' +
+    '  timestamp: ISO 8601.\n' +
+    'Example: {"summary":"Add JWT validation middleware","status":"implementing","detail":"Wraps every protected route handler.","files_touched":["src/middleware/auth.ts"],"timestamp":"2024-01-15T10:30:00Z"}. ' +
+    'When you want the user to review your work: write an entry with status "awaiting_review" and pause. Resume appending entries when the user continues.';
+  const effectivePrompt =
+    stepsEnabled && initialPrompt ? `${initialPrompt}\n\n---\n${stepsInstruction}` : initialPrompt;
+
   const task: Task = {
     id: taskId,
     name,
@@ -141,8 +166,9 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
     shellAgentIds: [],
     notes: '',
     lastPrompt: '',
-    initialPrompt: initialPrompt ?? undefined,
+    initialPrompt: effectivePrompt ?? undefined,
     savedInitialPrompt: initialPrompt ?? undefined,
+    stepsEnabled: stepsEnabled || undefined,
     skipPermissions: skipPermissions ?? undefined,
     dockerMode: dockerMode ?? undefined,
     dockerImage: dockerImage ?? undefined,
@@ -162,6 +188,7 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
   };
 
   initTaskInStore(taskId, task, agent, projectId, agentDef);
+  saveState(); // fire-and-forget — errors handled internally
   return taskId;
 }
 
@@ -229,6 +256,7 @@ function removeTaskFromStore(taskId: string, agentIds: string[]): void {
   // merge+cleanup, current-branch-mode close), so placing it here prevents leaks
   // regardless of which path removed the task.  Idempotent if already stopped.
   invoke(IPC.StopPlanWatcher, { taskId }).catch(console.error);
+  invoke(IPC.StopStepsWatcher, { taskId }).catch(console.error);
 
   // Clean up agent activity tracking (timers, buffers, decoders) before
   // the store entries are deleted — otherwise markAgentExited can't find
@@ -339,8 +367,14 @@ export function updateTaskNotes(taskId: string, notes: string): void {
 }
 
 export async function sendPrompt(taskId: string, agentId: string, text: string): Promise<void> {
+  // Send a Focus In escape sequence before the prompt text.  When the user focuses
+  // the PromptInput textarea, the xterm.js terminal loses DOM focus.  For agents
+  // that enable focus tracking (\x1b[?1004h), xterm.js sends \x1b[O (Focus Out)
+  // to the PTY, which may suspend readline input processing; \x1b[I re-activates it.
+  await writeToAgentWhenReady(agentId, '\x1b[I');
   // Send text and Enter separately so TUI apps (Claude Code, Codex)
   // don't treat the \r as part of a pasted block
+  setTaskLastInputAt(taskId);
   await writeToAgentWhenReady(agentId, text);
   await new Promise((r) => setTimeout(r, 50));
   await writeToAgentWhenReady(agentId, '\r');
@@ -453,8 +487,9 @@ export async function collapseTask(taskId: string): Promise<void> {
   const task = store.tasks[taskId];
   if (!task || task.collapsed || task.closingStatus) return;
 
-  // Stop plan file watcher to prevent FSWatcher leak
+  // Stop file watchers to prevent FSWatcher leak
   invoke(IPC.StopPlanWatcher, { taskId }).catch(console.error);
+  invoke(IPC.StopStepsWatcher, { taskId }).catch(console.error);
 
   // Save agent def before killing so uncollapse can restart cleanly.
   // Collapsing unmounts the TaskPanel which destroys the TerminalView,
@@ -463,8 +498,6 @@ export async function collapseTask(taskId: string): Promise<void> {
   const agentDef = firstAgent?.def;
   const agentIds = [...task.agentIds];
   const shellAgentIds = [...task.shellAgentIds];
-
-  invoke(IPC.StopPlanWatcher, { taskId }).catch(console.error);
   const allIds = [...agentIds, ...shellAgentIds];
   await Promise.allSettled(
     allIds.map((id) => invoke(IPC.KillAgent, { agentId: id }).catch(console.error)),
@@ -581,4 +614,21 @@ export function setPlanContent(
 ): void {
   setStore('tasks', taskId, 'planContent', content ?? undefined);
   setStore('tasks', taskId, 'planFileName', fileName ?? undefined);
+}
+
+export function setStepsContent(taskId: string, steps: unknown[] | null): void {
+  const valid = steps
+    ? (steps.filter((s) => s !== null && typeof s === 'object' && !Array.isArray(s)) as StepEntry[])
+    : [];
+  setStore('tasks', taskId, 'stepsContent', valid.length > 0 ? valid : undefined);
+}
+
+export function setTaskLastInputAt(taskId: string): void {
+  setStore('tasks', taskId, 'lastInputAt', new Date().toISOString());
+}
+
+/** Toggles steps tracking for a task and remembers the choice as the new default. */
+export function setTaskStepsEnabled(taskId: string, enabled: boolean): void {
+  setStore('tasks', taskId, 'stepsEnabled', enabled || undefined);
+  setStore('showSteps', enabled); // remember as default for future tasks
 }

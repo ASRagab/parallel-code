@@ -14,6 +14,9 @@ export interface AgentDef {
   skip_permissions_args: string[];
   description: string;
   available?: boolean;
+  /** Per-agent override for the stability-check delay (ms) used before auto-sending
+   *  the initial prompt.  Agents with multi-step init dialogs need a longer wait. */
+  prompt_ready_delay_ms?: number;
 }
 
 export interface CreateTaskResult {
@@ -60,4 +63,17 @@ export interface FileDiffResult {
   diff: string;
   oldContent: string;
   newContent: string;
+}
+
+export interface CommitInfo {
+  hash: string;
+  message: string;
+}
+
+export interface StepEntry {
+  summary: string;
+  detail?: string;
+  status: 'starting' | 'investigating' | 'implementing' | 'testing' | 'awaiting_review' | 'done';
+  files_touched?: string[];
+  timestamp: string;
 }

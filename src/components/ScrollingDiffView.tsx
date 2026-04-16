@@ -1,6 +1,6 @@
 import { For, Show, createSignal, createEffect, onMount, onCleanup } from 'solid-js';
 import type { JSX } from 'solid-js';
-import { theme } from '../lib/theme';
+import { theme, bannerStyle } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { getStatusColor } from '../lib/status-colors';
 import { openFileInEditor } from '../lib/shell';
@@ -175,7 +175,7 @@ function DiffLineView(props: {
         'grid-template-columns': '40px 40px 1rem 1fr',
         background: bg(),
         'font-family': "'JetBrains Mono', monospace",
-        'font-size': sf(12),
+        'font-size': sf(13),
         'line-height': '1.5',
       }}
     >
@@ -184,7 +184,7 @@ function DiffLineView(props: {
         style={{
           'text-align': 'right',
           color: theme.fgSubtle,
-          'font-size': sf(11),
+          'font-size': sf(12),
           'user-select': 'none',
           padding: '0 4px',
         }}
@@ -197,7 +197,7 @@ function DiffLineView(props: {
         style={{
           'text-align': 'right',
           color: theme.fgSubtle,
-          'font-size': sf(11),
+          'font-size': sf(12),
           'user-select': 'none',
           padding: '0 4px',
         }}
@@ -362,7 +362,7 @@ function GapView(props: {
               padding: '2px 0',
               'text-align': 'center',
               color: theme.fgSubtle,
-              'font-size': sf(11),
+              'font-size': sf(12),
               'font-family': "'JetBrains Mono', monospace",
               background: theme.bgElevated,
               'border-top': props.borderTop ? `1px solid ${theme.borderSubtle}` : undefined,
@@ -484,7 +484,7 @@ function TrailingGap(props: {
               padding: '2px 0',
               'text-align': 'center',
               color: theme.fgSubtle,
-              'font-size': sf(11),
+              'font-size': sf(12),
               'font-family': "'JetBrains Mono', monospace",
               background: theme.bgElevated,
               'border-top': `1px solid ${theme.borderSubtle}`,
@@ -573,7 +573,7 @@ function FileSection(props: {
         <span
           style={{
             color: theme.fgSubtle,
-            'font-size': sf(11),
+            'font-size': sf(12),
             'user-select': 'none',
             transition: 'transform 0.15s',
             transform: collapsed() ? 'rotate(-90deg)' : 'rotate(0deg)',
@@ -586,12 +586,15 @@ function FileSection(props: {
         {/* Status badge */}
         <span
           style={{
-            'font-size': sf(11),
+            'font-size': sf(12),
             'font-weight': '600',
             padding: '2px 8px',
             'border-radius': '4px',
             color: getStatusColor(props.file.status),
-            background: 'rgba(255,255,255,0.06)',
+            background:
+              props.file.status === 'M'
+                ? 'rgba(255,255,255,0.06)'
+                : `color-mix(in srgb, ${getStatusColor(props.file.status)} 15%, transparent)`,
           }}
         >
           {STATUS_LABELS[props.file.status] ?? props.file.status}
@@ -601,7 +604,7 @@ function FileSection(props: {
         <span
           style={{
             flex: '1',
-            'font-size': sf(12),
+            'font-size': sf(13),
             'font-family': "'JetBrains Mono', monospace",
             color: theme.fg,
             overflow: 'hidden',
@@ -614,7 +617,7 @@ function FileSection(props: {
 
         <span
           style={{
-            'font-size': sf(11),
+            'font-size': sf(12),
             color: theme.success,
             'font-family': "'JetBrains Mono', monospace",
           }}
@@ -623,7 +626,7 @@ function FileSection(props: {
         </span>
         <span
           style={{
-            'font-size': sf(11),
+            'font-size': sf(12),
             color: theme.error,
             'font-family': "'JetBrains Mono', monospace",
           }}
@@ -665,16 +668,30 @@ function FileSection(props: {
               padding: '24px',
               'text-align': 'center',
               color: theme.fgMuted,
-              'font-size': sf(12),
+              'font-size': sf(13),
             }}
           >
             Binary file — cannot display diff
           </div>
         </Show>
 
-        <Show when={!props.file.binary}>
+        <Show when={!props.file.binary && props.file.status === 'D'}>
+          <div
+            style={{
+              ...bannerStyle(theme.error),
+              margin: '12px',
+              'font-size': sf(13),
+              'text-align': 'center',
+              'font-weight': '600',
+            }}
+          >
+            This file was deleted
+          </div>
+        </Show>
+
+        <Show when={!props.file.binary && props.file.status !== 'D'}>
           <div style={{ 'padding-bottom': '8px', background: 'rgba(0, 0, 0, 0.15)' }}>
-            <Show when={props.file.hunks.length > 0 && props.file.status !== 'D'}>
+            <Show when={props.file.hunks.length > 0 && props.file.status === 'M'}>
               <GapView
                 startLine={1}
                 endLine={props.file.hunks[0].newStart}
@@ -691,7 +708,7 @@ function FileSection(props: {
             <For each={props.file.hunks}>
               {(hunk, hunkIdx) => (
                 <>
-                  <Show when={hunkIdx() > 0}>
+                  <Show when={hunkIdx() > 0 && props.file.status === 'M'}>
                     <GapView
                       startLine={
                         props.file.hunks[hunkIdx() - 1].newStart +
@@ -777,7 +794,7 @@ function FileSection(props: {
                 </>
               )}
             </For>
-            <Show when={props.file.hunks.length > 0 && props.file.status !== 'D'}>
+            <Show when={props.file.hunks.length > 0 && props.file.status === 'M'}>
               <TrailingGap
                 lastHunk={props.file.hunks[props.file.hunks.length - 1]}
                 lang={lang()}
@@ -978,7 +995,7 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
             padding: '40px',
             'text-align': 'center',
             color: theme.fgMuted,
-            'font-size': sf(12),
+            'font-size': sf(13),
           }}
         >
           No changes to display

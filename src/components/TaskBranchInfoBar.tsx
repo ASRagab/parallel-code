@@ -113,7 +113,7 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
         <Show when={props.task.gitIsolation === 'direct'}>
           <span
             style={{
-              'font-size': '10px',
+              'font-size': '11px',
               'font-weight': '600',
               padding: '1px 6px',
               'border-radius': '4px',

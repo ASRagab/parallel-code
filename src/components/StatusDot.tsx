@@ -8,7 +8,9 @@ function getDotColor(status: TaskDotStatus, attention?: TaskAttentionState): str
   if (attention === 'needs_input') return theme.warning;
   if (attention === 'error') return theme.error;
   if (attention === 'ready') return theme.success;
-  return { busy: theme.fgMuted, waiting: '#e5a800', ready: theme.success }[status];
+  return { busy: theme.fgMuted, waiting: '#e5a800', ready: theme.success, review: '#c084fc' }[
+    status
+  ];
 }
 
 function getDotShadow(attention?: TaskAttentionState): string | undefined {

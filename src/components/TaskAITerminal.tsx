@@ -1,4 +1,5 @@
 import { Show, For, createSignal, onMount, onCleanup } from 'solid-js';
+
 import {
   store,
   markAgentExited,
@@ -6,12 +7,10 @@ import {
   switchAgent,
   setLastPrompt,
   markAgentOutput,
-  getFontScale,
   registerFocusFn,
   unregisterFocusFn,
   setTaskFocusedPanel,
 } from '../store/store';
-import { ScalablePanel } from './ScalablePanel';
 import { InfoBar } from './InfoBar';
 import { TerminalView } from './TerminalView';
 import { Dialog } from './Dialog';
@@ -58,154 +57,149 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
 
   return (
     <>
-      <ScalablePanel panelId={`${props.task.id}:ai-terminal`}>
-        <div
-          class="focusable-panel shell-terminal-container"
-          data-shell-focused={
-            store.focusedPanel[props.task.id] === 'ai-terminal' ? 'true' : 'false'
+      <div
+        class="focusable-panel shell-terminal-container"
+        data-shell-focused={store.focusedPanel[props.task.id] === 'ai-terminal' ? 'true' : 'false'}
+        style={{
+          height: '100%',
+          position: 'relative',
+          background: theme.taskPanelBg,
+          display: 'flex',
+          'flex-direction': 'column',
+        }}
+        onClick={() => setTaskFocusedPanel(props.task.id, 'ai-terminal')}
+      >
+        <InfoBar
+          title={
+            props.task.lastPrompt ||
+            (firstAgent()?.status === 'exited' && props.task.initialPrompt
+              ? 'Agent exited before prompt was sent'
+              : props.task.dockerMode && props.task.initialPrompt
+                ? 'Starting Docker container…'
+                : props.task.initialPrompt
+                  ? 'Waiting to send prompt…'
+                  : 'No prompts sent yet')
           }
-          style={{
-            height: '100%',
-            position: 'relative',
-            background: theme.taskPanelBg,
-            display: 'flex',
-            'flex-direction': 'column',
+          onDblClick={() => {
+            if (props.task.lastPrompt && props.promptHandle && !props.promptHandle.getText())
+              props.promptHandle.setText(props.task.lastPrompt);
           }}
-          onClick={() => setTaskFocusedPanel(props.task.id, 'ai-terminal')}
         >
-          <InfoBar
-            title={
-              props.task.lastPrompt ||
-              (firstAgent()?.status === 'exited' && props.task.initialPrompt
+          <span style={{ opacity: props.task.lastPrompt ? 1 : 0.4 }}>
+            {props.task.lastPrompt
+              ? `> ${props.task.lastPrompt}`
+              : firstAgent()?.status === 'exited' && props.task.initialPrompt
                 ? 'Agent exited before prompt was sent'
                 : props.task.dockerMode && props.task.initialPrompt
                   ? 'Starting Docker container…'
                   : props.task.initialPrompt
                     ? 'Waiting to send prompt…'
-                    : 'No prompts sent yet')
-            }
-            onDblClick={() => {
-              if (props.task.lastPrompt && props.promptHandle && !props.promptHandle.getText())
-                props.promptHandle.setText(props.task.lastPrompt);
-            }}
-          >
-            <span style={{ opacity: props.task.lastPrompt ? 1 : 0.4 }}>
-              {props.task.lastPrompt
-                ? `> ${props.task.lastPrompt}`
-                : firstAgent()?.status === 'exited' && props.task.initialPrompt
-                  ? 'Agent exited before prompt was sent'
-                  : props.task.dockerMode && props.task.initialPrompt
-                    ? 'Starting Docker container…'
-                    : props.task.initialPrompt
-                      ? 'Waiting to send prompt…'
-                      : 'No prompts sent'}
-            </span>
-          </InfoBar>
-          <div style={{ flex: '1', position: 'relative', overflow: 'hidden' }}>
-            <Show when={props.task.dockerMode}>
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '8px',
-                  left: '12px',
-                  'z-index': '10',
-                  'font-size': sf(10),
-                  color: theme.fgMuted,
-                  background: 'color-mix(in srgb, var(--island-bg) 80%, transparent)',
-                  padding: '2px 8px',
-                  'border-radius': '6px',
-                  border: `1px solid ${theme.border}`,
-                  'pointer-events': 'none',
-                }}
-              >
-                docker
-              </div>
-            </Show>
-            <Show when={firstAgent()}>
-              {(a) => (
-                <>
-                  <Show when={a().status === 'exited'}>
-                    <div
-                      class="exit-badge"
-                      title={a().lastOutput.length ? a().lastOutput.join('\n') : undefined}
-                      style={{
-                        position: 'absolute',
-                        top: '8px',
-                        right: '12px',
-                        'z-index': '10',
-                        'font-size': sf(11),
-                        color: a().exitCode === 0 ? theme.success : theme.error,
-                        background: 'color-mix(in srgb, var(--island-bg) 80%, transparent)',
-                        padding: '4px 12px',
-                        'border-radius': '8px',
-                        border: `1px solid ${theme.border}`,
-                        display: 'flex',
-                        'align-items': 'center',
-                        gap: '8px',
-                      }}
-                    >
-                      <span>
-                        {a().signal === 'spawn_failed'
-                          ? 'Failed to start'
-                          : `Process exited (${a().exitCode ?? '?'})`}
-                      </span>
-                      <AgentRestartMenu agentId={a().id} agentDefId={a().def.id} />
-                      <Show when={a().def.resume_args?.length}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            restartAgent(a().id, true);
-                          }}
-                          style={{
-                            background: theme.bgElevated,
-                            border: `1px solid ${theme.border}`,
-                            color: theme.fg,
-                            padding: '2px 8px',
-                            'border-radius': '4px',
-                            cursor: 'pointer',
-                            'font-size': sf(10),
-                          }}
-                        >
-                          Resume
-                        </button>
-                      </Show>
-                    </div>
-                  </Show>
-                  <Show when={`${a().id}:${a().generation}`} keyed>
-                    <TerminalView
-                      taskId={props.task.id}
-                      agentId={a().id}
-                      isFocused={
-                        props.isActive && store.focusedPanel[props.task.id] === 'ai-terminal'
-                      }
-                      command={a().def.command}
-                      args={[
-                        ...(a().resumed && a().def.resume_args?.length
-                          ? (a().def.resume_args ?? [])
-                          : a().def.args),
-                        ...(props.task.skipPermissions && a().def.skip_permissions_args?.length
-                          ? (a().def.skip_permissions_args ?? [])
-                          : []),
-                      ]}
-                      cwd={props.task.worktreePath}
-                      dockerMode={props.task.dockerMode}
-                      dockerImage={props.task.dockerImage}
-                      onExit={(code) => markAgentExited(a().id, code)}
-                      onData={(data) => markAgentOutput(a().id, data, props.task.id)}
-                      onFileLink={handleFileLink}
-                      onPromptDetected={(text) => setLastPrompt(props.task.id, text)}
-                      onReady={(focusFn) =>
-                        registerFocusFn(`${props.task.id}:ai-terminal`, focusFn)
-                      }
-                      fontSize={Math.round(13 * getFontScale(`${props.task.id}:ai-terminal`))}
-                    />
-                  </Show>
-                </>
-              )}
-            </Show>
-          </div>
+                    : 'No prompts sent'}
+          </span>
+        </InfoBar>
+        <div style={{ flex: '1', position: 'relative', overflow: 'hidden' }}>
+          <Show when={props.task.dockerMode}>
+            <div
+              style={{
+                position: 'absolute',
+                top: '8px',
+                left: '12px',
+                'z-index': '10',
+                'font-size': sf(11),
+                color: theme.fgMuted,
+                background: 'color-mix(in srgb, var(--island-bg) 80%, transparent)',
+                padding: '2px 8px',
+                'border-radius': '6px',
+                border: `1px solid ${theme.border}`,
+                'pointer-events': 'none',
+              }}
+            >
+              docker
+            </div>
+          </Show>
+          <Show when={firstAgent()}>
+            {(a) => (
+              <>
+                <Show when={a().status === 'exited'}>
+                  <div
+                    class="exit-badge"
+                    title={a().lastOutput.length ? a().lastOutput.join('\n') : undefined}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '12px',
+                      'z-index': '10',
+                      'font-size': sf(12),
+                      color: a().exitCode === 0 ? theme.success : theme.error,
+                      background: 'color-mix(in srgb, var(--island-bg) 80%, transparent)',
+                      padding: '4px 12px',
+                      'border-radius': '8px',
+                      border: `1px solid ${theme.border}`,
+                      display: 'flex',
+                      'align-items': 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <span>
+                      {a().signal === 'spawn_failed'
+                        ? 'Failed to start'
+                        : `Process exited (${a().exitCode ?? '?'})`}
+                    </span>
+                    <AgentRestartMenu agentId={a().id} agentDefId={a().def.id} />
+                    <Show when={a().def.resume_args?.length}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          restartAgent(a().id, true);
+                        }}
+                        style={{
+                          background: theme.bgElevated,
+                          border: `1px solid ${theme.border}`,
+                          color: theme.fg,
+                          padding: '2px 8px',
+                          'border-radius': '4px',
+                          cursor: 'pointer',
+                          'font-size': sf(11),
+                        }}
+                      >
+                        Resume
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={`${a().id}:${a().generation}`} keyed>
+                  <TerminalView
+                    taskId={props.task.id}
+                    agentId={a().id}
+                    isFocused={
+                      props.isActive && store.focusedPanel[props.task.id] === 'ai-terminal'
+                    }
+                    command={a().def.command}
+                    args={[
+                      ...(a().resumed && a().def.resume_args?.length
+                        ? (a().def.resume_args ?? [])
+                        : a().def.args),
+                      ...(props.task.skipPermissions && a().def.skip_permissions_args?.length
+                        ? (a().def.skip_permissions_args ?? [])
+                        : []),
+                    ]}
+                    cwd={props.task.worktreePath}
+                    stepsEnabled={props.task.stepsEnabled}
+                    dockerMode={props.task.dockerMode}
+                    dockerImage={props.task.dockerImage}
+                    onExit={(code) => markAgentExited(a().id, code)}
+                    onData={(data) => markAgentOutput(a().id, data, props.task.id)}
+                    onFileLink={handleFileLink}
+                    onPromptDetected={(text) => setLastPrompt(props.task.id, text)}
+                    onReady={(focusFn) => registerFocusFn(`${props.task.id}:ai-terminal`, focusFn)}
+                    fontSize={14}
+                  />
+                </Show>
+              </>
+            )}
+          </Show>
         </div>
-      </ScalablePanel>
+      </div>
       <MarkdownViewerDialog
         open={mdViewerOpen()}
         onClose={() => setMdViewerOpen(false)}
@@ -251,7 +245,7 @@ function MarkdownViewerDialog(props: {
       >
         <span
           style={{
-            'font-size': sf(13),
+            'font-size': sf(14),
             color: theme.fg,
             'font-weight': '600',
             'font-family': "'JetBrains Mono', monospace",
@@ -326,7 +320,7 @@ function AgentRestartMenu(props: { agentId: string; agentDefId: string }) {
           'border-radius': '4px 0 0 4px',
           'border-right': 'none',
           cursor: 'pointer',
-          'font-size': sf(10),
+          'font-size': sf(11),
         }}
       >
         Restart
@@ -343,7 +337,7 @@ function AgentRestartMenu(props: { agentId: string; agentDefId: string }) {
           padding: '2px 4px',
           'border-radius': '0 4px 4px 0',
           cursor: 'pointer',
-          'font-size': sf(10),
+          'font-size': sf(11),
         }}
       >
         ▾
@@ -367,7 +361,7 @@ function AgentRestartMenu(props: { agentId: string; agentDefId: string }) {
           <div
             style={{
               padding: '4px 10px',
-              'font-size': sf(9),
+              'font-size': sf(10),
               color: theme.fgMuted,
             }}
           >
@@ -394,7 +388,7 @@ function AgentRestartMenu(props: { agentId: string; agentDefId: string }) {
                   color: theme.fg,
                   padding: '5px 10px',
                   cursor: 'pointer',
-                  'font-size': sf(10),
+                  'font-size': sf(11),
                   'text-align': 'left',
                 }}
                 onMouseEnter={(e) => {

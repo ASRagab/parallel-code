@@ -35,6 +35,9 @@ export enum IPC {
   CheckIsGitRepo = 'check_is_git_repo',
   CommitAll = 'commit_all',
   DiscardUncommitted = 'discard_uncommitted',
+  GetBranchCommits = 'get_branch_commits',
+  GetCommitChangedFiles = 'get_commit_changed_files',
+  GetCommitDiffs = 'get_commit_diffs',
 
   // Persistence
   SaveAppState = 'save_app_state',
@@ -85,6 +88,11 @@ export enum IPC {
   PlanContent = 'plan_content',
   ReadPlanContent = 'read_plan_content',
   StopPlanWatcher = 'stop_plan_watcher',
+
+  // Steps
+  StepsContent = 'steps_content',
+  ReadStepsContent = 'read_steps_content',
+  StopStepsWatcher = 'stop_steps_watcher',
 
   // Ask about code
   AskAboutCode = 'ask_about_code',
