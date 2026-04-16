@@ -21,6 +21,7 @@ export const [store, setStore] = createStore<AppStore>({
   panelSizes: {},
   globalScale: 1,
   taskGitStatus: {},
+  taskViewportVisibility: {},
   focusedPanel: {},
   sidebarFocused: false,
   sidebarFocusedProjectId: null,
@@ -63,9 +64,14 @@ export const [store, setStore] = createStore<AppStore>({
   showArena: false,
 });
 
+type CleanupPanelStore = Pick<
+  AppStore,
+  'focusedPanel' | 'panelSizes' | 'taskOrder' | 'collapsedTaskOrder'
+>;
+
 /** Remove panelSizes, focusedPanel, and taskOrder entries for a given ID.
  *  Call inside a `produce` callback. Returns the index the item had in taskOrder. */
-export function cleanupPanelEntries(s: AppStore, id: string): number {
+export function cleanupPanelEntries(s: CleanupPanelStore, id: string): number {
   const idx = s.taskOrder.indexOf(id);
   delete s.focusedPanel[id];
   const prefix = id + ':';

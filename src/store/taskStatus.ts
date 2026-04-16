@@ -37,6 +37,7 @@ interface AgentTrackingState {
   decoder: TextDecoder;
   lastAnalysisAt?: number;
   pendingAnalysis?: ReturnType<typeof setTimeout>;
+  pendingAnalysisDueAt?: number;
 }
 
 const agentStates = new Map<string, AgentTrackingState>();
@@ -90,6 +91,7 @@ function clearAutoTrustState(agentId: string): void {
 }
 
 export type TaskDotStatus = 'busy' | 'waiting' | 'ready' | 'review';
+export type TaskAttentionState = 'idle' | 'active' | 'needs_input' | 'error' | 'ready';
 
 // --- Prompt detection helpers ---
 
@@ -460,7 +462,8 @@ const TAIL_BUFFER_MAX = 16_384;
 const AUTO_TRUST_BG_THROTTLE_MS = 500;
 
 // Per-agent timestamp of last expensive analysis (question/prompt detection).
-const ANALYSIS_INTERVAL_MS = 200;
+const ACTIVE_ANALYSIS_INTERVAL_MS = 200;
+const BACKGROUND_ANALYSIS_INTERVAL_MS = 1_200;
 
 function addToActive(agentId: string): void {
   setActiveAgents((s) => {
@@ -490,6 +493,46 @@ function resetIdleTimer(agentId: string): void {
   }, IDLE_TIMEOUT_MS);
 }
 
+function cancelPendingAnalysis(state: AgentTrackingState): void {
+  if (state.pendingAnalysis !== undefined) {
+    clearTimeout(state.pendingAnalysis);
+    state.pendingAnalysis = undefined;
+  }
+  state.pendingAnalysisDueAt = undefined;
+}
+
+function runAgentAnalysis(agentId: string, now: number): void {
+  const state = getAgentState(agentId);
+  cancelPendingAnalysis(state);
+  state.lastAnalysisAt = now;
+  analyzeAgentOutput(agentId);
+}
+
+function scheduleAgentAnalysis(agentId: string, intervalMs: number, now: number): void {
+  const state = getAgentState(agentId);
+  const lastAnalysis = state.lastAnalysisAt ?? 0;
+  if (now - lastAnalysis >= intervalMs) {
+    runAgentAnalysis(agentId, now);
+    return;
+  }
+
+  const delay = intervalMs - (now - lastAnalysis);
+  const dueAt = now + delay;
+  if (
+    state.pendingAnalysis !== undefined &&
+    state.pendingAnalysisDueAt !== undefined &&
+    state.pendingAnalysisDueAt <= dueAt
+  ) {
+    return;
+  }
+
+  cancelPendingAnalysis(state);
+  state.pendingAnalysisDueAt = dueAt;
+  state.pendingAnalysis = setTimeout(() => {
+    runAgentAnalysis(agentId, Date.now());
+  }, delay);
+}
+
 /** Mark an agent as active when it is first spawned.
  *  Ensures agents start as "busy" before any PTY data arrives. */
 export function markAgentSpawned(agentId: string): void {
@@ -497,10 +540,7 @@ export function markAgentSpawned(agentId: string): void {
   state.outputTailBuffer = '';
   clearAutoTrustState(agentId);
   state.lastAnalysisAt = undefined;
-  if (state.pendingAnalysis !== undefined) {
-    clearTimeout(state.pendingAnalysis);
-    state.pendingAnalysis = undefined;
-  }
+  cancelPendingAnalysis(state);
   state.lastDataAt = Date.now();
   addToActive(agentId);
   resetIdleTimer(agentId);
@@ -594,13 +634,14 @@ export function markAgentOutput(agentId: string, data: Uint8Array, taskId?: stri
       ? combined.slice(combined.length - TAIL_BUFFER_MAX)
       : combined;
 
-  // Expensive analysis (regex, ANSI strip) — only for active task's agents.
+  // Expensive analysis (regex, ANSI strip) now runs for all task agents, with a
+  // slower cadence for background tasks so off-screen attention still updates.
   const isActiveTask = !taskId || taskId === store.activeTaskId;
 
   // Auto-trust runs for ALL agents (including background tasks) so trust
   // dialogs are accepted immediately without needing to switch to the task.
-  // Active-task agents get this via analyzeAgentOutput; background agents
-  // are throttled to avoid ANSI strip + regex on every PTY chunk.
+  // Active-task agents also get full analysis; background agents keep a faster
+  // trust-only path plus a slower full analysis path for attention updates.
   if (store.autoTrustFolders && !isAutoTrustPending(agentId) && !isActiveTask) {
     const lastCheck = state.lastAutoTrustCheckAt ?? 0;
     if (now - lastCheck >= AUTO_TRUST_BG_THROTTLE_MS) {
@@ -608,25 +649,12 @@ export function markAgentOutput(agentId: string, data: Uint8Array, taskId?: stri
       tryAutoTrust(agentId, state.outputTailBuffer);
     }
   }
-  if (isActiveTask) {
-    // Throttle expensive analysis (question/prompt/agent-ready detection).
-    const lastAnalysis = state.lastAnalysisAt ?? 0;
-    if (now - lastAnalysis >= ANALYSIS_INTERVAL_MS) {
-      state.lastAnalysisAt = now;
-      if (state.pendingAnalysis !== undefined) {
-        clearTimeout(state.pendingAnalysis);
-        state.pendingAnalysis = undefined;
-      }
-      analyzeAgentOutput(agentId);
-    } else if (state.pendingAnalysis === undefined) {
-      // Schedule a trailing analysis so the last chunk is always analyzed.
-      state.pendingAnalysis = setTimeout(() => {
-        state.pendingAnalysis = undefined;
-        state.lastAnalysisAt = Date.now();
-        analyzeAgentOutput(agentId);
-      }, ANALYSIS_INTERVAL_MS);
-    }
-  }
+
+  scheduleAgentAnalysis(
+    agentId,
+    isActiveTask ? ACTIVE_ANALYSIS_INTERVAL_MS : BACKGROUND_ANALYSIS_INTERVAL_MS,
+    now,
+  );
 
   // Extract last non-empty line from recent output for prompt matching.
   // This check is UNTHROTTLED — it's cheap (single line, 6 patterns) and
@@ -656,13 +684,12 @@ export function markAgentOutput(agentId: string, data: Uint8Array, taskId?: stri
     // sent into the active trust dialog.  Allow the trailing analysis to run
     // so question/trust state is always up-to-date.
 
-    // Agent is at its prompt — clear stale question state so auto-send
-    // isn't blocked by old dialog text (e.g. trust dialogs that were already
-    // accepted). Only clear if the tail buffer is genuinely free of questions
-    // to avoid briefly hiding a real Y/n prompt that also matches looksLikePrompt.
-    if (!looksLikeQuestion(state.outputTailBuffer)) {
-      updateQuestionState(agentId, false);
-    }
+    // Preserve real question state even when the prompt arrives inside the
+    // analysis throttle window (common for background Y/n confirmations).
+    // Without this fast-path check, cancelling the pending analysis would drop
+    // the question signal and the task would incorrectly look idle.
+    const hasQuestion = looksLikeQuestion(state.outputTailBuffer);
+    updateQuestionState(agentId, hasQuestion);
 
     // Fire the agentReady callback (used by PromptInput auto-send).
     // The chunkContainsAgentPrompt guard inside tryFireAgentReadyCallback
@@ -712,7 +739,7 @@ export function clearAgentActivity(agentId: string): void {
   if (state) {
     clearAutoTrustState(agentId);
     if (state.idleTimer !== undefined) clearTimeout(state.idleTimer);
-    if (state.pendingAnalysis !== undefined) clearTimeout(state.pendingAnalysis);
+    cancelPendingAnalysis(state);
   }
   agentStates.delete(agentId);
   agentReadyCallbacks.delete(agentId);
@@ -721,6 +748,49 @@ export function clearAgentActivity(agentId: string): void {
 }
 
 // --- Derived status ---
+
+function isTaskReady(taskId: string): boolean {
+  const git = store.taskGitStatus[taskId];
+  return Boolean(git?.has_committed_changes && !git?.has_uncommitted_changes);
+}
+
+function hasTaskAgentError(taskId: string): boolean {
+  const task = store.tasks[taskId];
+  if (!task) return false;
+  return task.agentIds.some((id) => {
+    const agent = store.agents[id];
+    if (agent?.status !== 'exited') return false;
+    return agent.exitCode !== 0 || agent.signal !== null;
+  });
+}
+
+export function getTaskAttentionState(taskId: string): TaskAttentionState {
+  const task = store.tasks[taskId];
+  if (!task) return 'idle';
+
+  if (hasTaskAgentError(taskId)) return 'error';
+
+  const active = activeAgents(); // reactive read
+  const hasQuestion = task.agentIds.some((id) => {
+    const agent = store.agents[id];
+    return agent?.status === 'running' && isAgentAskingQuestion(id);
+  });
+  if (hasQuestion) return 'needs_input';
+
+  const hasActive = task.agentIds.some((id) => {
+    const agent = store.agents[id];
+    return agent?.status === 'running' && active.has(id);
+  });
+  if (hasActive) return 'active';
+
+  if (isTaskReady(taskId)) return 'ready';
+  return 'idle';
+}
+
+export function taskNeedsAttention(taskId: string): boolean {
+  const attention = getTaskAttentionState(taskId);
+  return attention === 'active' || attention === 'needs_input' || attention === 'error';
+}
 
 export function getTaskDotStatus(taskId: string): TaskDotStatus {
   const task = store.tasks[taskId];
@@ -732,15 +802,13 @@ export function getTaskDotStatus(taskId: string): TaskDotStatus {
   });
   if (hasActive) return 'busy';
 
-  // Check if the latest step requests review (priority above ready/waiting)
   const steps = task.stepsContent;
   if (steps && steps.length > 0) {
     const latest = steps[steps.length - 1];
     if (latest.status === 'awaiting_review') return 'review';
   }
 
-  const git = store.taskGitStatus[taskId];
-  if (git?.has_committed_changes && !git?.has_uncommitted_changes) return 'ready';
+  if (isTaskReady(taskId)) return 'ready';
   return 'waiting';
 }
 

@@ -6,6 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { invoke, fireAndForget, Channel } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { getTerminalFontFamily } from '../lib/fonts';
+import { TERMINAL_SCROLLBACK_LINES } from '../lib/terminalConstants';
 import { getTerminalTheme } from '../lib/theme';
 import { matchesGlobalShortcut } from '../lib/shortcuts';
 import { isMac } from '../lib/platform';
@@ -86,7 +87,7 @@ export function TerminalView(props: TerminalViewProps) {
       fontFamily: getTerminalFontFamily(store.terminalFont),
       theme: getTerminalTheme(store.themePreset),
       allowProposedApi: true,
-      scrollback: 3000,
+      scrollback: TERMINAL_SCROLLBACK_LINES,
     });
 
     fitAddon = new FitAddon();

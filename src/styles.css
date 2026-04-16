@@ -376,6 +376,20 @@ textarea::placeholder {
   color: var(--fg) !important;
 }
 
+.sidebar-offscreen-attention-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .icon-btn {
   backdrop-filter: blur(6px);
 }
@@ -388,6 +402,131 @@ textarea::placeholder {
 
 .icon-btn:active {
   transform: translateY(1px);
+}
+
+.tiling-layout-shell {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.tiling-layout-strip {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 4px;
+}
+
+.tiling-layout-scroll-affordance {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 26px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tiling-layout-scroll-affordance::before,
+.tiling-layout-scroll-affordance::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tiling-layout-scroll-affordance::before {
+  width: 1px;
+  height: 100%;
+  background: color-mix(in srgb, var(--border-focus) 68%, var(--accent) 12%);
+  opacity: 0.72;
+}
+
+.tiling-layout-scroll-affordance::after {
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid color-mix(in srgb, var(--accent-hover) 78%, white 22%);
+  opacity: 0.95;
+}
+
+.tiling-layout-scroll-affordance-left {
+  left: 4px;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--border-focus) 16%, var(--accent) 6%),
+    color-mix(in srgb, var(--accent) 8%, transparent) 28%,
+    color-mix(in srgb, var(--accent) 4%, transparent) 52%,
+    transparent 100%
+  );
+}
+
+.tiling-layout-scroll-affordance-left::before {
+  left: 0;
+}
+
+.tiling-layout-scroll-affordance-left::after {
+  left: 10px;
+  border-left: 2px solid color-mix(in srgb, var(--accent-hover) 78%, white 22%);
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.tiling-layout-scroll-affordance-right {
+  right: 4px;
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--border-focus) 16%, var(--accent) 6%),
+    color-mix(in srgb, var(--accent) 8%, transparent) 28%,
+    color-mix(in srgb, var(--accent) 4%, transparent) 52%,
+    transparent 100%
+  );
+}
+
+.tiling-layout-scroll-affordance-right::before {
+  right: 0;
+}
+
+.tiling-layout-scroll-affordance-right::after {
+  right: 10px;
+  border-right: 2px solid color-mix(in srgb, var(--accent-hover) 78%, white 22%);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.tiling-layout-scroll-affordance-attention::before {
+  background: color-mix(in srgb, var(--warning) 72%, var(--accent) 14%);
+  opacity: 0.95;
+}
+
+.tiling-layout-scroll-affordance-attention::after {
+  border-top-color: color-mix(in srgb, var(--warning) 82%, white 18%);
+  animation: statusPulse 1.4s ease-in-out infinite;
+}
+
+.tiling-layout-scroll-affordance-attention.tiling-layout-scroll-affordance-left {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--warning) 18%, transparent),
+    color-mix(in srgb, var(--warning) 10%, transparent) 28%,
+    color-mix(in srgb, var(--warning) 5%, transparent) 52%,
+    transparent 100%
+  );
+}
+
+.tiling-layout-scroll-affordance-attention.tiling-layout-scroll-affordance-right {
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--warning) 18%, transparent),
+    color-mix(in srgb, var(--warning) 10%, transparent) 28%,
+    color-mix(in srgb, var(--warning) 5%, transparent) 52%,
+    transparent 100%
+  );
+}
+
+.tiling-layout-scroll-affordance-attention.tiling-layout-scroll-affordance-left::after {
+  border-left-color: color-mix(in srgb, var(--warning) 82%, white 18%);
+}
+
+.tiling-layout-scroll-affordance-attention.tiling-layout-scroll-affordance-right::after {
+  border-right-color: color-mix(in srgb, var(--warning) 82%, white 18%);
 }
 
 .btn-primary {
