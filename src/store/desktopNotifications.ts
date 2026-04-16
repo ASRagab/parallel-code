@@ -88,9 +88,9 @@ export function startDesktopNotificationWatcher(windowFocused: Accessor<boolean>
 
       if (current === 'ready' && prev !== 'ready') {
         scheduleBatch('ready', taskId);
-      } else if (current === 'needs_input') {
+      } else if (current === 'needs_input' && prev !== 'needs_input') {
         scheduleBatch('needs_input', taskId);
-      } else if (current === 'error') {
+      } else if (current === 'error' && prev !== 'error') {
         scheduleBatch('error', taskId);
       }
     }

@@ -802,7 +802,6 @@ export function getTaskDotStatus(taskId: string): TaskDotStatus {
   });
   if (hasActive) return 'busy';
 
-  // Check if the latest step requests review (priority above ready/waiting)
   const steps = task.stepsContent;
   if (steps && steps.length > 0) {
     const latest = steps[steps.length - 1];
