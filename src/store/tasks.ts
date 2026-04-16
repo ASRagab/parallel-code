@@ -72,17 +72,19 @@ async function writeToAgentWhenReady(agentId: string, data: string): Promise<voi
 }
 
 const STEPS_INSTRUCTION =
-  'IMPORTANT: Maintain .claude/steps.json throughout this task — a JSON array tracking your progress. ' +
-  'Before beginning each major step, append an entry with status "starting". ' +
-  'After completing the step, append a follow-up entry with the appropriate status (never modify previous entries). ' +
-  'Rules for each field:\n' +
-  '  summary: ≤60 chars, start with an action verb (e.g. "Add JWT middleware", "Fix token refresh bug"). No filler words like "Successfully", "Now", or "Going to".\n' +
-  '  detail: one sentence max, only if it adds context the summary cannot carry — omit the field entirely otherwise.\n' +
-  '  files_touched: only files you actually wrote or modified in this step, not files you read.\n' +
+  'IMPORTANT: Maintain .claude/steps.json throughout this task. ' +
+  'This file is the engineering-manager view of the task — it must always answer "what is going on right now?" at a glance, including any work delegated to sub-agents. ' +
+  'Append a new entry at every meaningful transition (starting a phase, completing it, spawning sub-agents, hitting a blocker, or reaching awaiting_review). Never modify previous entries.\n' +
+  'Fields:\n' +
+  '  summary: ≤60 chars. Outcome-oriented, not action-oriented. Describe what was decided or completed, not what you are doing. E.g. "Auth middleware complete — JWT + rate-limit" not "Implementing auth middleware".\n' +
+  '  next: ≤80 chars. What happens next if the user continues. Always include this so context-switching is instant. E.g. "Write tests for edge cases" or "Waiting for user to approve DB schema".\n' +
+  '  detail: one sentence max, only if it adds context the summary and next fields cannot carry — omit otherwise.\n' +
   '  status: starting | investigating | implementing | testing | awaiting_review | done.\n' +
+  '  files_touched: only files you actually wrote or modified in this step, not files you read.\n' +
   '  timestamp: ISO 8601.\n' +
-  'Example: {"summary":"Add JWT validation middleware","status":"implementing","detail":"Wraps every protected route handler.","files_touched":["src/middleware/auth.ts"],"timestamp":"2024-01-15T10:30:00Z"}. ' +
-  'When you want the user to review your work: write an entry with status "awaiting_review" and pause. Resume appending entries when the user continues.';
+  'Sub-agents: when you spawn sub-agents, append one entry describing what each will work on. When they finish, append a completion entry with their outcome.\n' +
+  'Example: {"summary":"Auth middleware complete — JWT + rate-limit","next":"Write integration tests for token expiry edge cases","status":"implementing","files_touched":["src/middleware/auth.ts"],"timestamp":"2024-01-15T10:30:00Z"}.\n' +
+  'When you want the user to review your work: write an entry with status "awaiting_review", set next to the decision or action you need from them, then pause.';
 
 export interface CreateTaskOptions {
   name: string;

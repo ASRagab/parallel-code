@@ -73,6 +73,7 @@ export interface CommitInfo {
 export interface StepEntry {
   summary: string;
   detail?: string;
+  next?: string;
   status: 'starting' | 'investigating' | 'implementing' | 'testing' | 'awaiting_review' | 'done';
   files_touched?: string[];
   timestamp: string;

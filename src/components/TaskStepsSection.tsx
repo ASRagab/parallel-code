@@ -416,6 +416,18 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                     </span>
                   </Show>
                 </div>
+                <Show when={step().next}>
+                  <div
+                    style={{
+                      'font-size': sf(12),
+                      color: theme.accent,
+                      'margin-top': '4px',
+                      'line-height': '1.4',
+                    }}
+                  >
+                    → {truncate(step().next ?? '', 160)}
+                  </div>
+                </Show>
                 <Show when={step().detail}>
                   <div
                     style={{
