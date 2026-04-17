@@ -1,4 +1,4 @@
-import { Show, For, createSignal, onMount, onCleanup } from 'solid-js';
+import { Show, For, createSignal, createEffect, onMount, onCleanup } from 'solid-js';
 
 import {
   store,
@@ -27,6 +27,9 @@ interface TaskAITerminalProps {
   task: Task;
   isActive: boolean;
   promptHandle: PromptInputHandle | undefined;
+  /** Receives a function that scrolls the AI terminal to the moment a given step
+   *  index was recorded. Called with `undefined` when the terminal unmounts. */
+  onStepJumpReady?: (jump: ((stepIndex: number) => boolean) | undefined) => void;
 }
 
 export function TaskAITerminal(props: TaskAITerminalProps) {
@@ -34,6 +37,28 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
 
   const dockerOverlayLabel = () => getTaskDockerOverlayLabel(props.task.dockerSource);
 
+  // Step bookmarks — TerminalView hands us a mark/jump API once the xterm
+  // instance is ready. We mark each newly arrived step at the current scrollback
+  // position, and expose `jump` upward so the steps panel can scroll back to it.
+  // On agent restart the inner TerminalView remounts (keyed Show), so the API
+  // reference must be reset to undefined and lastMarkedLen back to 0 — the new
+  // mount will then re-backfill markers for all existing steps.
+  let stepNav: { mark: (i: number) => void; jump: (i: number) => boolean } | undefined;
+  let lastMarkedLen = 0;
+  onCleanup(() => props.onStepJumpReady?.(undefined));
+
+  createEffect(() => {
+    const len = props.task.stepsContent?.length ?? 0;
+    if (!stepNav) return; // Don't advance lastMarkedLen until a terminal is ready.
+    if (len <= lastMarkedLen) {
+      lastMarkedLen = len;
+      return;
+    }
+    for (let i = lastMarkedLen; i < len; i++) stepNav.mark(i);
+    lastMarkedLen = len;
+  });
+
+  // --- Markdown file viewer ---
   const [mdViewerContent, setMdViewerContent] = createSignal('');
   const [mdViewerFileName, setMdViewerFileName] = createSignal('');
   const [mdViewerOpen, setMdViewerOpen] = createSignal(false);
@@ -200,6 +225,24 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                     onFileLink={handleFileLink}
                     onPromptDetected={(text) => setLastPrompt(props.task.id, text)}
                     onReady={(focusFn) => registerFocusFn(`${props.task.id}:ai-terminal`, focusFn)}
+                    onStepNavReady={(api) => {
+                      if (!api) {
+                        // TerminalView is unmounting (agent restart). Drop the stale API
+                        // and reset the watermark so the next mount's backfill marks every step.
+                        stepNav = undefined;
+                        lastMarkedLen = 0;
+                        props.onStepJumpReady?.(undefined);
+                        return;
+                      }
+                      stepNav = api;
+                      // Backfill markers for steps that already exist when the terminal mounts.
+                      // They all anchor to the current line — best-effort, since we can't know
+                      // where each historical step was originally written.
+                      const len = props.task.stepsContent?.length ?? 0;
+                      for (let i = 0; i < len; i++) api.mark(i);
+                      lastMarkedLen = len;
+                      props.onStepJumpReady?.(api.jump);
+                    }}
                     fontSize={14}
                   />
                 </Show>

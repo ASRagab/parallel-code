@@ -5,12 +5,12 @@ import {
   setActiveTask,
   clearInitialPrompt,
   clearPrefillPrompt,
+  setPrefillPrompt,
   getProject,
   setTaskFocusedPanel,
   triggerFocus,
   clearPendingAction,
   showNotification,
-  sendPrompt,
 } from '../store/store';
 import { useFocusRegistration } from '../lib/focus-registration';
 import { ResizablePanel, type PanelChild } from './ResizablePanel';
@@ -55,6 +55,8 @@ export function TaskPanel(props: TaskPanelProps) {
   const [selectedCommit, setSelectedCommit] = createSignal<string | null>(null);
   const [editingProjectId, setEditingProjectId] = createSignal<string | null>(null);
   const [stepsNaturalHeight, setStepsNaturalHeight] = createSignal(110);
+  // Stored as a ref (not a signal) — only invoked from user click handlers, never read reactively.
+  let stepJumpFn: ((stepIndex: number) => boolean) | undefined;
   let panelRef!: HTMLDivElement;
   let promptRef: HTMLTextAreaElement | undefined;
   let titleEditHandle: EditableTextHandle | undefined;
@@ -207,7 +209,12 @@ export function TaskPanel(props: TaskPanelProps) {
           onFileClick={(file) => setDiffScrollTarget(file)}
           onNaturalHeight={setStepsNaturalHeight}
           onNextClick={(text) => {
-            void sendPrompt(props.task.id, firstAgentId(), text);
+            setPrefillPrompt(props.task.id, text);
+            triggerFocus(`${props.task.id}:prompt`);
+          }}
+          onJumpToStep={(idx) => {
+            const ok = stepJumpFn?.(idx);
+            if (ok) setTaskFocusedPanel(props.task.id, 'ai-terminal');
           }}
         />
       ),
@@ -251,7 +258,12 @@ export function TaskPanel(props: TaskPanelProps) {
       id: 'ai-terminal',
       minSize: 80,
       content: () => (
-        <TaskAITerminal task={props.task} isActive={props.isActive} promptHandle={promptHandle} />
+        <TaskAITerminal
+          task={props.task}
+          isActive={props.isActive}
+          promptHandle={promptHandle}
+          onStepJumpReady={(fn) => (stepJumpFn = fn)}
+        />
       ),
     };
   }

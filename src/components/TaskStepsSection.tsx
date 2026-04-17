@@ -1,10 +1,11 @@
-import { Show, For, createSignal, createMemo, createEffect, onMount } from 'solid-js';
+import { Show, For, createSignal, createMemo, createEffect, onCleanup, onMount } from 'solid-js';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { badgeStyle } from '../lib/badgeStyle';
 import { useFocusRegistration } from '../lib/focus-registration';
 import { setTaskFocusedPanel } from '../store/store';
 import type { Task } from '../store/types';
+import type { StepEntry } from '../ipc/types';
 
 const STATUS_COLORS: Record<string, string> = {
   starting: '#fb923c',
@@ -19,10 +20,10 @@ function statusColor(status: string): string {
   return STATUS_COLORS[status] ?? theme.fgMuted;
 }
 
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return text.slice(0, max - 1) + '…';
-}
+/** Visual offset applied to a sub-agent step. The collapsed history row absorbs this
+ *  via padding; the latest card via margin; the expanded detail panel adds it on top
+ *  of the base 32px indent so the detail aligns under the row's text. */
+const SUB_AGENT_INDENT_PX = 16;
 
 /** Append Z when no timezone is present — ISO strings without TZ are parsed as local time. */
 function normalizeIsoTimestamp(ts: string): string {
@@ -62,6 +63,8 @@ interface TaskStepsSectionProps {
   onFileClick?: (file: string) => void;
   onNaturalHeight?: (h: number) => void;
   onNextClick?: (text: string) => void;
+  /** Scroll the AI terminal to the moment a given step index was recorded. */
+  onJumpToStep?: (stepIndex: number) => void;
 }
 
 /** Clickable file path badge shown on step cards. */
@@ -95,6 +98,105 @@ function FileBadge(props: { file: string; onFileClick?: (file: string) => void }
   );
 }
 
+/** Dashed badge identifying a sub-agent's entries. Caps width so an oversized agent_id
+ *  can't push controls off the row. */
+function AgentBadge(props: { agentId: string }) {
+  return (
+    <span
+      title={`Sub-agent: ${props.agentId}`}
+      style={{
+        'font-size': sf(9),
+        padding: '0 5px',
+        'border-radius': '3px',
+        background: 'transparent',
+        color: theme.fgMuted,
+        border: `1px dashed color-mix(in srgb, ${theme.fgMuted} 50%, transparent)`,
+        'flex-shrink': '0',
+        'font-family': "'JetBrains Mono', monospace",
+        'max-width': '120px',
+        overflow: 'hidden',
+        'text-overflow': 'ellipsis',
+        'white-space': 'nowrap',
+      }}
+    >
+      {props.agentId}
+    </span>
+  );
+}
+
+/** Inline copy-to-clipboard control. Only meaningful on hover (parent toggles `visible`). */
+function CopyButton(props: { text: string; visible: boolean; label: string }) {
+  const [copied, setCopied] = createSignal(false);
+  let resetTimer: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => {
+    if (resetTimer !== undefined) clearTimeout(resetTimer);
+  });
+  return (
+    <button
+      type="button"
+      title={`Copy ${props.label}`}
+      aria-label={`Copy ${props.label}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard
+          .writeText(props.text)
+          .then(() => {
+            setCopied(true);
+            if (resetTimer !== undefined) clearTimeout(resetTimer);
+            resetTimer = setTimeout(() => {
+              resetTimer = undefined;
+              setCopied(false);
+            }, 1200);
+          })
+          .catch(() => {});
+      }}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        padding: '0 4px',
+        cursor: 'pointer',
+        color: copied() ? theme.success : theme.fgSubtle,
+        opacity: props.visible || copied() ? 1 : 0,
+        transition: 'opacity 120ms',
+        'font-size': sf(11),
+        'flex-shrink': '0',
+        'line-height': '1',
+      }}
+    >
+      {copied() ? '✓' : '⧉'}
+    </button>
+  );
+}
+
+/** Hover-revealed button that scrolls the AI terminal back to a step's moment. */
+function JumpButton(props: { onClick: () => void; visible: boolean }) {
+  return (
+    <button
+      type="button"
+      title="Jump to terminal moment"
+      aria-label="Jump to terminal moment"
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onClick();
+      }}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        padding: '0 4px',
+        cursor: 'pointer',
+        color: theme.fgSubtle,
+        opacity: props.visible ? 1 : 0,
+        transition: 'opacity 120ms',
+        'font-size': sf(11),
+        'flex-shrink': '0',
+        'line-height': '1',
+      }}
+    >
+      ↗
+    </button>
+  );
+}
+
 function WaitingIndicator(props: { fontSize: string }) {
   return (
     <>
@@ -118,8 +220,10 @@ function WaitingIndicator(props: { fontSize: string }) {
 
 export function TaskStepsSection(props: TaskStepsSectionProps) {
   const [expandedHistory, setExpandedHistory] = createSignal<Set<number>>(new Set());
+  const [hoveredHistory, setHoveredHistory] = createSignal<number | null>(null);
+  const [latestHovered, setLatestHovered] = createSignal<'summary' | 'detail' | null>(null);
   let scrollRef!: HTMLDivElement;
-  let latestCardRef: HTMLDivElement | undefined;
+  const [latestCardRef, setLatestCardRef] = createSignal<HTMLDivElement | undefined>();
 
   onMount(() => {
     useFocusRegistration(`${props.task.id}:steps`, () => scrollRef?.focus());
@@ -130,7 +234,7 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
     const s = steps();
     return s.length > 0 ? s[s.length - 1] : null;
   });
-  const historySteps = createMemo(() => {
+  const historySteps = createMemo<StepEntry[]>(() => {
     const s = steps();
     if (s.length <= 1) return [];
     return s.slice(0, -1);
@@ -150,13 +254,27 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
     }
   });
 
+  const reportHeight = () => {
+    const el = latestCardRef();
+    if (!el) return;
+    const indicatorH = isInteracting() ? 28 : 0;
+    props.onNaturalHeight?.(el.offsetHeight + indicatorH + 24);
+  };
+
   createEffect(() => {
-    const step = latestStep();
-    const interacting = isInteracting();
-    if (!step || !latestCardRef) return;
-    const cardH = latestCardRef.offsetHeight;
-    const indicatorH = interacting ? 28 : 0;
-    props.onNaturalHeight?.(cardH + indicatorH + 24);
+    // Re-measure when the step content, interaction state, or card ref changes.
+    latestStep();
+    isInteracting();
+    latestCardRef();
+    reportHeight();
+  });
+
+  createEffect(() => {
+    const el = latestCardRef();
+    if (!el) return;
+    const ro = new ResizeObserver(() => reportHeight());
+    ro.observe(el);
+    onCleanup(() => ro.disconnect());
   });
 
   function toggleHistory(originalIndex: number) {
@@ -182,7 +300,6 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
         'border-radius': '6px',
       }}
     >
-      {/* Waiting placeholder — shown when steps tracking is on but no steps written yet */}
       <Show when={steps().length === 0}>
         <div
           style={{
@@ -215,7 +332,6 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
         </div>
       </Show>
 
-      {/* Scrollable content — keyboard-navigable when focused */}
       <Show when={steps().length > 0}>
         <div
           ref={scrollRef}
@@ -248,17 +364,37 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
             outline: 'none',
           }}
         >
-          {/* History — collapsible entries */}
           <Show when={historySteps().length > 0}>
-            <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
+            <div style={{ display: 'flex', 'flex-direction': 'column', gap: '0' }}>
               <For each={historySteps()}>
                 {(step, idx) => {
                   const isExpanded = () => expandedHistory().has(idx());
+                  const isHovered = () => hoveredHistory() === idx();
+                  const prevStep = () => (idx() > 0 ? historySteps()[idx() - 1] : null);
+                  // Phase divider when status changes between adjacent entries.
+                  const phaseChanged = () => {
+                    const p = prevStep();
+                    if (!p) return false;
+                    return String(p.status ?? '') !== String(step.status ?? '');
+                  };
+                  const indented = () => Boolean(step.agent_id);
 
                   return (
                     <div>
+                      <Show when={phaseChanged()}>
+                        <div
+                          style={{
+                            height: '1px',
+                            background: theme.border,
+                            margin: '4px 0 4px 28px',
+                            opacity: 0.5,
+                          }}
+                        />
+                      </Show>
                       <div
                         onClick={() => toggleHistory(idx())}
+                        onMouseEnter={() => setHoveredHistory(idx())}
+                        onMouseLeave={() => setHoveredHistory(null)}
                         style={{
                           display: 'flex',
                           'align-items': 'center',
@@ -267,12 +403,11 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                           cursor: 'pointer',
                           'border-radius': '4px',
                           'user-select': 'none',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = `color-mix(in srgb, ${theme.fgMuted} 8%, transparent)`;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'transparent';
+                          'border-left': `3px solid ${statusColor(String(step.status ?? ''))}`,
+                          'padding-left': indented() ? `${8 + SUB_AGENT_INDENT_PX}px` : '8px',
+                          background: isHovered()
+                            ? `color-mix(in srgb, ${theme.fgMuted} 8%, transparent)`
+                            : 'transparent',
                         }}
                       >
                         <span
@@ -280,12 +415,15 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                             'font-size': sf(10),
                             color: theme.fgSubtle,
                             'flex-shrink': '0',
-                            width: '20px',
+                            width: '18px',
                             'text-align': 'right',
                           }}
                         >
                           {idx() + 1}
                         </span>
+                        <Show when={step.agent_id}>
+                          <AgentBadge agentId={step.agent_id ?? ''} />
+                        </Show>
                         <span
                           style={{
                             ...badgeStyle(statusColor(String(step.status ?? ''))),
@@ -306,8 +444,19 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                             flex: '1',
                           }}
                         >
-                          {truncate(step.summary ?? '', 60)}
+                          {step.summary ?? ''}
                         </span>
+                        <CopyButton
+                          text={step.summary ?? ''}
+                          visible={isHovered()}
+                          label="summary"
+                        />
+                        <Show when={props.onJumpToStep}>
+                          <JumpButton
+                            visible={isHovered()}
+                            onClick={() => props.onJumpToStep?.(idx())}
+                          />
+                        </Show>
                         <Show when={step.timestamp}>
                           <span
                             style={{
@@ -339,11 +488,11 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                       <Show when={isExpanded()}>
                         <div
                           style={{
-                            'margin-left': '32px',
+                            'margin-left': indented() ? `${32 + SUB_AGENT_INDENT_PX}px` : '32px',
                             padding: '4px 8px',
                             'font-size': sf(12),
                             color: theme.fgMuted,
-                            'border-left': `2px solid ${theme.border}`,
+                            'border-left': `2px solid ${statusColor(String(step.status ?? ''))}`,
                           }}
                         >
                           <Show when={step.timestamp}>
@@ -358,8 +507,16 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                             </div>
                           </Show>
                           <Show when={step.detail}>
-                            <div style={{ 'margin-bottom': '4px' }}>
-                              {truncate(step.detail ?? '', 280)}
+                            <div
+                              style={{
+                                display: 'flex',
+                                'align-items': 'flex-start',
+                                gap: '4px',
+                                'margin-bottom': '4px',
+                              }}
+                            >
+                              <div style={{ flex: '1', 'line-height': '1.45' }}>{step.detail}</div>
+                              <CopyButton text={step.detail ?? ''} visible label="detail" />
                             </div>
                           </Show>
                           <Show
@@ -392,96 +549,132 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
 
           {/* Latest step — always expanded, anchored at bottom */}
           <Show when={latestStep()}>
-            {(step) => (
-              <div
-                ref={(el) => {
-                  latestCardRef = el;
-                }}
-                style={{
-                  'border-radius': '6px',
-                  padding: '8px 10px',
-                }}
-              >
+            {(step) => {
+              const indented = () => Boolean(step().agent_id);
+              return (
                 <div
+                  ref={setLatestCardRef}
                   style={{
-                    display: 'flex',
-                    'align-items': 'center',
-                    gap: '8px',
-                    'margin-bottom': '4px',
+                    'border-radius': '6px',
+                    padding: '8px 10px 8px 12px',
+                    'border-left': `3px solid ${statusColor(String(step().status ?? ''))}`,
+                    'margin-left': indented() ? `${SUB_AGENT_INDENT_PX}px` : '0',
                   }}
                 >
-                  <span style={badgeStyle(statusColor(String(step().status ?? '')))}>
-                    {String(step().status ?? '').replaceAll('_', ' ')}
-                  </span>
-                  <span
-                    style={{
-                      'font-size': sf(12),
-                      'font-weight': '600',
-                      color: theme.fg,
-                      flex: '1',
-                    }}
-                  >
-                    {truncate(step().summary ?? '', 140)}
-                  </span>
-                  <Show when={step().timestamp}>
-                    <span
-                      style={{ 'font-size': sf(10), color: theme.fgSubtle, 'flex-shrink': '0' }}
-                    >
-                      {relativeTime(step().timestamp)}
-                    </span>
-                  </Show>
-                </div>
-                <Show when={step().next}>
                   <div
-                    onClick={() => props.onNextClick?.(step().next ?? '')}
-                    onMouseEnter={(e) => {
-                      if (props.onNextClick) e.currentTarget.style.opacity = '0.75';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.opacity = '1';
-                    }}
-                    style={{
-                      'font-size': sf(12),
-                      color: theme.accent,
-                      'margin-top': '4px',
-                      'line-height': '1.4',
-                      cursor: props.onNextClick ? 'pointer' : 'default',
-                    }}
-                  >
-                    → `{truncate(step().next ?? '', 160)}`
-                  </div>
-                </Show>
-                <Show when={step().detail}>
-                  <div
-                    style={{
-                      'font-size': sf(12),
-                      color: theme.fgMuted,
-                      'margin-top': '4px',
-                      'line-height': '1.4',
-                    }}
-                  >
-                    {truncate(step().detail ?? '', 280)}
-                  </div>
-                </Show>
-                <Show when={(step().files_touched ?? []).length > 0}>
-                  <div
+                    onMouseEnter={() => setLatestHovered('summary')}
+                    onMouseLeave={() => setLatestHovered(null)}
                     style={{
                       display: 'flex',
-                      'flex-wrap': 'wrap',
-                      gap: '4px',
-                      'margin-top': '6px',
+                      'align-items': 'center',
+                      gap: '8px',
+                      'margin-bottom': '4px',
                     }}
                   >
-                    <For each={step().files_touched}>
-                      {(file) => <FileBadge file={file} onFileClick={props.onFileClick} />}
-                    </For>
+                    <Show when={step().agent_id}>
+                      <AgentBadge agentId={step().agent_id ?? ''} />
+                    </Show>
+                    <span style={badgeStyle(statusColor(String(step().status ?? '')))}>
+                      {String(step().status ?? '').replaceAll('_', ' ')}
+                    </span>
+                    <span
+                      style={{
+                        'font-size': sf(12),
+                        'font-weight': '600',
+                        color: theme.fg,
+                        flex: '1',
+                        'line-height': '1.4',
+                      }}
+                    >
+                      {step().summary ?? ''}
+                    </span>
+                    <CopyButton
+                      text={step().summary ?? ''}
+                      visible={latestHovered() === 'summary'}
+                      label="summary"
+                    />
+                    <Show when={props.onJumpToStep}>
+                      <JumpButton
+                        visible={latestHovered() === 'summary'}
+                        onClick={() => {
+                          const len = steps().length;
+                          if (len > 0) props.onJumpToStep?.(len - 1);
+                        }}
+                      />
+                    </Show>
+                    <Show when={step().timestamp}>
+                      <span
+                        style={{ 'font-size': sf(10), color: theme.fgSubtle, 'flex-shrink': '0' }}
+                      >
+                        {relativeTime(step().timestamp)}
+                      </span>
+                    </Show>
                   </div>
-                </Show>
-              </div>
-            )}
+                  <Show when={step().next}>
+                    <div
+                      onClick={() => props.onNextClick?.(step().next ?? '')}
+                      onMouseEnter={(e) => {
+                        if (props.onNextClick) e.currentTarget.style.opacity = '0.75';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                      }}
+                      style={{
+                        display: 'flex',
+                        'align-items': 'flex-start',
+                        gap: '6px',
+                        'font-size': sf(12),
+                        color: theme.accent,
+                        'margin-top': '4px',
+                        'line-height': '1.4',
+                        cursor: props.onNextClick ? 'pointer' : 'default',
+                      }}
+                    >
+                      <span style={{ 'flex-shrink': '0', opacity: '0.7' }}>›</span>
+                      <span style={{ flex: '1', 'font-style': 'italic' }}>{step().next}</span>
+                    </div>
+                  </Show>
+                  <Show when={step().detail}>
+                    <div
+                      onMouseEnter={() => setLatestHovered('detail')}
+                      onMouseLeave={() => setLatestHovered(null)}
+                      style={{
+                        display: 'flex',
+                        'align-items': 'flex-start',
+                        gap: '4px',
+                        'font-size': sf(12),
+                        color: theme.fgMuted,
+                        'margin-top': '4px',
+                        'line-height': '1.4',
+                      }}
+                    >
+                      <div style={{ flex: '1' }}>{step().detail}</div>
+                      <CopyButton
+                        text={step().detail ?? ''}
+                        visible={latestHovered() === 'detail'}
+                        label="detail"
+                      />
+                    </div>
+                  </Show>
+                  <Show when={(step().files_touched ?? []).length > 0}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        'flex-wrap': 'wrap',
+                        gap: '4px',
+                        'margin-top': '6px',
+                      }}
+                    >
+                      <For each={step().files_touched}>
+                        {(file) => <FileBadge file={file} onFileClick={props.onFileClick} />}
+                      </For>
+                    </div>
+                  </Show>
+                </div>
+              );
+            }}
           </Show>
 
-          {/* Interacting indicator — shown when user sent input after last step */}
           <Show when={isInteracting()}>
             <div
               style={{
