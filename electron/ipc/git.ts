@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'child_process';
+import { execFile, execFileSync, spawn } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
@@ -92,7 +92,6 @@ function withWorktreeLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
 // --- Symlink candidates ---
 
 const SYMLINK_CANDIDATES = [
-  '.claude',
   '.cursor',
   '.aider',
   '.copilot',
@@ -103,8 +102,11 @@ const SYMLINK_CANDIDATES = [
   'node_modules',
 ];
 
-/** Entries inside `.claude` that must NOT be symlinked (kept per-worktree). */
-const CLAUDE_DIR_EXCLUDE = new Set(['plans', 'settings.local.json']);
+/**
+ * Entries inside `.claude/` that must NOT be seeded from the main repo's
+ * `.claude/` into new worktrees (per-worktree-local state).
+ */
+const CLAUDE_DIR_EXCLUDE = new Set(['plans']);
 
 /**
  * Files Claude Code's sandbox (bwrap) read-only-binds on startup. They must
@@ -355,33 +357,6 @@ async function computeBranchDiffStats(
   return { linesAdded, linesRemoved };
 }
 
-/**
- * "Shallow-symlink" a directory: create a real directory at `target` and
- * symlink each entry from `source` into it, EXCEPT entries in `exclude`.
- */
-function shallowSymlinkDir(source: string, target: string, exclude: Set<string>): void {
-  fs.mkdirSync(target, { recursive: true });
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(source, { withFileTypes: true });
-  } catch (err) {
-    console.warn(`Failed to read directory ${source} for shallow-symlink:`, err);
-    return;
-  }
-  for (const entry of entries) {
-    if (exclude.has(entry.name)) continue;
-    const src = path.join(source, entry.name);
-    const dst = path.join(target, entry.name);
-    try {
-      if (!fs.existsSync(dst)) {
-        fs.symlinkSync(src, dst);
-      }
-    } catch (err) {
-      console.warn(`Failed to symlink ${src} -> ${dst}:`, err);
-    }
-  }
-}
-
 // --- Public functions (used by tasks.ts and register.ts) ---
 
 export async function createWorktree(
@@ -439,8 +414,11 @@ export async function createWorktree(
   if (baseBranch) worktreeArgs.push(baseBranch);
   await exec('git', worktreeArgs, { cwd: repoRoot });
 
-  // Symlink selected directories
+  // Symlink selected directories. `.claude` is handled separately below — it
+  // can't be a symlink because Claude Code's bwrap sandbox binds specific
+  // entries inside it, and bwrap refuses to bind-mount at symlink paths.
   for (const name of symlinkDirs) {
+    if (name === '.claude') continue;
     // Reject names that could escape the worktree directory
     if (name.includes('/') || name.includes('\\') || name.includes('..') || name === '.') continue;
     const source = path.join(repoRoot, name);
@@ -448,32 +426,31 @@ export async function createWorktree(
     try {
       if (!fs.existsSync(source)) continue;
       if (fs.existsSync(target)) continue;
-
-      if (name === '.claude') {
-        // Shallow-symlink: real dir with per-entry symlinks, excluding per-worktree entries
-        shallowSymlinkDir(source, target, CLAUDE_DIR_EXCLUDE);
-      } else {
-        fs.symlinkSync(source, target);
-      }
+      fs.symlinkSync(source, target);
     } catch (err) {
       console.warn(`Failed to symlink directory '${name}' into worktree:`, err);
     }
   }
 
-  ensureClaudeSandboxFiles(worktreePath);
+  ensureClaudeSandboxFiles(worktreePath, repoRoot);
 
   return { path: worktreePath, branch: branchName };
 }
 
 /**
- * Claude Code's sandbox (bwrap) read-only-binds `.claude/settings.json` and
- * `.claude/settings.local.json` on startup. bwrap can't resolve symlinks
- * whose target lives outside its visible namespace, so these entries must
- * be real files in the worktree, not symlinks to the repo root. Replaces
- * any existing symlink with a copy of its target's content, and writes an
- * empty `{}` placeholder when the file is missing entirely.
+ * Ensure the worktree's `.claude/` is bwrap-safe and seeded from the main
+ * repo's `.claude/`, matching Claude Code's `/worktree` model: each worktree
+ * gets an independent real `.claude/` directory (no symlinks), one-time
+ * copied from the source at creation. bwrap's `create_file` cannot place a
+ * bind-mount placeholder at a symlink destination — it fails with
+ * "Can't create file at … .claude/X: No such file or directory" — so every
+ * entry must be a real file or directory.
+ *
+ * Also runs as a backfill on agent spawn: deletes any symlinks left over
+ * from the previous shallow-symlink behavior and seeds any newly-missing
+ * entries from the source.
  */
-export function ensureClaudeSandboxFiles(worktreePath: string): void {
+export function ensureClaudeSandboxFiles(worktreePath: string, repoRoot?: string): void {
   const claudeDir = path.join(worktreePath, '.claude');
   try {
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -481,53 +458,81 @@ export function ensureClaudeSandboxFiles(worktreePath: string): void {
     console.warn(`Failed to create ${claudeDir}:`, err);
     return;
   }
+
+  // Remove any symlinks under .claude/ — they're leftover from the old
+  // shallow-symlink behavior and bwrap cannot bind to them. Real files/dirs
+  // are preserved (may contain worktree-local edits).
+  let existing: fs.Dirent[] = [];
+  try {
+    existing = fs.readdirSync(claudeDir, { withFileTypes: true });
+  } catch (err) {
+    console.warn(`Failed to readdir ${claudeDir}:`, err);
+  }
+  for (const entry of existing) {
+    if (!entry.isSymbolicLink()) continue;
+    try {
+      fs.unlinkSync(path.join(claudeDir, entry.name));
+    } catch (err) {
+      console.warn(`Failed to unlink ${path.join(claudeDir, entry.name)}:`, err);
+    }
+  }
+
+  // Seed missing entries from the main repo's .claude/. Dereferences any
+  // symlinks in the source so the copy is pure real files (bwrap-safe).
+  const root = repoRoot ?? detectRepoRoot(worktreePath);
+  if (root && root !== worktreePath) {
+    const source = path.join(root, '.claude');
+    if (fs.existsSync(source)) {
+      let srcEntries: fs.Dirent[] = [];
+      try {
+        srcEntries = fs.readdirSync(source, { withFileTypes: true });
+      } catch (err) {
+        console.warn(`Failed to readdir ${source}:`, err);
+      }
+      for (const entry of srcEntries) {
+        if (CLAUDE_DIR_EXCLUDE.has(entry.name)) continue;
+        const dst = path.join(claudeDir, entry.name);
+        if (fs.existsSync(dst)) continue;
+        try {
+          fs.cpSync(path.join(source, entry.name), dst, {
+            recursive: true,
+            dereference: true,
+          });
+        } catch (err) {
+          console.warn(`Failed to seed ${dst} from source:`, err);
+        }
+      }
+    }
+  }
+
+  // Ensure required settings placeholders exist — bwrap binds them even when
+  // absent from both worktree and source.
   for (const file of CLAUDE_REQUIRED_FILES) {
-    materializeSandboxFile(path.join(claudeDir, file));
+    const p = path.join(claudeDir, file);
+    if (fs.existsSync(p)) continue;
+    try {
+      fs.writeFileSync(p, '{}\n');
+    } catch (err) {
+      console.warn(`Failed to create placeholder ${p}:`, err);
+    }
   }
 }
 
 /**
- * Ensure `filePath` is a real file (not a symlink) so bwrap can bind-mount it.
- * If already a regular file, no-op. If a symlink, read the target's content
- * first, then replace with a real copy. If missing, write `{}` placeholder.
- *
- * Refuses to destroy recoverable state: on read or unlink failure, leaves
- * the symlink in place rather than silently writing an empty placeholder
- * (which would clobber the user's real settings) or writing through the
- * still-present symlink to the source file.
+ * Find the main repository root for a worktree via `git rev-parse
+ * --git-common-dir`. Returns null when the cwd isn't inside a git repo.
  */
-function materializeSandboxFile(filePath: string): void {
-  let stats: fs.Stats | null = null;
+function detectRepoRoot(worktreePath: string): string | null {
   try {
-    stats = fs.lstatSync(filePath);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.warn(`lstat failed for ${filePath}:`, err);
-      return;
-    }
-    // ENOENT — fall through to write placeholder.
-  }
-  if (stats && !stats.isSymbolicLink()) return;
-
-  let content = '{}\n';
-  if (stats?.isSymbolicLink()) {
-    try {
-      content = fs.readFileSync(filePath, 'utf8');
-    } catch (err) {
-      console.warn(`Cannot read symlink ${filePath}, leaving as-is:`, err);
-      return;
-    }
-    try {
-      fs.unlinkSync(filePath);
-    } catch (err) {
-      console.warn(`Failed to unlink symlink ${filePath}:`, err);
-      return;
-    }
-  }
-  try {
-    fs.writeFileSync(filePath, content);
-  } catch (err) {
-    console.warn(`Failed to create placeholder ${filePath}:`, err);
+    const out = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+      timeout: 3000,
+    }).trim();
+    const abs = path.isAbsolute(out) ? out : path.join(worktreePath, out);
+    return path.dirname(abs);
+  } catch {
+    return null;
   }
 }
 
