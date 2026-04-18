@@ -879,7 +879,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
                       gap: '4px',
                     }}
                   >
-                    <span>📁</span>
+                    <span aria-hidden="true">📁</span>
                     Using project Dockerfile:{' '}
                     <code style={{ 'font-family': "'JetBrains Mono', monospace" }}>
                       {PROJECT_DOCKERFILE_RELATIVE_PATH}

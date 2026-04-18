@@ -298,6 +298,15 @@ describe('resolveProjectDockerfile', () => {
     const result = resolveProjectDockerfile('/nonexistent/path/to/project');
     expect(result).toBeNull();
   });
+
+  it('returns null when .parallel-code/Dockerfile is a directory', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pty-resolve-'));
+    tempPaths.push(projectRoot);
+    fs.mkdirSync(path.join(projectRoot, '.parallel-code', 'Dockerfile'), { recursive: true });
+
+    const result = resolveProjectDockerfile(projectRoot);
+    expect(result).toBeNull();
+  });
 });
 
 describe('projectImageTag', () => {

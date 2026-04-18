@@ -655,7 +655,11 @@ function getDockerfileHash(): string | null {
  */
 export function resolveProjectDockerfile(projectRoot: string): string | null {
   const p = path.join(projectRoot, '.parallel-code', 'Dockerfile');
-  return fs.existsSync(p) ? p : null;
+  try {
+    return fs.statSync(p).isFile() ? p : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
