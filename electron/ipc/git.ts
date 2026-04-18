@@ -114,6 +114,29 @@ const CLAUDE_DIR_EXCLUDE = new Set(['plans']);
  */
 const CLAUDE_REQUIRED_FILES = ['settings.json', 'settings.local.json'];
 
+/**
+ * Worktree-root filenames bwrap leaves behind as character-device placeholders
+ * when it bind-mounts user-home dotfiles into the Claude Code sandbox. They
+ * aren't project files and must not surface in `git status` / changed-files.
+ * Mirrored into `.git/info/exclude` so the filter works on branches whose
+ * committed `.gitignore` predates the fix. Patterns are root-anchored (`/`)
+ * so a legitimate nested file with the same name (e.g. `subproj/.gitmodules`)
+ * is still shown.
+ */
+const SANDBOX_EXCLUDE_PATTERNS = [
+  '/.bash_profile',
+  '/.bashrc',
+  '/.gitconfig',
+  '/.gitmodules',
+  '/.mcp.json',
+  '/.profile',
+  '/.ripgreprc',
+  '/.zprofile',
+  '/.zshrc',
+];
+const SANDBOX_EXCLUDE_HEADER = '# parallel-code: sandbox bind-mount artifacts';
+const seededSandboxExcludes = new Set<string>();
+
 // --- Internal helpers ---
 
 async function detectMainBranch(repoRoot: string): Promise<string> {
@@ -433,6 +456,7 @@ export async function createWorktree(
   }
 
   ensureClaudeSandboxFiles(worktreePath, repoRoot);
+  ensureSandboxExcludes(worktreePath);
 
   return { path: worktreePath, branch: branchName };
 }
@@ -515,6 +539,58 @@ export function ensureClaudeSandboxFiles(worktreePath: string, repoRoot?: string
     } catch (err) {
       console.warn(`Failed to create placeholder ${p}:`, err);
     }
+  }
+}
+
+/**
+ * Append `SANDBOX_EXCLUDE_PATTERNS` to the shared `.git/info/exclude` so the
+ * bwrap-left char-device placeholders at the worktree root are filtered out
+ * of `git status` / `git ls-files` regardless of what the branch's committed
+ * `.gitignore` looks like. Uses the header line as an idempotency marker;
+ * safe to call on every agent spawn. Memoized per common git dir for the
+ * process lifetime.
+ */
+export function ensureSandboxExcludes(worktreePath: string): void {
+  let commonDir: string;
+  try {
+    const out = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      cwd: worktreePath,
+      encoding: 'utf8',
+      timeout: 3000,
+    }).trim();
+    commonDir = path.isAbsolute(out) ? out : path.join(worktreePath, out);
+  } catch {
+    return;
+  }
+
+  if (seededSandboxExcludes.has(commonDir)) return;
+
+  const excludePath = path.join(commonDir, 'info', 'exclude');
+  let existing = '';
+  try {
+    existing = fs.readFileSync(excludePath, 'utf8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== 'ENOENT') {
+      console.warn(`Failed to read ${excludePath}:`, err);
+      return;
+    }
+    // File is absent — `.git/info/` itself is guaranteed by `git init`, so no mkdir needed.
+  }
+
+  if (existing.includes(SANDBOX_EXCLUDE_HEADER)) {
+    seededSandboxExcludes.add(commonDir);
+    return;
+  }
+
+  const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+  const block = prefix + SANDBOX_EXCLUDE_HEADER + '\n' + SANDBOX_EXCLUDE_PATTERNS.join('\n') + '\n';
+
+  try {
+    fs.appendFileSync(excludePath, block);
+    seededSandboxExcludes.add(commonDir);
+  } catch (err) {
+    console.warn(`Failed to append to ${excludePath}:`, err);
   }
 }
 

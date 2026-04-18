@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import type { BrowserWindow } from 'electron';
 import { RingBuffer } from '../remote/ring-buffer.js';
 import { resolveUserShell } from '../user-shell.js';
-import { ensureClaudeSandboxFiles } from './git.js';
+import { ensureClaudeSandboxFiles, ensureSandboxExcludes } from './git.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -169,6 +169,7 @@ export function spawnAgent(
   // Claude Code may launch). See ensureClaudeSandboxFiles for the why.
   if (!args.dockerMode && fs.existsSync(cwd)) {
     ensureClaudeSandboxFiles(cwd);
+    ensureSandboxExcludes(cwd);
   }
 
   let spawnCommand: string;
