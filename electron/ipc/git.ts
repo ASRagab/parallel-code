@@ -467,8 +467,11 @@ export async function createWorktree(
 
 /**
  * Claude Code's sandbox (bwrap) read-only-binds `.claude/settings.json` and
- * `.claude/settings.local.json` on startup; the targets must exist or the
- * sandbox fails before Claude launches. Create empty placeholders if missing.
+ * `.claude/settings.local.json` on startup. bwrap can't resolve symlinks
+ * whose target lives outside its visible namespace, so these entries must
+ * be real files in the worktree, not symlinks to the repo root. Replaces
+ * any existing symlink with a copy of its target's content, and writes an
+ * empty `{}` placeholder when the file is missing entirely.
  */
 export function ensureClaudeSandboxFiles(worktreePath: string): void {
   const claudeDir = path.join(worktreePath, '.claude');
@@ -479,13 +482,52 @@ export function ensureClaudeSandboxFiles(worktreePath: string): void {
     return;
   }
   for (const file of CLAUDE_REQUIRED_FILES) {
-    const filePath = path.join(claudeDir, file);
-    if (fs.existsSync(filePath)) continue;
-    try {
-      fs.writeFileSync(filePath, '{}\n');
-    } catch (err) {
-      console.warn(`Failed to create placeholder ${filePath}:`, err);
+    materializeSandboxFile(path.join(claudeDir, file));
+  }
+}
+
+/**
+ * Ensure `filePath` is a real file (not a symlink) so bwrap can bind-mount it.
+ * If already a regular file, no-op. If a symlink, read the target's content
+ * first, then replace with a real copy. If missing, write `{}` placeholder.
+ *
+ * Refuses to destroy recoverable state: on read or unlink failure, leaves
+ * the symlink in place rather than silently writing an empty placeholder
+ * (which would clobber the user's real settings) or writing through the
+ * still-present symlink to the source file.
+ */
+function materializeSandboxFile(filePath: string): void {
+  let stats: fs.Stats | null = null;
+  try {
+    stats = fs.lstatSync(filePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`lstat failed for ${filePath}:`, err);
+      return;
     }
+    // ENOENT — fall through to write placeholder.
+  }
+  if (stats && !stats.isSymbolicLink()) return;
+
+  let content = '{}\n';
+  if (stats?.isSymbolicLink()) {
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch (err) {
+      console.warn(`Cannot read symlink ${filePath}, leaving as-is:`, err);
+      return;
+    }
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      console.warn(`Failed to unlink symlink ${filePath}:`, err);
+      return;
+    }
+  }
+  try {
+    fs.writeFileSync(filePath, content);
+  } catch (err) {
+    console.warn(`Failed to create placeholder ${filePath}:`, err);
   }
 }
 
