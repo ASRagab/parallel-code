@@ -5,7 +5,6 @@ import {
   setActiveTask,
   clearInitialPrompt,
   clearPrefillPrompt,
-  setPrefillPrompt,
   getProject,
   setTaskFocusedPanel,
   triggerFocus,
@@ -57,6 +56,9 @@ export function TaskPanel(props: TaskPanelProps) {
   const [stepsNaturalHeight, setStepsNaturalHeight] = createSignal(110);
   // Stored as a ref (not a signal) — only invoked from user click handlers, never read reactively.
   let stepJumpFn: ((stepIndex: number) => boolean) | undefined;
+  // First step index with a live marker; steps below aren't jumpable. Signal because
+  // the steps panel reads it reactively to hide ↗ on historical rows.
+  const [firstJumpableStep, setFirstJumpableStep] = createSignal(0);
   let panelRef!: HTMLDivElement;
   let promptRef: HTMLTextAreaElement | undefined;
   let titleEditHandle: EditableTextHandle | undefined;
@@ -208,13 +210,11 @@ export function TaskPanel(props: TaskPanelProps) {
           isActive={props.isActive}
           onFileClick={(file) => setDiffScrollTarget(file)}
           onNaturalHeight={setStepsNaturalHeight}
-          onNextClick={(text) => {
-            setPrefillPrompt(props.task.id, text);
-            triggerFocus(`${props.task.id}:prompt`);
-          }}
+          firstJumpableIndex={firstJumpableStep()}
           onJumpToStep={(idx) => {
-            const ok = stepJumpFn?.(idx);
+            const ok = stepJumpFn?.(idx) ?? false;
             if (ok) setTaskFocusedPanel(props.task.id, 'ai-terminal');
+            return ok;
           }}
         />
       ),
@@ -262,7 +262,10 @@ export function TaskPanel(props: TaskPanelProps) {
           task={props.task}
           isActive={props.isActive}
           promptHandle={promptHandle}
-          onStepJumpReady={(fn) => (stepJumpFn = fn)}
+          onStepJumpReady={(fn, fromIdx) => {
+            stepJumpFn = fn;
+            setFirstJumpableStep(fromIdx);
+          }}
         />
       ),
     };

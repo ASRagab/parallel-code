@@ -61,9 +61,13 @@ interface TaskStepsSectionProps {
   isActive: boolean;
   onFileClick?: (file: string) => void;
   onNaturalHeight?: (h: number) => void;
-  onNextClick?: (text: string) => void;
-  /** Scroll the AI terminal to the moment a given step index was recorded. */
-  onJumpToStep?: (stepIndex: number) => void;
+  /** Scroll the AI terminal to the moment a given step index was recorded.
+   *  Only steps marked since the terminal mounted are jumpable — historical
+   *  steps (written before this session) have no marker and can't be located. */
+  onJumpToStep?: (stepIndex: number) => boolean;
+  /** Steps with `index < firstJumpableIndex` don't have a terminal marker and
+   *  therefore shouldn't show the ↗ button. */
+  firstJumpableIndex?: number;
 }
 
 /** Clickable file path badge shown on step cards. */
@@ -227,7 +231,6 @@ function CopyButton(props: { text: string; visible: boolean; label: string }) {
   );
 }
 
-/** Hover-revealed button that scrolls the AI terminal back to a step's moment. */
 function JumpButton(props: { onClick: () => void; visible: boolean }) {
   return (
     <button
@@ -508,7 +511,9 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                             visible={isHovered()}
                             label="summary"
                           />
-                          <Show when={props.onJumpToStep}>
+                          <Show
+                            when={props.onJumpToStep && idx() >= (props.firstJumpableIndex ?? 0)}
+                          >
                             <JumpButton
                               visible={isHovered()}
                               onClick={() => props.onJumpToStep?.(idx())}
@@ -648,7 +653,11 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                       visible={latestHovered() === 'summary'}
                       label="summary"
                     />
-                    <Show when={props.onJumpToStep}>
+                    <Show
+                      when={
+                        props.onJumpToStep && steps().length - 1 >= (props.firstJumpableIndex ?? 0)
+                      }
+                    >
                       <JumpButton
                         visible={latestHovered() === 'summary'}
                         onClick={() => {
@@ -665,30 +674,6 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
                       </span>
                     </Show>
                   </div>
-                  <Show when={step().next}>
-                    <div
-                      onClick={() => props.onNextClick?.(step().next ?? '')}
-                      onMouseEnter={(e) => {
-                        if (props.onNextClick) e.currentTarget.style.opacity = '0.75';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.opacity = '1';
-                      }}
-                      style={{
-                        display: 'flex',
-                        'align-items': 'flex-start',
-                        gap: '6px',
-                        'font-size': sf(12),
-                        color: theme.accent,
-                        'margin-top': '4px',
-                        'line-height': '1.4',
-                        cursor: props.onNextClick ? 'pointer' : 'default',
-                      }}
-                    >
-                      <span style={{ 'flex-shrink': '0', opacity: '0.7' }}>›</span>
-                      <span style={{ flex: '1', 'font-style': 'italic' }}>{step().next}</span>
-                    </div>
-                  </Show>
                   <Show when={step().detail}>
                     <div
                       onMouseEnter={() => setLatestHovered('detail')}

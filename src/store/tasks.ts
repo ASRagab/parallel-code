@@ -77,15 +77,14 @@ const STEPS_INSTRUCTION =
   'Append a new entry at every meaningful transition (starting a phase, completing it, spawning sub-agents, hitting a blocker, or reaching awaiting_review). Never modify previous entries.\n' +
   'Fields:\n' +
   '  summary: ≤60 chars. Outcome-oriented, not action-oriented. Describe what was decided or completed, not what you are doing. E.g. "Auth middleware complete — JWT + rate-limit" not "Implementing auth middleware".\n' +
-  '  next: ≤80 chars. What happens next if the user continues. Always include this so context-switching is instant. E.g. "Write tests for edge cases" or "Waiting for user to approve DB schema".\n' +
-  '  detail: one sentence max, only if it adds context the summary and next fields cannot carry — omit otherwise.\n' +
+  '  detail: one sentence max, only if it adds context the summary cannot carry — omit otherwise.\n' +
   '  status: starting | investigating | implementing | testing | awaiting_review | done.\n' +
   '  files_touched: only files you actually wrote or modified in this step, not files you read.\n' +
   '  agent_id: short label for the sub-agent doing this work (e.g. "auth-worker", "test-runner"). Omit for your own entries. Use the same id consistently across all entries from one delegated agent so the UI can group them.\n' +
   'Sub-agents: when you spawn a sub-agent, append one entry describing what it will work on, including its agent_id. When it finishes, append a completion entry with the same agent_id and its outcome.\n' +
-  'Example: {"summary":"Auth middleware complete — JWT + rate-limit","next":"Write integration tests for token expiry edge cases","status":"implementing","files_touched":["src/middleware/auth.ts"]}.\n' +
-  'Sub-agent example: {"summary":"Schema migration generated","next":"Run migration in staging","status":"implementing","agent_id":"db-worker","files_touched":["migrations/0042_users.sql"]}.\n' +
-  'When you want the user to review your work: write an entry with status "awaiting_review", set next to the decision or action you need from them, then pause.';
+  'Example: {"summary":"Auth middleware complete — JWT + rate-limit","status":"implementing","files_touched":["src/middleware/auth.ts"]}.\n' +
+  'Sub-agent example: {"summary":"Schema migration generated","status":"implementing","agent_id":"db-worker","files_touched":["migrations/0042_users.sql"]}.\n' +
+  'When you want the user to review your work: write an entry with status "awaiting_review" describing the decision or action you need from them, then pause.';
 
 export interface CreateTaskOptions {
   name: string;

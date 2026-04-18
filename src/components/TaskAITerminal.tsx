@@ -27,22 +27,25 @@ interface TaskAITerminalProps {
   isActive: boolean;
   promptHandle: PromptInputHandle | undefined;
   /** Receives a function that scrolls the AI terminal to the moment a given step
-   *  index was recorded. Called with `undefined` when the terminal unmounts. */
-  onStepJumpReady?: (jump: ((stepIndex: number) => boolean) | undefined) => void;
+   *  index was recorded, along with the first step index that is jumpable — steps
+   *  below that index were written before the current terminal mount and have no
+   *  marker. Called with `undefined` jump when the terminal unmounts. */
+  onStepJumpReady?: (
+    jump: ((stepIndex: number) => boolean) | undefined,
+    firstJumpableIndex: number,
+  ) => void;
 }
 
 export function TaskAITerminal(props: TaskAITerminalProps) {
   onCleanup(() => unregisterFocusFn(`${props.task.id}:ai-terminal`));
 
   // Step bookmarks — TerminalView hands us a mark/jump API once the xterm
-  // instance is ready. We mark each newly arrived step at the current scrollback
-  // position, and expose `jump` upward so the steps panel can scroll back to it.
-  // On agent restart the inner TerminalView remounts (keyed Show), so the API
-  // reference must be reset to undefined and lastMarkedLen back to 0 — the new
-  // mount will then re-backfill markers for all existing steps.
+  // instance is ready. We only mark steps that arrive while the terminal is live;
+  // historical steps written before this mount aren't jumpable (anchoring them
+  // all at line 0 was the source of the original "jump to" bug).
   let stepNav: { mark: (i: number) => void; jump: (i: number) => boolean } | undefined;
   let lastMarkedLen = 0;
-  onCleanup(() => props.onStepJumpReady?.(undefined));
+  onCleanup(() => props.onStepJumpReady?.(undefined, 0));
 
   createEffect(() => {
     const len = props.task.stepsContent?.length ?? 0;
@@ -218,21 +221,21 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                     onReady={(focusFn) => registerFocusFn(`${props.task.id}:ai-terminal`, focusFn)}
                     onStepNavReady={(api) => {
                       if (!api) {
-                        // TerminalView is unmounting (agent restart). Drop the stale API
-                        // and reset the watermark so the next mount's backfill marks every step.
+                        // TerminalView unmounting (agent restart). Drop the stale API
+                        // and reset the watermark so the next mount starts fresh.
                         stepNav = undefined;
                         lastMarkedLen = 0;
-                        props.onStepJumpReady?.(undefined);
+                        props.onStepJumpReady?.(undefined, 0);
                         return;
                       }
                       stepNav = api;
-                      // Backfill markers for steps that already exist when the terminal mounts.
-                      // They all anchor to the current line — best-effort, since we can't know
-                      // where each historical step was originally written.
-                      const len = props.task.stepsContent?.length ?? 0;
-                      for (let i = 0; i < len; i++) api.mark(i);
-                      lastMarkedLen = len;
-                      props.onStepJumpReady?.(api.jump);
+                      // Skip historical steps — we can't know which terminal line each
+                      // one was originally written at, and anchoring them all at the
+                      // current line would silently mis-route every jump. Steps below
+                      // `firstJumpable` therefore don't get a ↗ button in the UI.
+                      const firstJumpable = props.task.stepsContent?.length ?? 0;
+                      lastMarkedLen = firstJumpable;
+                      props.onStepJumpReady?.(api.jump, firstJumpable);
                     }}
                     fontSize={14}
                   />
