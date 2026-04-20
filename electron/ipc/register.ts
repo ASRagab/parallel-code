@@ -26,6 +26,7 @@ import {
   readPlanForWorktree,
 } from './plans.js';
 import { startStepsWatcher, stopStepsWatcher, readStepsForWorktree } from './steps.js';
+import { initPrChecks, startPrChecksWatcher, stopPrChecksWatcher, isPrUrl } from './pr-checks.js';
 import { startRemoteServer } from '../remote/server.js';
 import {
   getGitIgnoredDirs,
@@ -542,6 +543,24 @@ export function registerAllHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.StopStepsWatcher, (_e, args) => {
     assertString(args.taskId, 'taskId');
     stopStepsWatcher(args.taskId);
+  });
+
+  // --- PR CI status watcher ---
+  initPrChecks(win);
+  ipcMain.handle(IPC.StartPrChecksWatcher, (_e, args) => {
+    assertString(args.taskId, 'taskId');
+    assertString(args.prUrl, 'prUrl');
+    assertString(args.taskName, 'taskName');
+    if (!isPrUrl(args.prUrl)) return; // defense in depth — also re-checked downstream
+    startPrChecksWatcher({
+      taskId: args.taskId,
+      prUrl: args.prUrl,
+      taskName: args.taskName,
+    });
+  });
+  ipcMain.handle(IPC.StopPrChecksWatcher, (_e, args) => {
+    assertString(args.taskId, 'taskId');
+    stopPrChecksWatcher(args.taskId);
   });
 
   // --- Steps content (one-shot read) ---

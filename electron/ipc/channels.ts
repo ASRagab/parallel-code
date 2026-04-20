@@ -123,4 +123,9 @@ export enum IPC {
   // Notifications
   ShowNotification = 'show_notification',
   NotificationClicked = 'notification_clicked',
+
+  // PR CI status
+  StartPrChecksWatcher = 'start_pr_checks_watcher',
+  StopPrChecksWatcher = 'stop_pr_checks_watcher',
+  PrChecksUpdate = 'pr_checks_update',
 }

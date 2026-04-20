@@ -77,6 +77,38 @@ export interface CommitInfo {
   message: string;
 }
 
+export type PrCheckBucket = 'pass' | 'fail' | 'pending' | 'skipping' | 'cancel';
+export type PrChecksOverall = 'pending' | 'success' | 'failure' | 'none';
+
+export interface PrCheckRun {
+  name: string;
+  bucket: PrCheckBucket;
+}
+
+export interface PrChecksUpdatePayload {
+  taskId: string;
+  overall: PrChecksOverall;
+  passing: number;
+  pending: number;
+  failing: number;
+  checks: PrCheckRun[];
+  checkedAt: string;
+  /** True when the main process has stopped watching this task (PR merged or
+   *  closed). The renderer should drop its bookkeeping so a later restart of
+   *  the watcher (e.g. PR reopened) goes through cleanly. */
+  cleared: boolean;
+}
+
+export interface StartPrChecksWatcherArgs {
+  taskId: string;
+  prUrl: string;
+  taskName: string;
+}
+
+export interface StopPrChecksWatcherArgs {
+  taskId: string;
+}
+
 export interface StepEntry {
   summary: string;
   detail?: string;
