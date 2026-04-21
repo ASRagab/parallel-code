@@ -116,6 +116,11 @@ export function toggleFocusMode(on?: boolean): void {
   setStore('focusMode', on ?? !store.focusMode);
 }
 
+export function setTaskSplitMode(taskId: string, active: boolean): void {
+  if (!!store.taskSplitMode[taskId] === active) return;
+  setStore('taskSplitMode', taskId, active);
+}
+
 export function setWindowState(windowState: PersistedWindowState): void {
   const current = store.windowState;
   if (

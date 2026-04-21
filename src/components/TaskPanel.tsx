@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, batch } from 'solid-js';
+import { Show, createSignal, createEffect, onMount, onCleanup, batch } from 'solid-js';
 import {
   store,
   retryCloseTask,
@@ -10,6 +10,7 @@ import {
   triggerFocus,
   clearPendingAction,
   showNotification,
+  setTaskSplitMode,
 } from '../store/store';
 import { useFocusRegistration } from '../lib/focus-registration';
 import { ResizablePanel, type PanelChild } from './ResizablePanel';
@@ -23,7 +24,8 @@ import { PlanViewerDialog } from './PlanViewerDialog';
 import { EditProjectDialog } from './EditProjectDialog';
 import { TaskTitleBar } from './TaskTitleBar';
 import { TaskBranchInfoBar } from './TaskBranchInfoBar';
-import { TaskNotesPanel } from './TaskNotesPanel';
+import { TaskNotesBody } from './TaskNotesBody';
+import { TaskChangedFilesSection } from './TaskChangedFilesSection';
 import { TaskShellSection } from './TaskShellSection';
 import { TaskStepsSection } from './TaskStepsSection';
 import { TaskAITerminal } from './TaskAITerminal';
@@ -65,6 +67,30 @@ export function TaskPanel(props: TaskPanelProps) {
   let titleEditHandle: EditableTextHandle | undefined;
   let promptHandle: PromptInputHandle | undefined;
 
+  // Two-column focus-mode layout kicks in once the task panel is wide enough.
+  // Hysteresis: enter at >=1200, leave at <1150. A single threshold flickers
+  // when the user drags the window edge across it, and every flip remounts the
+  // xterm terminal inside the left column.
+  const SPLIT_ENTER_WIDTH = 1200;
+  const SPLIT_EXIT_WIDTH = 1150;
+  const [panelWidth, setPanelWidth] = createSignal(0);
+  const [useSplit, setUseSplit] = createSignal(false);
+  createEffect(() => {
+    if (!store.focusMode) {
+      setUseSplit(false);
+      return;
+    }
+    const w = panelWidth();
+    setUseSplit((prev) => (prev ? w >= SPLIT_EXIT_WIDTH : w >= SPLIT_ENTER_WIDTH));
+  });
+
+  // Mirror split state into the store so keyboard navigation (focus.ts)
+  // can build the correct grid for this task.
+  createEffect(() => {
+    setTaskSplitMode(props.task.id, useSplit());
+  });
+  onCleanup(() => setTaskSplitMode(props.task.id, false));
+
   const editingProject = () => {
     const id = editingProjectId();
     return id ? (getProject(id) ?? null) : null;
@@ -75,6 +101,14 @@ export function TaskPanel(props: TaskPanelProps) {
     const id = props.task.id;
     useFocusRegistration(`${id}:title`, () => titleEditHandle?.startEdit());
     useFocusRegistration(`${id}:prompt`, () => promptRef?.focus());
+
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      setPanelWidth(w);
+    });
+    ro.observe(panelRef);
+    setPanelWidth(panelRef.clientWidth);
+    onCleanup(() => ro.disconnect());
   });
 
   // Respond to focus panel changes from store
@@ -165,145 +199,145 @@ export function TaskPanel(props: TaskPanelProps) {
 
   const firstAgentId = () => props.task.agentIds[0] ?? '';
 
-  function titleBar(): PanelChild {
-    return {
-      id: 'title',
-      initialSize: 50,
-      fixed: true,
-      content: () => (
-        <TaskTitleBar
-          task={props.task}
-          isActive={props.isActive}
-          onClose={() => setShowCloseConfirm(true)}
-          onMerge={() => setShowMergeConfirm(true)}
-          onPush={() => setShowPushConfirm(true)}
-          pushing={pushing()}
-          pushSuccess={pushSuccess()}
-          onTitleEditRef={(h) => (titleEditHandle = h)}
-        />
-      ),
-    };
-  }
+  // Heavy components are created once and reused in both stack and split
+  // layouts. Solid owns their reactive scope under TaskPanel (not under the
+  // <Show> branch), so when the user crosses the split threshold the DOM is
+  // reparented instead of destroyed+recreated. That avoids the expensive
+  // xterm.js teardown/reinit and scrollback replay on every layout flip.
+  const aiTerminalEl = (
+    <TaskAITerminal
+      task={props.task}
+      isActive={props.isActive}
+      promptHandle={promptHandle}
+      onStepJumpReady={(fn, fromIdx) => {
+        setStepNav(fn ? { jump: fn, firstIndex: fromIdx } : undefined);
+      }}
+    />
+  );
+  const shellSectionEl = <TaskShellSection task={props.task} isActive={props.isActive} />;
+  const notesBodyEl = (
+    <TaskNotesBody
+      task={props.task}
+      agentId={firstAgentId()}
+      onPlanFullscreen={() => setPlanFullscreen(true)}
+    />
+  );
+  const changedFilesEl = (
+    <TaskChangedFilesSection
+      task={props.task}
+      isActive={props.isActive}
+      commitList={commitList()}
+      selectedCommit={selectedCommit()}
+      onCommitNavigate={setSelectedCommit}
+      onDiffFileClick={(path) => setDiffScrollTarget(path)}
+    />
+  );
+  const stepsSectionEl = (
+    <TaskStepsSection
+      task={props.task}
+      isActive={props.isActive}
+      onFileClick={(file) => setDiffScrollTarget(file)}
+      onNaturalHeight={setStepsNaturalHeight}
+      firstJumpableIndex={stepNav()?.firstIndex}
+      onJumpToStep={
+        stepNav()
+          ? (idx) => {
+              const ok = stepNav()?.jump(idx) ?? false;
+              if (ok) setTaskFocusedPanel(props.task.id, 'ai-terminal');
+              return ok;
+            }
+          : undefined
+      }
+    />
+  );
+  const promptInputEl = (
+    <div onClick={() => setTaskFocusedPanel(props.task.id, 'prompt')} style={{ height: '100%' }}>
+      <PromptInput
+        taskId={props.task.id}
+        agentId={firstAgentId()}
+        initialPrompt={props.task.initialPrompt}
+        prefillPrompt={props.task.prefillPrompt}
+        onSend={() => {
+          if (props.task.initialPrompt) clearInitialPrompt(props.task.id);
+        }}
+        onPrefillConsumed={() => clearPrefillPrompt(props.task.id)}
+        ref={(el) => (promptRef = el)}
+        handle={(h) => (promptHandle = h)}
+      />
+    </div>
+  );
 
-  function branchInfoBar(): PanelChild {
-    return {
-      id: 'branch',
-      initialSize: 28,
-      fixed: true,
-      content: () => (
-        <TaskBranchInfoBar task={props.task} onEditProject={(id) => setEditingProjectId(id)} />
-      ),
-    };
-  }
+  // PanelChild wrappers — stable references so ResizablePanel's <For> reuses
+  // entries (and therefore the DOM inside them) across re-evaluations.
 
-  function stepsSection(): PanelChild {
-    return {
-      id: 'steps-section',
-      initialSize: 28,
-      minSize: 28,
-      get fixed() {
-        return !props.task.stepsContent?.length;
-      },
-      requestSize: stepsNaturalHeight,
-      content: () => (
-        <TaskStepsSection
-          task={props.task}
-          isActive={props.isActive}
-          onFileClick={(file) => setDiffScrollTarget(file)}
-          onNaturalHeight={setStepsNaturalHeight}
-          firstJumpableIndex={stepNav()?.firstIndex}
-          onJumpToStep={
-            stepNav()
-              ? (idx) => {
-                  const ok = stepNav()?.jump(idx) ?? false;
-                  if (ok) setTaskFocusedPanel(props.task.id, 'ai-terminal');
-                  return ok;
-                }
-              : undefined
-          }
-        />
-      ),
-    };
-  }
+  const stepsSectionChild: PanelChild = {
+    id: 'steps-section',
+    initialSize: 28,
+    minSize: 28,
+    get fixed() {
+      return !props.task.stepsContent?.length;
+    },
+    requestSize: stepsNaturalHeight,
+    content: () => stepsSectionEl,
+  };
 
-  function notesAndFiles(): PanelChild {
-    return {
-      id: 'notes-files',
-      initialSize: 150,
-      minSize: 60,
-      content: () => (
-        <TaskNotesPanel
-          task={props.task}
-          agentId={firstAgentId()}
-          isActive={props.isActive}
-          commitList={commitList()}
-          selectedCommit={selectedCommit()}
-          onCommitNavigate={setSelectedCommit}
-          onPlanFullscreen={() => setPlanFullscreen(true)}
-          onDiffFileClick={(path) => setDiffScrollTarget(path)}
-        />
-      ),
-    };
-  }
+  const shellSectionChild: PanelChild = {
+    id: 'shell-section',
+    initialSize: 28,
+    minSize: 28,
+    get fixed() {
+      return props.task.shellAgentIds.length === 0;
+    },
+    requestSize: () => (props.task.shellAgentIds.length > 0 ? 200 : 28),
+    content: () => shellSectionEl,
+  };
 
-  function shellSection(): PanelChild {
-    return {
-      id: 'shell-section',
-      initialSize: 28,
-      minSize: 28,
-      get fixed() {
-        return props.task.shellAgentIds.length === 0;
-      },
-      requestSize: () => (props.task.shellAgentIds.length > 0 ? 200 : 28),
-      content: () => <TaskShellSection task={props.task} isActive={props.isActive} />,
-    };
-  }
+  const aiTerminalChild: PanelChild = {
+    id: 'ai-terminal',
+    minSize: 80,
+    content: () => aiTerminalEl,
+  };
 
-  function aiTerminal(): PanelChild {
-    return {
-      id: 'ai-terminal',
-      minSize: 80,
-      content: () => (
-        <TaskAITerminal
-          task={props.task}
-          isActive={props.isActive}
-          promptHandle={promptHandle}
-          onStepJumpReady={(fn, fromIdx) => {
-            setStepNav(fn ? { jump: fn, firstIndex: fromIdx } : undefined);
-          }}
-        />
-      ),
-    };
-  }
+  const promptInputChild: PanelChild = {
+    id: 'prompt',
+    initialSize: 72,
+    stable: true,
+    minSize: 54,
+    maxSize: 300,
+    content: () => promptInputEl,
+  };
 
-  function promptInput(): PanelChild {
-    return {
-      id: 'prompt',
-      initialSize: 72,
-      stable: true,
-      minSize: 54,
-      maxSize: 300,
-      content: () => (
-        <div
-          onClick={() => setTaskFocusedPanel(props.task.id, 'prompt')}
-          style={{ height: '100%' }}
-        >
-          <PromptInput
-            taskId={props.task.id}
-            agentId={firstAgentId()}
-            initialPrompt={props.task.initialPrompt}
-            prefillPrompt={props.task.prefillPrompt}
-            onSend={() => {
-              if (props.task.initialPrompt) clearInitialPrompt(props.task.id);
-            }}
-            onPrefillConsumed={() => clearPrefillPrompt(props.task.id)}
-            ref={(el) => (promptRef = el)}
-            handle={(h) => (promptHandle = h)}
-          />
-        </div>
-      ),
-    };
-  }
+  // Stack-mode inner horizontal split: notes on the left, changed-files on the right.
+  const stackNotesSplitChildren: PanelChild[] = [
+    { id: 'notes', initialSize: 200, minSize: 100, content: () => notesBodyEl },
+    { id: 'changed-files', initialSize: 200, minSize: 100, content: () => changedFilesEl },
+  ];
+  const notesAndFilesChild: PanelChild = {
+    id: 'notes-files',
+    initialSize: 150,
+    minSize: 60,
+    content: () => (
+      <ResizablePanel
+        direction="horizontal"
+        persistKey={`task:${props.task.id}:notes-split`}
+        children={stackNotesSplitChildren}
+      />
+    ),
+  };
+
+  // Split-mode right-column children.
+  const splitChangedFilesChild: PanelChild = {
+    id: 'changed-files',
+    initialSize: 200,
+    minSize: 80,
+    content: () => changedFilesEl,
+  };
+  const splitNotesBodyChild: PanelChild = {
+    id: 'notes-body',
+    initialSize: 200,
+    minSize: 80,
+    content: () => notesBodyEl,
+  };
 
   return (
     <div
@@ -326,19 +360,79 @@ export function TaskPanel(props: TaskPanelProps) {
         closingError={props.task.closingError}
         onRetry={() => retryCloseTask(props.task.id)}
       />
-      <ResizablePanel
-        direction="vertical"
-        persistKey={`task:${props.task.id}`}
-        children={[
-          titleBar(),
-          branchInfoBar(),
-          notesAndFiles(),
-          shellSection(),
-          aiTerminal(),
-          ...(props.task.stepsEnabled ? [stepsSection()] : []),
-          ...(store.showPromptInput ? [promptInput()] : []),
-        ]}
-      />
+      {/* Title + branch bars live outside <Show> so they don't remount on layout flips. */}
+      <div style={{ flex: '0 0 50px', overflow: 'hidden' }}>
+        <TaskTitleBar
+          task={props.task}
+          isActive={props.isActive}
+          onClose={() => setShowCloseConfirm(true)}
+          onMerge={() => setShowMergeConfirm(true)}
+          onPush={() => setShowPushConfirm(true)}
+          pushing={pushing()}
+          pushSuccess={pushSuccess()}
+          onTitleEditRef={(h) => (titleEditHandle = h)}
+        />
+      </div>
+      <div style={{ flex: '0 0 28px', overflow: 'hidden' }}>
+        <TaskBranchInfoBar task={props.task} onEditProject={(id) => setEditingProjectId(id)} />
+      </div>
+      <div style={{ flex: '1', 'min-height': '0' }}>
+        <Show
+          when={useSplit()}
+          fallback={
+            <ResizablePanel
+              direction="vertical"
+              persistKey={`task:${props.task.id}`}
+              children={[
+                notesAndFilesChild,
+                shellSectionChild,
+                aiTerminalChild,
+                ...(props.task.stepsEnabled ? [stepsSectionChild] : []),
+                ...(store.showPromptInput ? [promptInputChild] : []),
+              ]}
+            />
+          }
+        >
+          <ResizablePanel
+            direction="horizontal"
+            persistKey={`task:${props.task.id}:split-cols`}
+            children={[
+              {
+                id: 'left-col',
+                initialSize: 800,
+                minSize: 420,
+                content: () => (
+                  <ResizablePanel
+                    direction="vertical"
+                    persistKey={`task:${props.task.id}:split-left`}
+                    children={[
+                      aiTerminalChild,
+                      ...(store.showPromptInput ? [promptInputChild] : []),
+                    ]}
+                  />
+                ),
+              },
+              {
+                id: 'right-col',
+                initialSize: 400,
+                minSize: 280,
+                content: () => (
+                  <ResizablePanel
+                    direction="vertical"
+                    persistKey={`task:${props.task.id}:split-right`}
+                    children={[
+                      splitChangedFilesChild,
+                      splitNotesBodyChild,
+                      ...(props.task.stepsEnabled ? [stepsSectionChild] : []),
+                      shellSectionChild,
+                    ]}
+                  />
+                ),
+              },
+            ]}
+          />
+        </Show>
+      </div>
       <CloseTaskDialog
         open={showCloseConfirm()}
         task={props.task}

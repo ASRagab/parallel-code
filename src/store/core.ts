@@ -67,11 +67,18 @@ export const [store, setStore] = createStore<AppStore>({
   keybindingOverridesByPreset: {},
   keybindingMigrationDismissed: false,
   focusMode: false,
+  taskSplitMode: {},
+  lastRightColFocus: {},
 });
 
 type CleanupPanelStore = Pick<
   AppStore,
-  'focusedPanel' | 'panelSizes' | 'taskOrder' | 'collapsedTaskOrder'
+  | 'focusedPanel'
+  | 'panelSizes'
+  | 'taskOrder'
+  | 'collapsedTaskOrder'
+  | 'taskSplitMode'
+  | 'lastRightColFocus'
 >;
 
 /** Remove panelSizes, focusedPanel, and taskOrder entries for a given ID.
@@ -79,6 +86,8 @@ type CleanupPanelStore = Pick<
 export function cleanupPanelEntries(s: CleanupPanelStore, id: string): number {
   const idx = s.taskOrder.indexOf(id);
   delete s.focusedPanel[id];
+  delete s.taskSplitMode[id];
+  delete s.lastRightColFocus[id];
   const prefix = id + ':';
   for (const key of Object.keys(s.panelSizes)) {
     if (key === id || key.startsWith(prefix)) delete s.panelSizes[key];

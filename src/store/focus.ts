@@ -32,18 +32,17 @@ export function triggerAction(key: string): void {
   actionRegistry.get(key)?.();
 }
 
-// --- Dynamic grid-based spatial navigation ---
-//
-// The grid is built per-task based on its shell count:
-//
-//        col 0           col 1         col 2 ...
-// row 0: title
-// row 1: notes           changed-files
-// row 2: shell-toolbar:0   shell-toolbar:1  ...   (always present, one per button)
-// row 3: shell:0         shell:1       shell:2   (only if shells exist)
-// row 4: ai-terminal
-// row 5: steps                                    (only if steps enabled)
-// row 6: prompt
+// Grid-based spatial navigation. Two layouts:
+//  - vertical stack (default): everything in one column
+//  - split (focus mode, panel wide enough): ai-terminal/prompt anchor the left,
+//    changed-files/notes/steps/shell anchor the right, and `ai-terminal` is
+//    repeated down col 0 so ←/→ cross cleanly into the right column.
+// navigateRow skip-repeats past those duplicates; row-aware → uses
+// `lastRightColFocus` so bouncing ←→ over ai-terminal returns to the origin.
+
+/** Cells that belong to the left column in split mode. Anything else is treated
+ *  as right-column for `lastRightColFocus` memory and the dead-end fallback. */
+const LEFT_COL_PANELS = new Set(['title', 'ai-terminal', 'prompt', 'terminal']);
 
 function buildGrid(panelId: string): string[][] {
   const task = store.tasks[panelId];
@@ -51,6 +50,29 @@ function buildGrid(panelId: string): string[][] {
     const bookmarkCount =
       store.projects.find((p) => p.id === task.projectId)?.terminalBookmarks?.length ?? 0;
     const toolbarCols = Array.from({ length: 1 + bookmarkCount }, (_, i) => `shell-toolbar:${i}`);
+
+    if (store.taskSplitMode[panelId]) {
+      const grid: string[][] = [['title']];
+      grid.push(['ai-terminal', 'changed-files']);
+      grid.push(['ai-terminal', 'notes']);
+      if (task.stepsEnabled && task.stepsContent?.length) {
+        grid.push(['ai-terminal', 'steps']);
+      }
+
+      // Pair the bottom-left (prompt or ai-terminal if prompt hidden) with
+      // whatever's at the bottom-right, so → from prompt jumps into the shell
+      // section instead of falling off to the next task.
+      const hasShells = task.shellAgentIds.length > 0;
+      const leftBottom = store.showPromptInput ? 'prompt' : 'ai-terminal';
+      if (hasShells) {
+        grid.push(['ai-terminal', ...toolbarCols]);
+        grid.push([leftBottom, ...task.shellAgentIds.map((_, i) => `shell:${i}`)]);
+      } else {
+        grid.push([leftBottom, ...toolbarCols]);
+      }
+      return grid;
+    }
+
     const grid: string[][] = [['title']];
     grid.push(['notes', 'changed-files']);
     grid.push(toolbarCols);
@@ -69,6 +91,21 @@ function buildGrid(panelId: string): string[][] {
 
   // Terminal panel: just title + terminal
   return [['title'], ['terminal']];
+}
+
+/** In split mode, pick the right-column cell to jump to when → from the left.
+ *  Prefers the user's last right-column position (so ← then → round-trips),
+ *  falls back to the top of the right column (changed-files / shell row). */
+function pickRightColumnTarget(taskId: string, grid: string[][]): string | null {
+  const remembered = store.lastRightColFocus[taskId];
+  if (remembered && findInGrid(grid, remembered)) return remembered;
+  for (const row of grid) {
+    for (let c = 1; c < row.length; c++) {
+      const cell = row[c];
+      if (!LEFT_COL_PANELS.has(cell)) return cell;
+    }
+  }
+  return null;
 }
 
 /** The panel to focus when navigating into a task or terminal. */
@@ -97,6 +134,11 @@ export function setTaskFocusedPanel(taskId: string, panel: string): void {
   setStore('focusedPanel', taskId, panel);
   setStore('sidebarFocused', false);
   setStore('placeholderFocused', false);
+  // Remember right-column visits so → from ai-terminal can return to where the
+  // user was instead of always jumping to the top of the right column.
+  if (!LEFT_COL_PANELS.has(panel)) {
+    setStore('lastRightColFocus', taskId, panel);
+  }
   triggerFocus(`${taskId}:${panel}`);
   scrollTaskIntoView(taskId);
 }
@@ -206,15 +248,44 @@ export function navigateRow(direction: 'up' | 'down'): void {
 
   const grid = buildGrid(taskId);
   const current = getTaskFocusedPanel(taskId);
-  const pos = findInGrid(grid, current);
-  if (!pos) return;
+  let pos = findInGrid(grid, current);
+  // The previously focused cell can vanish (task.stepsEnabled off, shells killed,
+  // width crossing threshold). Recover by falling back to the default instead of
+  // leaving arrow keys silently broken until the user clicks.
+  if (!pos) {
+    const fallback = defaultPanelFor(taskId);
+    pos = findInGrid(grid, fallback);
+    if (!pos) return;
+    setTaskFocusedPanel(taskId, fallback);
+  }
 
-  const nextRow = direction === 'up' ? pos.row - 1 : pos.row + 1;
-  if (nextRow < 0 || nextRow >= grid.length) return;
+  const step = direction === 'up' ? -1 : 1;
+  let nextRow = pos.row + step;
+  // Skip rows whose clamped target equals the current cell — in split mode,
+  // ai-terminal spans many rows on col 0, so ↓ from it has to walk past itself
+  // to reach prompt (or the right column, below).
+  while (nextRow >= 0 && nextRow < grid.length) {
+    const col = Math.min(pos.col, grid[nextRow].length - 1);
+    const target = grid[nextRow][col];
+    if (target !== current) {
+      setTaskFocusedPanel(taskId, target);
+      return;
+    }
+    nextRow += step;
+  }
 
-  // Clamp column to target row width
-  const col = Math.min(pos.col, grid[nextRow].length - 1);
-  setTaskFocusedPanel(taskId, grid[nextRow][col]);
+  // Dead-end: in split mode, ↓ from ai-terminal when no prompt/shells anchor
+  // the left column's bottom would otherwise stop — enter the right column
+  // (the ← from any right-col cell will come back to ai-terminal).
+  if (
+    direction === 'down' &&
+    store.taskSplitMode[taskId] &&
+    pos.col === 0 &&
+    current === 'ai-terminal'
+  ) {
+    const target = pickRightColumnTarget(taskId, grid);
+    if (target) setTaskFocusedPanel(taskId, target);
+  }
 }
 
 export function navigateColumn(direction: 'left' | 'right'): void {
@@ -259,8 +330,29 @@ export function navigateColumn(direction: 'left' | 'right'): void {
 
   const grid = buildGrid(taskId);
   const current = getTaskFocusedPanel(taskId);
-  const pos = findInGrid(grid, current);
-  if (!pos) return;
+  let pos = findInGrid(grid, current);
+  if (!pos) {
+    const fallback = defaultPanelFor(taskId);
+    pos = findInGrid(grid, fallback);
+    if (!pos) return;
+    setTaskFocusedPanel(taskId, fallback);
+  }
+
+  // In split mode, → from ai-terminal is row-aware: go to the last right-column
+  // cell the user visited, not the first match in findInGrid (which always
+  // returned `changed-files` at row 1 regardless of where they came from).
+  if (
+    direction === 'right' &&
+    pos.col === 0 &&
+    current === 'ai-terminal' &&
+    store.taskSplitMode[taskId]
+  ) {
+    const target = pickRightColumnTarget(taskId, grid);
+    if (target) {
+      setTaskFocusedPanel(taskId, target);
+      return;
+    }
+  }
 
   const row = grid[pos.row];
   const nextCol = direction === 'left' ? pos.col - 1 : pos.col + 1;

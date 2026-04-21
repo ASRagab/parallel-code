@@ -225,4 +225,9 @@ export interface AppStore {
   keybindingOverridesByPreset: Record<string, Record<string, KeybindingOverride>>;
   keybindingMigrationDismissed: boolean;
   focusMode: boolean;
+  /** Per-task flag: true when the task is rendering its focus-mode two-column layout. */
+  taskSplitMode: Record<string, boolean>;
+  /** Per-task memory of the last right-column cell focused, so crossing ai-terminal and back
+   *  with the arrow keys returns to where the user was instead of always jumping to `changed-files`. */
+  lastRightColFocus: Record<string, string>;
 }
