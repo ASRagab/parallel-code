@@ -11,6 +11,7 @@ import { NewTaskDialog } from './components/NewTaskDialog';
 import { HelpDialog } from './components/HelpDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { WindowTitleBar } from './components/WindowTitleBar';
+import { FocusModeTaskIndicators } from './components/FocusModeTaskIndicators';
 import { WindowResizeHandles } from './components/WindowResizeHandles';
 import { theme } from './lib/theme';
 import {
@@ -633,7 +634,9 @@ function App() {
           <WindowTitleBar />
         </Show>
         <Show when={isMac}>
-          <div class="mac-titlebar-spacer" data-tauri-drag-region />
+          <div class="mac-titlebar-spacer" data-tauri-drag-region>
+            <FocusModeTaskIndicators />
+          </div>
         </Show>
         <Show when={!store.keybindingMigrationDismissed}>
           <div
