@@ -18,6 +18,7 @@ const APP_LAYER_IDS = [
   'app.new-task',
   'app.new-task-alt',
   'app.toggle-sidebar',
+  'app.toggle-focus-mode',
   'app.toggle-help',
   'app.toggle-help-f1',
   'app.toggle-settings',

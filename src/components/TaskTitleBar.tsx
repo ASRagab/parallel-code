@@ -6,7 +6,7 @@ import {
   updateTaskName,
   collapseTask,
   getTaskDotStatus,
-  toggleFocusMode,
+  toggleTaskFocusMode,
 } from '../store/store';
 import { EditableText, type EditableTextHandle } from './EditableText';
 import { IconButton } from './IconButton';
@@ -167,8 +167,7 @@ export function TaskTitleBar(props: TaskTitleBarProps) {
             )
           }
           onClick={() => {
-            if (!store.focusMode) setActiveTask(props.task.id);
-            toggleFocusMode();
+            toggleTaskFocusMode(props.task.id);
           }}
           title={store.focusMode ? 'Exit focus mode' : 'Focus on this task'}
         />

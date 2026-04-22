@@ -193,6 +193,17 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
     // NOT global — only fires outside input/terminal
   },
   {
+    id: 'app.toggle-focus-mode',
+    layer: 'app',
+    category: 'App',
+    description: 'Toggle focus mode / side-by-side view',
+    platform: 'both',
+    key: 'F',
+    modifiers: { cmdOrCtrl: true, shift: true },
+    action: 'toggleFocusMode',
+    global: true,
+  },
+  {
     id: 'app.toggle-help',
     layer: 'app',
     category: 'App',

@@ -44,6 +44,7 @@ import {
   setPlanContent,
   setStepsContent,
   setDockerAvailable,
+  toggleTaskFocusMode,
 } from './store/store';
 import { isGitHubUrl } from './lib/github-url';
 import type { PersistedWindowState } from './store/types';
@@ -482,6 +483,7 @@ function App() {
       },
       newTask: () => toggleNewTaskDialog(true),
       toggleSidebar: () => toggleSidebar(),
+      toggleFocusMode: () => toggleTaskFocusMode(),
       toggleHelp: () => toggleHelpDialog(),
       toggleSettings: () => toggleSettingsDialog(),
       closeDialogs: () => {

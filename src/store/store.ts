@@ -97,6 +97,7 @@ export {
   toggleSidebar,
   toggleArena,
   toggleFocusMode,
+  toggleTaskFocusMode,
   setTaskSplitMode,
   setTerminalFont,
   setThemePreset,

@@ -1,5 +1,6 @@
 import { batch } from 'solid-js';
 import { store, setStore } from './core';
+import { setActiveTask } from './navigation';
 import type { LookPreset } from '../lib/look';
 import type { PersistedWindowState, TaskViewportVisibility } from './types';
 import { invoke } from '../lib/ipc';
@@ -114,6 +115,12 @@ export function toggleArena(show?: boolean): void {
 
 export function toggleFocusMode(on?: boolean): void {
   setStore('focusMode', on ?? !store.focusMode);
+}
+
+export function toggleTaskFocusMode(taskId: string | null = store.activeTaskId): void {
+  if (!taskId || !store.tasks[taskId]) return;
+  if (store.activeTaskId !== taskId) setActiveTask(taskId);
+  toggleFocusMode();
 }
 
 export function setTaskSplitMode(taskId: string, active: boolean): void {
