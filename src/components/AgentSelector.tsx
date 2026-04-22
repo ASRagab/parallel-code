@@ -7,6 +7,7 @@ interface AgentSelectorProps {
   agents: AgentDef[];
   selectedAgent: AgentDef | null;
   onSelect: (agent: AgentDef) => void;
+  wrap?: boolean;
 }
 
 /**
@@ -15,6 +16,7 @@ interface AgentSelectorProps {
  */
 export function AgentSelector(props: AgentSelectorProps) {
   const btnRefs: HTMLButtonElement[] = [];
+  const allowWrap = () => props.wrap ?? true;
 
   function handleKeyDown(e: KeyboardEvent, idx: number) {
     const agents = props.agents;
@@ -46,7 +48,17 @@ export function AgentSelector(props: AgentSelectorProps) {
       >
         Agent
       </label>
-      <div role="radiogroup" style={{ display: 'flex', 'flex-wrap': 'wrap', gap: '8px' }}>
+      <div
+        role="radiogroup"
+        style={{
+          display: 'flex',
+          'flex-wrap': allowWrap() ? 'wrap' : 'nowrap',
+          gap: '8px',
+          'overflow-x': allowWrap() ? undefined : 'auto',
+          'overflow-y': 'hidden',
+          'padding-bottom': allowWrap() ? undefined : '2px',
+        }}
+      >
         <For each={props.agents}>
           {(agent, i) => {
             const isSelected = () => props.selectedAgent?.id === agent.id;
@@ -61,7 +73,7 @@ export function AgentSelector(props: AgentSelectorProps) {
                 onClick={() => props.onSelect(agent)}
                 onKeyDown={(e) => handleKeyDown(e, i())}
                 style={{
-                  flex: '0 1 auto',
+                  flex: allowWrap() ? '0 1 auto' : '0 0 auto',
                   'min-width': '70px',
                   padding: '10px 8px',
                   background: isSelected() ? theme.bgSelected : theme.bgInput,
@@ -78,6 +90,7 @@ export function AgentSelector(props: AgentSelectorProps) {
                   'font-size': '13px',
                   'font-weight': isSelected() ? '500' : '400',
                   'text-align': 'center',
+                  'white-space': 'nowrap',
                 }}
               >
                 {agent.name}

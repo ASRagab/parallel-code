@@ -547,7 +547,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
     <Dialog
       open={props.open}
       onClose={props.onClose}
-      width={store.availableAgents.length > 8 ? '620px' : '520px'}
+      width={store.availableAgents.length > 8 ? 'min(840px, calc(100vw - 48px))' : '560px'}
       panelStyle={{ gap: '20px' }}
     >
       <form
@@ -696,6 +696,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
           agents={store.availableAgents}
           selectedAgent={selectedAgent()}
           onSelect={setSelectedAgent}
+          wrap={false}
         />
 
         {/* Isolation mode selector — hidden for non-git projects */}
