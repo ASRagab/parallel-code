@@ -283,12 +283,12 @@ export function TaskPanel(props: TaskPanelProps) {
 
   const shellSectionChild: PanelChild = {
     id: 'shell-section',
-    initialSize: 28,
+    initialSize: 40,
     minSize: 28,
     get fixed() {
       return props.task.shellAgentIds.length === 0;
     },
-    requestSize: () => (props.task.shellAgentIds.length > 0 ? 200 : 28),
+    requestSize: () => (props.task.shellAgentIds.length > 0 ? 200 : 40),
     content: () => shellSectionEl,
   };
 

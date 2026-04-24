@@ -68,6 +68,8 @@ export function TaskShellSection(props: TaskShellSectionProps) {
     });
   });
 
+  const hasShell = () => props.task.shellAgentIds.length > 0;
+
   return (
     <div
       style={{
@@ -75,6 +77,8 @@ export function TaskShellSection(props: TaskShellSectionProps) {
         display: 'flex',
         'flex-direction': 'column',
         background: 'transparent',
+        'padding-top': hasShell() ? '0' : '6px',
+        'padding-bottom': hasShell() ? '0' : '6px',
       }}
     >
       <div
