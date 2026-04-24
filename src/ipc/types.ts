@@ -81,6 +81,7 @@ export interface ImportableWorktree {
 export interface MergeStatus {
   main_ahead_count: number;
   conflicting_files: string[];
+  base_branch: string;
 }
 
 export interface MergeResult {

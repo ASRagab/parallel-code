@@ -1179,7 +1179,7 @@ export async function discardUncommitted(worktreePath: string): Promise<void> {
 export async function checkMergeStatus(
   worktreePath: string,
   baseBranch?: string,
-): Promise<{ main_ahead_count: number; conflicting_files: string[] }> {
+): Promise<{ main_ahead_count: number; conflicting_files: string[]; base_branch: string }> {
   const mainBranch = baseBranch ?? (await detectMainBranch(worktreePath));
 
   let mainAheadCount = 0;
@@ -1192,7 +1192,9 @@ export async function checkMergeStatus(
     /* ignore */
   }
 
-  if (mainAheadCount === 0) return { main_ahead_count: 0, conflicting_files: [] };
+  if (mainAheadCount === 0) {
+    return { main_ahead_count: 0, conflicting_files: [], base_branch: mainBranch };
+  }
 
   const conflictingFiles: string[] = [];
   try {
@@ -1206,7 +1208,11 @@ export async function checkMergeStatus(
     }
   }
 
-  return { main_ahead_count: mainAheadCount, conflicting_files: conflictingFiles };
+  return {
+    main_ahead_count: mainAheadCount,
+    conflicting_files: conflictingFiles,
+    base_branch: mainBranch,
+  };
 }
 
 export async function mergeTask(
