@@ -35,6 +35,10 @@ const TERMINAL_LAYER_IDS = [
   'term.home',
   'term.end',
   'term.kill-line',
+  'term.scroll-line-up',
+  'term.scroll-line-down',
+  'term.scroll-page-up',
+  'term.scroll-page-down',
 ];
 
 describe('DEFAULT_BINDINGS', () => {

@@ -254,6 +254,24 @@ export function TerminalView(props: TerminalViewProps) {
           return false;
         }
 
+        if (binding.action?.startsWith('scrollback:')) {
+          switch (binding.action) {
+            case 'scrollback:line-up':
+              term?.scrollLines(-1);
+              break;
+            case 'scrollback:line-down':
+              term?.scrollLines(1);
+              break;
+            case 'scrollback:page-up':
+              term?.scrollPages(-1);
+              break;
+            case 'scrollback:page-down':
+              term?.scrollPages(1);
+              break;
+          }
+          return false;
+        }
+
         // Generic escape sequence bindings
         if (binding.escapeSequence) {
           enqueueInput(binding.escapeSequence);

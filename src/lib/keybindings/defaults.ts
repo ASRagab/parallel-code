@@ -350,4 +350,48 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
     modifiers: { meta: true },
     escapeSequence: '\x15',
   },
+
+  // -------------------------------------------------------------------------
+  // Terminal layer — Scrollback navigation
+  // -------------------------------------------------------------------------
+  {
+    id: 'term.scroll-line-up',
+    layer: 'terminal',
+    category: 'Scrollback',
+    description: 'Scroll up one line',
+    platform: 'both',
+    key: 'ArrowUp',
+    modifiers: { cmdOrCtrl: true, shift: true },
+    action: 'scrollback:line-up',
+  },
+  {
+    id: 'term.scroll-line-down',
+    layer: 'terminal',
+    category: 'Scrollback',
+    description: 'Scroll down one line',
+    platform: 'both',
+    key: 'ArrowDown',
+    modifiers: { cmdOrCtrl: true, shift: true },
+    action: 'scrollback:line-down',
+  },
+  {
+    id: 'term.scroll-page-up',
+    layer: 'terminal',
+    category: 'Scrollback',
+    description: 'Scroll up one page',
+    platform: 'both',
+    key: 'PageUp',
+    modifiers: { cmdOrCtrl: true, shift: true },
+    action: 'scrollback:page-up',
+  },
+  {
+    id: 'term.scroll-page-down',
+    layer: 'terminal',
+    category: 'Scrollback',
+    description: 'Scroll down one page',
+    platform: 'both',
+    key: 'PageDown',
+    modifiers: { cmdOrCtrl: true, shift: true },
+    action: 'scrollback:page-down',
+  },
 ];
