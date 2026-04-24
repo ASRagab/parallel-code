@@ -90,10 +90,11 @@ describe('baseBranch fallback to detectMainBranch', () => {
       expect(refSpec).toMatch(/^main\.\.\./);
     });
 
-    it("uses the provided baseBranch when it is 'develop'", async () => {
+    it("uses the provided baseBranch when it is 'develop' (no remote)", async () => {
       const calls: string[][] = [];
-      setupMock(calls, (_argsArr, cb) => {
-        cb(null, '', '');
+      setupMock(calls, (argsArr, cb) => {
+        const isRemoteCheck = argsArr[0] === 'rev-parse' && argsArr[2]?.startsWith('refs/remotes/');
+        cb(isRemoteCheck ? new Error('no remote') : null, '', '');
       });
 
       await getAllFileDiffsFromBranch('/repo', 'feature', 'develop');
@@ -103,10 +104,37 @@ describe('baseBranch fallback to detectMainBranch', () => {
       const refSpec = diffCall?.[2] ?? '';
       expect(refSpec).toBe('develop...feature');
     });
+
+    it("uses 'origin/develop' when baseBranch 'develop' has a remote-tracking ref", async () => {
+      const calls: string[][] = [];
+      setupMock(calls, (_argsArr, cb) => {
+        cb(null, '', '');
+      });
+
+      await getAllFileDiffsFromBranch('/repo', 'feature', 'develop');
+
+      const diffCall = calls.find((a) => a[0] === 'diff');
+      const refSpec = diffCall?.[2] ?? '';
+      expect(refSpec).toBe('origin/develop...feature');
+    });
   });
 
   describe('getChangedFilesFromBranch', () => {
-    it("uses 'develop' directly when baseBranch is 'develop'", async () => {
+    it("uses 'develop' directly when baseBranch is 'develop' (no remote)", async () => {
+      const calls: string[][] = [];
+      setupMock(calls, (argsArr, cb) => {
+        const isRemoteCheck = argsArr[0] === 'rev-parse' && argsArr[2]?.startsWith('refs/remotes/');
+        cb(isRemoteCheck ? new Error('no remote') : null, '', '');
+      });
+
+      await getChangedFilesFromBranch('/repo', 'feature', 'develop');
+
+      const diffCall = calls.find((a) => a[0] === 'diff');
+      const tripleRef = diffCall?.find((arg) => arg.includes('...')) ?? '';
+      expect(tripleRef).toBe('develop...feature');
+    });
+
+    it("uses 'origin/develop' when baseBranch 'develop' has a remote-tracking ref", async () => {
       const calls: string[][] = [];
       setupMock(calls, (_argsArr, cb) => {
         cb(null, '', '');
@@ -116,12 +144,26 @@ describe('baseBranch fallback to detectMainBranch', () => {
 
       const diffCall = calls.find((a) => a[0] === 'diff');
       const tripleRef = diffCall?.find((arg) => arg.includes('...')) ?? '';
-      expect(tripleRef).toBe('develop...feature');
+      expect(tripleRef).toBe('origin/develop...feature');
     });
   });
 
   describe('getFileDiffFromBranch', () => {
-    it("uses 'develop' directly when baseBranch is 'develop'", async () => {
+    it("uses 'develop' directly when baseBranch is 'develop' (no remote)", async () => {
+      const calls: string[][] = [];
+      setupMock(calls, (argsArr, cb) => {
+        const isRemoteCheck = argsArr[0] === 'rev-parse' && argsArr[2]?.startsWith('refs/remotes/');
+        cb(isRemoteCheck ? new Error('no remote') : null, '', '');
+      });
+
+      await getFileDiffFromBranch('/repo', 'feature', 'src/foo.ts', 'develop');
+
+      const diffCall = calls.find((a) => a[0] === 'diff');
+      const tripleRef = diffCall?.find((arg) => arg.includes('...')) ?? '';
+      expect(tripleRef).toBe('develop...feature');
+    });
+
+    it("uses 'origin/develop' when baseBranch 'develop' has a remote-tracking ref", async () => {
       const calls: string[][] = [];
       setupMock(calls, (_argsArr, cb) => {
         cb(null, '', '');
@@ -131,7 +173,7 @@ describe('baseBranch fallback to detectMainBranch', () => {
 
       const diffCall = calls.find((a) => a[0] === 'diff');
       const tripleRef = diffCall?.find((arg) => arg.includes('...')) ?? '';
-      expect(tripleRef).toBe('develop...feature');
+      expect(tripleRef).toBe('origin/develop...feature');
     });
   });
 });
@@ -421,6 +463,35 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
       );
       expect(diffCall).toBeDefined();
       expect(diffCall).toContain(MERGE_BASE);
+    });
+
+    it('should compute merge-base against origin/<branch> when the remote ref exists', async () => {
+      // Regression: when local main is stale (behind origin/main) and the
+      // worktree was branched from origin/main, using bare `main` resolves
+      // to stale refs/heads/main and the diff leaks the origin-vs-local
+      // delta into the feature diff.
+      const calls: string[][] = [];
+      const baseHandler = buildWorktreeMockHandler({
+        committedRawNumstat: rawNumstatEntry('feat.ts', 1, 0),
+      });
+      setupMock(calls, (args, cb) => {
+        if (
+          args[0] === 'rev-parse' &&
+          args[1] === '--verify' &&
+          args[2] === 'refs/remotes/origin/main'
+        ) {
+          cb(null, 'ref-exists\n', '');
+          return;
+        }
+        baseHandler(args, cb);
+      });
+
+      await getChangedFiles(uniqueWorktreePath(), 'main');
+
+      const mergeBaseCall = calls.find((a) => a[0] === 'merge-base');
+      expect(mergeBaseCall).toBeDefined();
+      expect(mergeBaseCall).toContain('origin/main');
+      expect(mergeBaseCall).not.toContain('main');
     });
   });
 

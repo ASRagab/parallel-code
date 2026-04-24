@@ -178,6 +178,23 @@ async function remoteTrackingRefExists(repoRoot: string, branch: string): Promis
   }
 }
 
+/**
+ * Resolve a branch name to the ref to use as a diff base.
+ *
+ * Prefers `origin/<branch>` when the remote-tracking ref exists because local
+ * branches are often stale (users fetch without pulling), and worktrees are
+ * usually branched off the latest origin state. Without this, `git merge-base
+ * main HEAD` resolves `main` to stale `refs/heads/main`, producing a merge-base
+ * older than the worktree's actual branch point — so the diff leaks the
+ * origin/main-vs-main delta into the feature branch's changes.
+ */
+async function resolveBaseRef(repoRoot: string, branch: string): Promise<string> {
+  if (await remoteTrackingRefExists(repoRoot, branch)) {
+    return `origin/${branch}`;
+  }
+  return branch;
+}
+
 /** Check whether a local branch ref exists. */
 async function localBranchExists(repoRoot: string, branch: string): Promise<boolean> {
   try {
@@ -253,7 +270,8 @@ async function detectMergeBase(
   }
 
   try {
-    const { stdout } = await exec('git', ['merge-base', branch, headRef], { cwd: repoRoot });
+    const baseRef = await resolveBaseRef(repoRoot, branch);
+    const { stdout } = await exec('git', ['merge-base', baseRef, headRef], { cwd: repoRoot });
     const result = stdout.trim();
     if (result) {
       mergeBaseCache.set(key, { value: result, expiresAt: Date.now() + MERGE_BASE_TTL });
@@ -417,7 +435,8 @@ async function computeBranchDiffStats(
   mainBranch: string,
   branchName: string,
 ): Promise<{ linesAdded: number; linesRemoved: number }> {
-  const { stdout } = await exec('git', ['diff', '--numstat', `${mainBranch}...${branchName}`], {
+  const baseRef = await resolveBaseRef(projectRoot, mainBranch);
+  const { stdout } = await exec('git', ['diff', '--numstat', `${baseRef}...${branchName}`], {
     cwd: projectRoot,
     maxBuffer: MAX_BUFFER,
   });
@@ -922,8 +941,9 @@ export async function getAllFileDiffsFromBranch(
   baseBranch?: string,
 ): Promise<string> {
   const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
+  const baseRef = await resolveBaseRef(projectRoot, mainBranch);
   try {
-    const { stdout } = await exec('git', ['diff', '-U3', `${mainBranch}...${branchName}`], {
+    const { stdout } = await exec('git', ['diff', '-U3', `${baseRef}...${branchName}`], {
       cwd: projectRoot,
       maxBuffer: MAX_BUFFER,
     });
@@ -1319,12 +1339,13 @@ export async function getChangedFilesFromBranch(
   baseBranch?: string,
 ): Promise<ChangedFile[]> {
   const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
+  const baseRef = await resolveBaseRef(projectRoot, mainBranch);
 
   let diffStr = '';
   try {
     const { stdout } = await exec(
       'git',
-      ['diff', '--raw', '--numstat', `${mainBranch}...${branchName}`],
+      ['diff', '--raw', '--numstat', `${baseRef}...${branchName}`],
       { cwd: projectRoot, maxBuffer: MAX_BUFFER },
     );
     diffStr = stdout;
@@ -1358,28 +1379,28 @@ export async function getFileDiffFromBranch(
   baseBranch?: string,
 ): Promise<FileDiffResult> {
   const mainBranch = baseBranch ?? (await detectMainBranch(projectRoot));
+  const baseRef = await resolveBaseRef(projectRoot, mainBranch);
 
   let diff = '';
   try {
-    const { stdout } = await exec(
-      'git',
-      ['diff', `${mainBranch}...${branchName}`, '--', filePath],
-      { cwd: projectRoot, maxBuffer: MAX_BUFFER },
-    );
+    const { stdout } = await exec('git', ['diff', `${baseRef}...${branchName}`, '--', filePath], {
+      cwd: projectRoot,
+      maxBuffer: MAX_BUFFER,
+    });
     diff = stdout;
   } catch {
     /* empty */
   }
 
   // Find the merge base for content retrieval
-  let mergeBase = mainBranch;
+  let mergeBase = baseRef;
   try {
-    const { stdout } = await exec('git', ['merge-base', mainBranch, branchName], {
+    const { stdout } = await exec('git', ['merge-base', baseRef, branchName], {
       cwd: projectRoot,
     });
     if (stdout.trim()) mergeBase = stdout.trim();
   } catch {
-    /* use mainBranch as fallback */
+    /* use baseRef as fallback */
   }
 
   let oldContent = '';
