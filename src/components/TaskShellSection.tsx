@@ -75,8 +75,15 @@ export function TaskShellSection(props: TaskShellSectionProps) {
   // we pick 140 px as the natural default so the panel stays dragable down to
   // a useful "small terminal" state; focus mode scales up so the terminal has
   // room when it takes over the screen.
+  //
+  // In split mode this section is the right-column flex absorber. Enforcing a
+  // min-height on the inner there would overflow the wrapper when steps grow
+  // and compress the absorber, and xterm fits the inner — so the bottom of
+  // the terminal output gets clipped by the wrapper's overflow:hidden. Fall
+  // back to 0 in that case and let the wrapper's allocated size drive xterm.
   const intrinsicHeight = () => {
     if (!hasShell()) return '28px';
+    if (store.focusMode && store.taskSplitMode[props.task.id]) return '0';
     if (store.focusMode) return 'max(200px, 33vh)';
     return '140px';
   };
