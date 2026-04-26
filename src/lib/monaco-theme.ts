@@ -61,11 +61,11 @@ const presetColors: Record<LookPreset, PresetColors> = {
     accent: '#50e2d3',
   },
   minimal: {
-    bgElevated: '#161514',
+    bgElevated: '#252520',
     fg: '#e8e8e8',
     fgMuted: '#b8b8b8',
     fgSubtle: '#909090',
-    border: '#2a2a2a',
+    border: '#2a2925',
     accent: '#c8bfa0',
   },
   zenburnesque: {
