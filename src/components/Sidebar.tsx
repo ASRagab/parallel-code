@@ -47,6 +47,19 @@ const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_SIZE_KEY = 'sidebar:width';
 
+/** Floor heights for the two scrollable sidebar regions — kept in lockstep so
+ *  neither region can be squeezed to nothing under flex pressure. The projects
+ *  section value adds the header strip on top of the tasks-list floor. */
+const TASKS_LIST_MIN_HEIGHT = '140px';
+const PROJECTS_SECTION_MIN_HEIGHT = '170px';
+/** Caps the project list before it starts pushing the tasks list around;
+ *  beyond this the list scrolls internally. */
+const PROJECTS_LIST_MAX_HEIGHT = '40vh';
+/** Below this many projects the natural content size is already smaller than
+ *  PROJECTS_SECTION_MIN_HEIGHT, so reserving the floor would just create dead
+ *  space. The floor only matters once content can plausibly threaten tasks. */
+const PROJECTS_FLOOR_THRESHOLD = 4;
+
 function getAttentionColor(attention: TaskAttentionState): string | null {
   if (attention === 'active') return theme.accent;
   if (attention === 'needs_input') return theme.warning;
@@ -372,14 +385,15 @@ export function Sidebar() {
           </div>
         </div>
 
-        {/* Projects section — outer enforces the same floor as the tasks list
-            (only when populated, so empty state stays compact) */}
+        {/* Projects section — outer enforces the same floor as the tasks list,
+            but only above the threshold (so few-project users see no waste) */}
         <div
           style={{
             display: 'flex',
             'flex-direction': 'column',
             gap: '6px',
-            'min-height': store.projects.length > 0 ? '170px' : '0',
+            'min-height':
+              store.projects.length >= PROJECTS_FLOOR_THRESHOLD ? PROJECTS_SECTION_MIN_HEIGHT : '0',
           }}
         >
           <div
@@ -413,7 +427,7 @@ export function Sidebar() {
           </div>
 
           {/* Scrollable project list — fills the outer (which carries the
-              floor); caps at 40vh so tasks below get a fair share */}
+              floor); caps so tasks below get a fair share */}
           <div
             style={{
               display: 'flex',
@@ -421,7 +435,7 @@ export function Sidebar() {
               gap: '6px',
               flex: '1',
               'min-height': '0',
-              'max-height': '40vh',
+              'max-height': PROJECTS_LIST_MAX_HEIGHT,
               'overflow-y': 'auto',
             }}
           >
@@ -615,7 +629,7 @@ export function Sidebar() {
             'flex-direction': 'column',
             gap: '1px',
             flex: '1',
-            'min-height': '140px',
+            'min-height': TASKS_LIST_MIN_HEIGHT,
             overflow: 'auto',
             outline: 'none',
           }}
