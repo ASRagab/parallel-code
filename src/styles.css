@@ -386,6 +386,20 @@ html[data-look='islands-dark'] .prompt-textarea:focus {
   box-shadow: none !important;
 }
 
+/* Islands Dark strips the textarea's own focus ring (it sits flush in the
+   panel), so restore the panel-level focus outline that the global rule
+   disables for .prompt-input-panel. */
+html[data-look='islands-dark'] .prompt-input-panel:focus-within::after,
+html[data-look='islands-dark'] .prompt-input-panel[data-panel-focused='true']::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid var(--border-focus);
+  pointer-events: none;
+  z-index: 10;
+}
+
 /* Soften the send button so it doesn't punch through the muted theme —
    matches the notes panel's send-notes button (soft accent tint). */
 html[data-look='islands-dark'] .prompt-send-btn:not(:disabled) {
