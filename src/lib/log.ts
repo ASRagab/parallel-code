@@ -34,11 +34,11 @@ let inLogger = false;
 
 type RateBucket = { windowStart: number; count: number; suppressed: number };
 const rateBuckets = new Map<string, RateBucket>();
-// Each pending notice captures the bucket it belongs to so a new entry
-// arriving after window-end can roll the live bucket without disturbing
-// the count the timer is about to read.
-type PendingNotice = { timer: ReturnType<typeof setTimeout>; bucket: RateBucket };
-const pendingNotices = new Map<string, PendingNotice>();
+// Categories whose suppression-notice timer is in flight. The bucket the
+// timer reports on is captured in the timer's closure (see takeRateBudget),
+// so a new entry arriving after window-end can roll the live bucket
+// without disturbing the count the timer is about to emit.
+const pendingNotices = new Set<string>();
 
 export function setVerbose(value: boolean): void {
   verbose = value;
@@ -220,9 +220,12 @@ function takeRateBudget(category: string, nowMs: number): boolean {
     // overwrite `bucket` with `suppressed: 0` and the notice would say
     // zero (or stomp the previous suppressed count).
     const captured = bucket;
-    const timer = setTimeout(
+    pendingNotices.add(category);
+    setTimeout(
       () => {
         pendingNotices.delete(category);
+        // Clean up the lingering bucket if no later entry has rolled it.
+        if (rateBuckets.get(category) === captured) rateBuckets.delete(category);
         if (captured.suppressed === 0) return;
         invokeForward({
           level: 'warn',
@@ -235,7 +238,6 @@ function takeRateBudget(category: string, nowMs: number): boolean {
       },
       Math.max(0, remaining),
     );
-    pendingNotices.set(category, { timer, bucket: captured });
   }
   return false;
 }
