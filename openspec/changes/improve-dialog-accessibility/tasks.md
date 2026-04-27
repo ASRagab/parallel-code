@@ -3,58 +3,86 @@
 - [ ] Extend `src/components/Dialog.tsx`: set `role="dialog"` and
       `aria-modal="true"` on the panel; accept optional `labelledBy` and
       `describedBy` props; render them as `aria-labelledby` /
-      `aria-describedby` on the panel; add a stable class hook (e.g.
-      `.dialog-panel`) on the panel so global focus styles can target
-      it through a `<Portal>`.
-- [ ] Stack-aware `aria-modal`: when more than one `Dialog` is open at
-      once, only the topmost carries `aria-modal="true"`. Implement via
-      a tiny ref-counted store of open-dialog ids, or by reading the
-      DOM order of mounted panels.
+      `aria-describedby` on the panel; the existing `dialog-panel`
+      class on the panel (already present) is the focus-style hook.
+      Capture `document.activeElement` on open via the existing
+      `createFocusRestore` and restore on close (already implemented;
+      add a test to lock it in).
+- [ ] Stack-aware `aria-modal` via a new module `src/lib/dialog-stack.ts`
+      exposing `pushDialog(id)` / `popDialog(id)` / `useIsTopmost(id)`.
+      `Dialog` registers on mount and unregisters on unmount using a
+      stable `createUniqueId()` per instance. Only the topmost id's
+      panel renders `aria-modal="true"`; others render without the
+      attribute. The store uses a `Set`-backed array so popping the
+      topmost cleanly restores the new top.
 - [ ] Extend `src/components/ConfirmDialog.tsx` API: accept optional
-      `labelledBy` and `describedBy` and forward to `Dialog`; generate
-      its own title id via `createUniqueId` and forward that as
-      `labelledBy` when a consumer does not supply one. Existing
-      call-sites keep working.
+      `labelledBy` and `describedBy` and forward to `Dialog`. Generate
+      a title id via `createUniqueId`. When the consumer does NOT
+      supply `labelledBy`, stamp the generated id onto the rendered
+      `<h2>` and forward it as `labelledBy`. When the consumer DOES
+      supply `labelledBy`, do NOT stamp the generated id (no orphan in
+      the DOM).
 - [ ] Update `SettingsDialog.tsx`: give the title an id (via
-      `createUniqueId`) and pass it as `labelledBy`; add `aria-label` to
-      the existing icon-only close button.
-- [ ] Update `HelpDialog.tsx`: same — unique title id + `labelledBy`;
-      add `aria-label` to the existing icon-only close button.
-- [ ] Update `NewTaskDialog.tsx`: unique title id + `labelledBy`. (The
-      dialog has no icon-only close button — its dismissal is via the
-      footer "Cancel" button — so no `aria-label` work is needed here.)
+      `createUniqueId`) and pass it as `labelledBy`; add
+      `aria-label="Close settings"` to the existing icon-only close
+      button at lines 101–114.
+- [ ] Update `HelpDialog.tsx`: unique title id + `labelledBy`; add
+      `aria-label="Close help"` to the existing icon-only close
+      button at lines 238–251.
+- [ ] Update `NewTaskDialog.tsx`: unique title id + `labelledBy`. (No
+      icon-only close button — dismissal is the footer "Cancel" button.)
 - [ ] Update `MergeDialog.tsx`: pass-through of `labelledBy` is now
       handled by the extended `ConfirmDialog` API; verify the link
-      resolves at render time. (`MergeDialog` does not render its own
-      close button, so no `aria-label` work is needed here.)
+      resolves at render time. (No icon-only close button.)
 - [ ] Update `DiffViewerDialog.tsx`: add a heading element using the
-      `.dialog-sr-only` utility class (clip-based hiding that keeps the
-      node in the accessibility tree, **not** `display: none` or
-      `visibility: hidden`) and wire its id as `labelledBy`.
+      new `.dialog-sr-only` utility class (clip-based hiding) whose
+      text incorporates the file being viewed (e.g.
+      `Diff viewer: ${props.scrollToFile ?? 'all changes'}`); wire
+      its id as `labelledBy`.
 - [ ] Add a `:focus-visible` outline rule in `src/styles.css` keyed on
-      `.dialog-panel` and matching the spec's broader interactive
-      enumeration (`button`, `input`, `select`, `textarea`, `a[href]`,
+      `.dialog-panel` matching the spec's interactive role enumeration
+      (`button`, `input`, `select`, `textarea`, `a[href]`,
       `[tabindex]:not([tabindex="-1"])`, `[role="button"]`,
-      `[role="switch"]`, `[role="checkbox"]`, `[role="link"]`) so the
-      rule covers icon buttons, toggles, and links inside dialogs.
+      `[role="switch"]`, `[role="checkbox"]`, `[role="link"]`,
+      `[role="menuitem"]`, `[role="menuitemradio"]`,
+      `[role="menuitemcheckbox"]`, `[role="tab"]`, `[role="option"]`,
+      `[role="combobox"]`, `[role="radio"]`).
 - [ ] Add the `.dialog-sr-only` utility (clip / sr-only) to
-      `src/styles.css` so `DiffViewerDialog`'s hidden heading can use
-      it without inventing a recipe.
-- [ ] Stack-aware `aria-modal` must restore the underlying panel's
-      `aria-modal="true"` when a topmost dialog closes, so reopening a
-      third dialog still finds the underlying as the next-top. Cover
-      this in tests.
-- [ ] Tests: add `Dialog.test.tsx`, `ConfirmDialog.test.tsx`, and
-      per-dialog assertions colocated next to each component (the
-      repo's convention is colocated `*.test.ts` / `*.test.tsx`, not a
-      `__tests__/` subdirectory) covering: panel has `role="dialog"`
-      and `aria-modal="true"`; the focus trap holds Tab inside the
-      panel; `aria-labelledby` resolves to a node whose trimmed
-      `textContent` is non-empty; stack-aware `aria-modal` removes the
-      attribute from the underlying panel when a second dialog opens
-      and restores it when the topmost closes; consumer-supplied
-      `labelledBy` to `ConfirmDialog` wins over the internal generated
-      id. Note that jsdom does not run AT name computation, so these
-      tests verify structure, not announcement.
-- [ ] Validate with `npm run typecheck`, `npm test`, and
+      `src/styles.css` so the hidden heading in `DiffViewerDialog` and
+      any future hidden-title use can share a recipe.
+- [ ] Verify `var(--accent)` resolves on `.dialog-panel` under each
+      shipping theme preset (Minimal, Islands Dark, Classic, etc.);
+      adjust the focus rule's fallback colour if any preset omits the
+      token.
+- [ ] Tests colocated next to each component (predominant convention
+      is `*.test.ts(x)` next to source; one existing `__tests__/`
+      directory at `src/lib/keybindings/__tests__/`). Add
+      `Dialog.test.tsx`, `ConfirmDialog.test.tsx`, and a small
+      assertion in each per-dialog test, covering:
+  - panel has `role="dialog"` and `aria-modal="true"`;
+  - the focus trap holds Tab inside the panel;
+  - focus moves into the panel on open;
+  - focus returns to the previously-focused element on close (or
+    `document.body` when the previous element is gone);
+  - `aria-labelledby` resolves to a node whose trimmed `textContent`
+    is non-empty;
+  - the linked title element is not hidden via `aria-hidden`,
+    `display:none`, or `visibility:hidden`;
+  - stack-aware `aria-modal` removes the attribute from the
+    underlying panel when a second dialog opens and restores it when
+    the topmost closes;
+  - three-stack: only the topmost panel has `aria-modal`;
+  - closing a non-topmost dialog leaves `aria-modal` on the topmost;
+  - Esc on a stacked dialog closes only the topmost and moves
+    keyboard focus into the underlying panel;
+  - consumer-supplied `labelledBy` to `ConfirmDialog` wins; the `<h2>`
+    has no orphan id;
+  - `createUniqueId`-based ids in two simultaneously-open dialogs do
+    not collide.
+- [ ] Verify the test setup supports two concurrent `<Portal>` mounts
+      in jsdom; if `document.body` becomes congested, use a
+      test-only render wrapper that mounts each Dialog into its own
+      detached node.
+- [ ] Validate with `npm run typecheck`, `npm test`,
+      `npm run format:check`, `npm run lint`, and
       `openspec validate --all --strict`.

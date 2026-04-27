@@ -23,9 +23,9 @@ The extension:
   `ConfirmDialog`'s own generated id to `Dialog` so the link works
   out of the box.
 - When the consumer DOES supply `labelledBy`, forward that value
-  unchanged; `ConfirmDialog`'s generated id remains on the `<h2>` but
-  is unused as a label reference. This avoids overwriting the
-  consumer's intent and the duplicate id is harmless.
+  unchanged AND omit `ConfirmDialog`'s internally-generated id from
+  the `<h2>` entirely. The cleaner contract — no orphan id sits in
+  the DOM where another component could accidentally key off it.
 - Forward `describedBy` to `Dialog` if the consumer passes one;
   `ConfirmDialog` does not synthesise a description id.
 
@@ -126,6 +126,68 @@ the editorial choice the initial implementation should make:
 A future change can revisit any of these without violating the spec,
 which only requires `describedBy` to be optional and to render correctly
 when supplied.
+
+## Initial focus and focus restoration
+
+The existing `Dialog` already wraps `lib/focus-trap.ts` for Tab cycling
+and `createFocusRestore` for restoring focus on close (capture
+`document.activeElement` at open, restore at close, skip if the user
+has clicked elsewhere meanwhile). This proposal pulls those guarantees
+into the spec so they cannot regress; no new code is required for the
+restore path. The implementation must verify the trap covers the
+broadened `:focus-visible` selector list (it currently selects on
+`button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])`).
+For elements that participate via ARIA role only (e.g. `<div
+role="button" tabindex="0">`), the trap already includes them via the
+`[tabindex]` clause provided they have non-negative `tabindex`.
+
+Initial-focus targeting: the panel itself has `tabindex={0}` today, so
+focus lands on the panel by default when the dialog opens. Consumers
+that want first-focusable-descendant semantics can opt in via
+component-local effects (e.g. `ConfirmDialog`'s
+`autoFocusCancel: true` is already wired this way).
+
+## Out-of-scope clarifications (cross-cutting)
+
+These are NOT covered by this proposal; called out so a reader who
+expected them does not file a follow-up:
+
+- **`role="alertdialog"`** for destructive `ConfirmDialog` (`danger`
+  variant). Spec hard-codes `role="dialog"` for every panel; a future
+  change can introduce `alertdialog` as an opt-in.
+- **`inert` / background `aria-hidden`** on the app shell while a
+  dialog is open. Modern guidance recommends this for virtual-cursor
+  AT users; the existing focus trap is sufficient for keyboard users
+  and the broader change has wider blast radius (theme tokens, focus
+  zones). Tracked as a follow-up.
+- **Outside-pointerdown closing the dialog.** UX decision; existing
+  behaviour is preserved.
+- **Tour overlay coupling.** The `add-onboarding-tour` proposal mounts
+  its own tooltip with `role="dialog"` separately from this `Dialog`
+  wrapper; it is therefore NOT part of this stack-aware aria-modal
+  store and does not interact with these scenarios. If the tour ever
+  migrates onto the shared `Dialog`, it inherits these scenarios.
+- **HelpDialog's keyboard-recording UI.** Continues to live inside the
+  focus trap; the trap holds Tab/Shift-Tab and the recorder consumes
+  other keys orthogonally.
+
+## Other dialogs in the codebase
+
+A walk through `src/components/` finds six additional Dialog-based
+components NOT covered by this proposal: `EditProjectDialog`,
+`ImportWorktreesDialog`, `PlanViewerDialog`, `PushDialog`,
+`ConnectPhoneModal`, plus the planned `TourOverlay`. They are
+deliberately out of scope here; once `Dialog`'s API is extended,
+follow-up changes can wire them up without further API churn (drop in
+a `createUniqueId` title id and a `labelledBy` prop). The proposal's
+scope is the six dialogs explicitly listed.
+
+## `createUniqueId` import
+
+Solid's `createUniqueId` (available since Solid 1.3; this repo is on
+1.9) is not currently used anywhere in the codebase. The
+implementation must add the import in `Dialog.tsx`, `ConfirmDialog.tsx`,
+and each consuming dialog as it is updated.
 
 ## Test surface
 

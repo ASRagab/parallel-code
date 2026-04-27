@@ -38,6 +38,51 @@ makes that promise true SHALL remain wired up.
   panel
 - **AND** subsequent dialog opens see it as the new top of the stack
 
+#### Scenario: Three or more stacked dialogs only mark the topmost
+
+- **WHEN** three (or more) dialogs are open simultaneously
+- **THEN** only the panel rendered topmost has `aria-modal="true"`
+- **AND** the other open panels render without an `aria-modal`
+  attribute
+
+#### Scenario: Closing a non-topmost dialog leaves the topmost as modal
+
+- **WHEN** a stacked dialog closes that is not the topmost (e.g. the
+  underlying dialog of a three-deep stack closes)
+- **THEN** the topmost panel still has `aria-modal="true"`
+- **AND** any remaining underlying panels still do not
+
+#### Scenario: Esc closes only the topmost stacked dialog
+
+- **WHEN** two or more dialogs are stacked and Esc is pressed
+- **THEN** only the topmost dialog closes
+- **AND** the underlying dialog regains `aria-modal="true"`
+- **AND** keyboard focus moves into the underlying panel (not back to
+  the trigger that originally opened the underlying dialog)
+
+### Requirement: Dialogs manage initial focus and restore it on close
+
+When a dialog opens it SHALL move keyboard focus into the panel. When
+the dialog closes it SHALL return focus to the element that was focused
+immediately before the dialog opened, unless that element is no longer
+in the DOM or is no longer focusable.
+
+#### Scenario: Focus moves into the panel on open
+
+- **WHEN** a `Dialog` opens
+- **THEN** `document.activeElement` is the panel itself or one of its
+  focusable descendants (the consumer-chosen first-focus target, the
+  first focusable descendant by tab order, or the panel's `tabindex=0`
+  fallback)
+
+#### Scenario: Focus returns to opener on close
+
+- **WHEN** a `Dialog` closes
+- **THEN** `document.activeElement` is the element that was focused
+  immediately before the dialog opened
+- **AND** if that element is no longer in the DOM or is no longer
+  focusable, focus falls back to `document.body`
+
 ### Requirement: Dialog panels link to their title
 
 Every dialog SHALL link its panel to a visible (or visually hidden) title
@@ -67,8 +112,10 @@ text.
   also providing a `title` string
 - **THEN** the value forwarded to `Dialog` as `aria-labelledby` is the
   consumer-supplied id
-- **AND** `ConfirmDialog`'s own internally-generated title id is left
-  on the rendered `<h2>` but is not used as `aria-labelledby`
+- **AND** `ConfirmDialog` does NOT also stamp its internally-generated
+  id onto the rendered `<h2>` (the `<h2>` carries no id when the
+  consumer supplied `labelledBy`), so no orphan id remains in the DOM
+  for an unrelated component to accidentally key off
 
 #### Scenario: Title element has accessible text
 
@@ -85,6 +132,10 @@ text.
 
 - **WHEN** `DiffViewerDialog` renders
 - **THEN** it includes a heading whose id is passed as `labelledBy`
+- **AND** the heading text identifies the diff being viewed (e.g.
+  includes the file path being viewed) so it does not collide with
+  other diff-viewer instances or other open dialogs in the user's
+  session
 - **AND** if the heading is visually hidden it uses the clip / sr-only
   pattern (which leaves the node in the accessibility tree) rather than
   `display: none` or `visibility: hidden` (which removes it)
@@ -97,8 +148,9 @@ announced by assistive technology.
 
 #### Scenario: Dialog accepts a describedBy prop
 
-- **WHEN** a consumer passes `describedBy="some-id"` to `Dialog`
-- **THEN** the panel renders `aria-describedby="some-id"`
+- **WHEN** a consumer passes `describedBy` to `Dialog` (a single id, or
+  the ARIA-allowed space-separated list of ids)
+- **THEN** the panel renders `aria-describedby` with that exact value
 
 #### Scenario: describedBy is optional
 
@@ -113,8 +165,10 @@ accessible name via `aria-label` so screen-reader users can identify it.
 #### Scenario: Close button has aria-label
 
 - **WHEN** a dialog renders an icon-only close button (no visible text)
-- **THEN** the button has an `aria-label` whose value clearly identifies
-  it as the close action (e.g. `"Close dialog"` or `"Close settings"`)
+- **THEN** the button has an `aria-label` whose value identifies it
+  as the close action and SHOULD include the dialog's name when known
+  (e.g. `Close settings`, `Close help`); a generic `Close dialog` is
+  acceptable only when the dialog has no stable name
 
 ### Requirement: Visible focus indicators inside dialogs
 
@@ -125,13 +179,14 @@ the panel being mounted in a Solid `<Portal>` outside the app root.
 
 #### Scenario: Interactive elements inside dialogs show a focus ring
 
-- **WHEN** an interactive element inside a dialog panel receives focus
-  via Tab or Shift-Tab — including any of `button`, `input`, `select`,
-  `textarea`, `a[href]`, `[tabindex]:not([tabindex="-1"])`,
-  `[role="button"]`, `[role="switch"]`, `[role="checkbox"]`, and
-  `[role="link"]`
-- **THEN** a visible focus indicator (e.g. an outline or ring matching
-  the app's accent colour) is rendered
+- **WHEN** an element inside a dialog panel that participates in the
+  keyboard tab cycle (form controls, links with `href`, elements with
+  non-negative `tabindex`) **or** carries an interactive ARIA role
+  (`button`, `link`, `switch`, `checkbox`, `menuitem`, `menuitemradio`,
+  `menuitemcheckbox`, `tab`, `option`, `combobox`, `radio`) receives
+  keyboard focus
+- **THEN** a visible focus indicator distinct from any hover/active
+  state is rendered
 
 #### Scenario: Indicator does not appear on mouse interaction alone
 

@@ -69,6 +69,31 @@ confused with the optional context object.
   hits a Proxy with a throwing trap) the logger emits the entry with
   `ctx` omitted entirely rather than propagating the error
 
+#### Scenario: Logger failure never throws into the caller
+
+- **WHEN** any internal logger step (timestamp formatting, `JSON.stringify`,
+  IPC invoke, `console` call, ctx normalisation) throws
+- **THEN** the exception is caught inside the logger
+- **AND** the calling code receives a normal synchronous return as if the
+  log call had succeeded
+- **AND** logger failures do not become user-visible errors or crash the
+  process
+
+#### Scenario: Output is bounded
+
+- **WHEN** an entry's serialised `ctx` would exceed 4 KB or its stack
+  trace would exceed 50 lines
+- **THEN** the offending field is truncated with a trailing `…` marker
+- **AND** the rest of the entry (level, category, message, remaining
+  fields) still emits
+
+#### Scenario: Logger calls do not recurse
+
+- **WHEN** code reachable from inside the logger module (timestamp,
+  serialisation, IPC plumbing) itself attempts to log
+- **THEN** the inner call is suppressed
+- **AND** the outer call still emits
+
 ### Requirement: Level gating by build and verbose flag
 
 The logger SHALL gate output by level according to the current build mode
@@ -97,6 +122,28 @@ and the user's `verboseLogging` setting.
 - **WHEN** the user toggles `verboseLogging` in `SettingsDialog`
 - **THEN** subsequent log calls reflect the new minimum level without
   requiring an app restart
+
+#### Scenario: Verbose level travels alongside forwarded entries
+
+- **WHEN** the renderer forwards an entry over `LogFromRenderer`
+- **THEN** the payload includes a `level_min` field carrying the
+  renderer's current minimum level
+- **AND** main updates its own minimum level from each received payload
+  so a verbose-toggle change converges within one forwarded entry
+- **AND** main entries emitted between toggle and the next forwarded
+  entry are gated by main's previous minimum level (accepted drift)
+
+#### Scenario: Level uses build-default until persisted state loads
+
+- **WHEN** the app is starting and persisted state has not yet resolved
+  from disk
+- **THEN** the logger uses the build-default minimum level (`debug` in
+  dev, `warn` in production) regardless of any persisted
+  `verboseLogging` value
+- **AND** entries emitted during this window resolve under the
+  build-default level
+- **AND** the level updates to reflect persisted `verboseLogging` once
+  load resolves; earlier entries are not retroactively re-emitted
 
 ### Requirement: No silent error swallowing
 
@@ -131,8 +178,10 @@ calls.
 
 #### Scenario: Test files are exempt
 
-- **WHEN** the catch lives in a test file (any file under `__tests__` or
-  matching `*.test.ts`)
+- **WHEN** the catch lives in a test file — colocated `*.test.ts` /
+  `*.test.tsx` next to the source (the predominant convention) or
+  inside an existing `__tests__/` directory (currently
+  `src/lib/keybindings/__tests__/`)
 - **THEN** the no-silent-swallow rule does not apply
 
 ### Requirement: Renderer logs forward to main
@@ -161,8 +210,8 @@ holds a single timeline of the session.
 
 #### Scenario: IPC forwarding is best-effort
 
-- **WHEN** `LogFromRenderer` cannot be delivered (e.g. preload not yet
-  initialised)
+- **WHEN** `LogFromRenderer` cannot be delivered (preload not yet wired,
+  the renderer is mid-reload, or `beforeunload` has fired)
 - **THEN** the renderer still emits the entry to its own `console`
 - **AND** the failure does not throw or block the calling code
 
@@ -176,6 +225,29 @@ holds a single timeline of the session.
   same category at level `warn` summarising how many entries were
   suppressed
 - **AND** the renderer's own `console` continues to receive every entry
+- **AND** flipping `verboseLogging` mid-window does not reset the
+  per-category counter or cancel the pending suppression notice
+
+#### Scenario: Main validates `LogFromRenderer` payloads
+
+- **WHEN** main receives a `LogFromRenderer` payload that does not match
+  the expected shape (`{ level: 'debug'|'info'|'warn'|'error', category:
+string, msg: string, ctx?: object, level_min?: same enum, ts: number }`)
+- **THEN** main drops the entry
+- **AND** main records a single `warn` under category `log.ipc` per
+  malformed shape per session (further occurrences of the same shape
+  are not re-logged)
+- **AND** main does not throw, propagate the error, or crash on
+  malformed input
+
+#### Scenario: Main-originated entries flow through the same level-gate
+
+- **WHEN** code in the main process calls the main logger directly
+- **THEN** the entry is gated by main's current minimum level (build
+  default, optionally raised by the most recent forwarded `level_min`)
+- **AND** the entry is formatted with the same shape used for forwarded
+  entries
+- **AND** main does not echo the entry back to any renderer
 
 #### Scenario: Forwarding rules apply equally in development
 
@@ -229,12 +301,24 @@ ad-hoc `console.log` calls.
 - **WHEN** a renderer-to-main IPC call is dispatched in dev or with
   verbose on
 - **THEN** the main process logs a `debug` entry under category `ipc`
-  with the channel name
-- **AND** the payload is included only for channels that are not in the
-  module-level `SENSITIVE_CHANNELS` set (channels carrying tokens,
-  paths under the user's home directory, or shell input)
+  with the channel name on dispatch
 - **AND** an entry is logged on completion with the result kind
-  (success / failure)
+  (`ok` for success or `err` for failure); a failure trace is at
+  `warn` level and records the error message but not the payload
+- **AND** the payload is omitted by default; it is logged only for
+  channels explicitly marked as safe in a `SAFE_FOR_TRACE` set
+  (default-deny rule, so a new channel cannot silently leak its
+  payload). The initial safe set is empty; reviewers may add channels
+  whose payloads are non-sensitive (no tokens, no home-relative
+  paths, no shell input, no file contents)
+- **AND** channels whose names match obvious sensitive categories
+  (`WriteToAgent`, `SetMinimaxApiKey`, `AskAboutCode`, `SaveAppState`,
+  `LoadAppState`, `SaveArenaData`, `LoadArenaData`, `SaveKeybindings`,
+  `LoadKeybindings`, `ShellOpenInEditor`, `ShellOpenFile`,
+  `ShellReveal`, `DialogOpen`, `OpenPath`, `ReadFileText`,
+  `SaveClipboardImage`, `CreateArenaWorktree`, `RemoveArenaWorktree`,
+  `CheckPathExists`, `ResolveProjectDockerfile`, `BuildDockerImage`)
+  MUST never appear in `SAFE_FOR_TRACE`
 
 #### Scenario: Git helpers trace command and exit code
 
@@ -255,3 +339,17 @@ ad-hoc `console.log` calls.
 - **WHEN** the build is production and `verboseLogging` is `false`
 - **THEN** none of the `ipc`, `git`, or `pty` debug traces produce
   output
+
+### Requirement: Verbose mode warns about log content
+
+The verbose-logging UI affordance SHALL warn the user, before the toggle
+is enabled, that subsequent logs may include local file paths, command
+arguments, and pty events. Token / argument redaction is out of scope
+for this proposal; the warning copy stands in for it.
+
+#### Scenario: Toggle copy carries a warning
+
+- **WHEN** `SettingsDialog` renders the "Verbose logging" toggle
+- **THEN** the explainer text immediately adjacent to the toggle states
+  that verbose logs may include paths, command arguments, and pty
+  events, and recommends reviewing logs before sharing them

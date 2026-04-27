@@ -56,7 +56,95 @@ unavailable the renderer still logs to its own console.
 `debug` and `info` are NOT forwarded by default; they would dominate the
 channel and add no value at production levels. With verbose mode on,
 forwarding extends to `info` (still not `debug`, to keep IPC volume
-sane).
+sane). Rationale: `debug` traces from the IPC layer alone are
+hundreds-per-second under normal use; pushing them across the IPC
+boundary defeats the purpose.
+
+### Payload schema
+
+```ts
+type LogFromRendererPayload = {
+  level: 'debug' | 'info' | 'warn' | 'error';
+  category: string;
+  msg: string;
+  ctx?: Record<string, unknown>;
+  // The renderer's current minimum level; main reconciles its own
+  // gate from this on every received entry, so a verbose-toggle
+  // change converges within one round-trip.
+  level_min: 'debug' | 'info' | 'warn' | 'error';
+  // Renderer-side `Date.now()` so main can preserve emit-time
+  // ordering when ingesting into a file sink later.
+  ts: number;
+};
+```
+
+Main validates this shape before processing; malformed payloads are
+dropped and reported once per shape per session under `log.ipc`.
+
+### What "single timeline" means
+
+Each entry carries a renderer-side `ts` (`Date.now()`). Main writes
+entries in arrival order and the `ts` field preserves emit-time. Across
+processes the spec admits arrival order may not exactly match emit
+order (Electron's IPC has no global clock and the renderer can issue
+several entries while main is busy); sort by `ts` when post-processing.
+
+### Pre-load and lifecycle gaps
+
+`LogFromRenderer` is unavailable during preload init, after
+`beforeunload`, and during a renderer reload. In each window the
+renderer logger MUST still emit to its own `console` so startup /
+shutdown diagnosis is possible without a working IPC. The spec
+formalises this; the implementation must not gate the console-write
+on IPC delivery.
+
+### Pre-load level
+
+Until persisted state has loaded, the logger uses the build-default
+level — not the persisted `verboseLogging`. This avoids a non-trivial
+"do we have the setting yet?" check inside hot log paths and is cheap:
+the only entries it affects are preload + pre-`loadState` startup
+paths.
+
+## IPC tracing strategy
+
+`electron/ipc/register.ts` is not a centralised router — it issues 40+
+independent `ipcMain.handle(IPC.X, handler)` calls. Adding a `debug`
+trace to "every handler entry/exit" therefore must NOT mean editing 40
+call sites. The implementation introduces a single wrapper:
+
+```ts
+function tracedHandle<T>(
+  channel: IPC,
+  handler: (event: IpcMainInvokeEvent, args: unknown) => Promise<T> | T,
+): void {
+  ipcMain.handle(channel, async (event, args) => {
+    debug('ipc', channel, SAFE_FOR_TRACE.has(channel) ? { args } : undefined);
+    try {
+      const result = await handler(event, args);
+      debug('ipc', `${channel} ok`);
+      return result;
+    } catch (err) {
+      warn('ipc', `${channel} err`, { err: errMessage(err) });
+      throw err;
+    }
+  });
+}
+```
+
+All existing `ipcMain.handle` calls in `register.ts` are refactored to
+`tracedHandle`. Tests target `tracedHandle` directly so the trace
+behaviour is unit-testable without spinning up Electron.
+
+## Git tracing strategy
+
+`electron/ipc/git.ts` runs git via direct `execFile` / `execFileSync`
+calls scattered across helpers (no central `runGit()` exists today).
+The implementation adds a `runGit(args, cwd)` (and `runGitSync(args,
+cwd)`) helper that emits the `git` debug trace on entry and exit, then
+migrates all call sites to use it. This is part of the implementation,
+not the spec — the spec only requires the trace to fire for every git
+command.
 
 ## Catch-block sweep policy
 
@@ -110,13 +198,15 @@ surprise the implementer.
   not enforce it. A follow-up may add a custom ESLint rule that flags
   empty arrow functions in `.catch()` and empty `catch {}` blocks. Until
   then, code review is the only check.
-- **Sensitive-channel taxonomy.** The spec's IPC trace scenario gates
-  payload logging on a `SENSITIVE_CHANNELS` set. The initial
-  implementation populates that set with at minimum: any channel that
-  forwards user input from a pty, any channel that round-trips a token
-  or auth header (e.g. ask-code provider channels), and any channel
-  whose payload includes a path under the user's home directory. The
-  set is module-level and reviewed alongside new channels.
+- **Sensitive-channel taxonomy: default-deny.** The spec gates payload
+  logging on an explicit `SAFE_FOR_TRACE` set, **not** a sensitive set.
+  This inverts the default so that adding a new channel cannot silently
+  leak its payload — a reviewer must consciously add the channel to
+  the safe set if logging the payload is acceptable. The spec lists the
+  initial blocklist of channels that MUST never be marked safe; any
+  channel not in that blocklist still defaults to "payload omitted"
+  unless explicitly added to `SAFE_FOR_TRACE`. The initial safe set is
+  empty and grows by review.
 - **Token / secret leakage beyond IPC.** Verbose mode also exposes git
   command arguments and pty events. These are not gated by
   `SENSITIVE_CHANNELS` because they are not IPC. Users who turn verbose
