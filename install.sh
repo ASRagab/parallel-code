@@ -29,7 +29,9 @@ case "$OS" in
             exit 1
         fi
 
+        APP_NAME=$(basename "$APP_FILE")
         echo "Installing to /Applications..."
+        rm -rf "/Applications/$APP_NAME"
         cp -R "$APP_FILE" /Applications/
         hdiutil detach "$MOUNT_DIR"
 

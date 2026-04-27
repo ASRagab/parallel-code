@@ -12,7 +12,7 @@
     "dev": "npm run compile && concurrently -k \"vite --config electron/vite.config.electron.ts\" \"wait-on http://localhost:1421 && VITE_DEV_SERVER_URL=http://localhost:1421 electron --no-sandbox dist-electron/main.js\"",
     "typecheck": "tsc --noEmit",
     "compile": "tsc -p electron/tsconfig.json",
-    "build:frontend": "vite build --config electron/vite.config.electron.ts",
+    "build:frontend": "NODE_OPTIONS='--max-old-space-size=4096' vite build --config electron/vite.config.electron.ts",
     "build:remote": "vite build --config src/remote/vite.config.ts",
     "build": "npm run build:frontend && npm run build:remote && npm run compile && electron-builder",
     "serve": "vite preview --config electron/vite.config.electron.ts",
