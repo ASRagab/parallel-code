@@ -41,7 +41,8 @@ interface TaskPanelProps {
   isActive: boolean;
 }
 
-const STEPS_PANEL_AUTO_MAX_PX = 160;
+const STEPS_PANEL_AUTO_MAX_PX = 240;
+const CHANGED_FILES_PANEL_AUTO_MAX_PX = 300;
 
 export function TaskPanel(props: TaskPanelProps) {
   const [showCloseConfirm, setShowCloseConfirm] = createSignal(false);
@@ -319,6 +320,7 @@ export function TaskPanel(props: TaskPanelProps) {
   const changedFilesChild: PanelChild = {
     id: 'changed-files',
     minSize: 100,
+    maxAutoSize: CHANGED_FILES_PANEL_AUTO_MAX_PX,
     content: () => changedFilesEl,
   };
 

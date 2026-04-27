@@ -40,7 +40,8 @@ export function TaskChangedFilesSection(props: TaskChangedFilesSectionProps) {
         // horizontal, 50/50 with notes). `min-height` gives the content-sized
         // case (split-right vertical) a usable default, while `max-height`
         // keeps the panel from ballooning past ~40 % of the viewport when the
-        // changed-file list is long.
+        // changed-file list is long. The ResizablePanel wrapper applies the
+        // fixed 300 px cap for unpinned auto-growth.
         height: '100%',
         'min-height': '140px',
         'max-height': '40vh',
