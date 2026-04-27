@@ -19,6 +19,7 @@ import {
   setShowSidebarProgress,
   setFontSmoothing,
   setDesktopNotificationsEnabled,
+  setVerboseLogging,
   setInactiveColumnOpacity,
   setEditorCommand,
   setDockerImage,
@@ -651,6 +652,36 @@ export function SettingsDialog(props: SettingsDialogProps) {
             This font includes ligatures which may impact rendering performance.
           </span>
         </Show>
+      </div>
+
+      <div style={{ display: 'flex', 'flex-direction': 'column', gap: '10px' }}>
+        <div style={{ ...sectionLabelStyle, 'font-weight': '600' }}>Diagnostics</div>
+        <label
+          style={{
+            display: 'flex',
+            'align-items': 'center',
+            gap: '10px',
+            cursor: 'pointer',
+            padding: '8px 12px',
+            'border-radius': '8px',
+            background: theme.bgInput,
+            border: `1px solid ${theme.border}`,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={store.verboseLogging}
+            onChange={(e) => setVerboseLogging(e.currentTarget.checked)}
+            style={{ 'accent-color': theme.accent, cursor: 'pointer' }}
+          />
+          <div style={{ display: 'flex', 'flex-direction': 'column', gap: '2px' }}>
+            <span style={{ 'font-size': '14px', color: theme.fg }}>Verbose logging</span>
+            <span style={{ 'font-size': '12px', color: theme.fgSubtle }}>
+              Emit debug-level logs to the developer console. Verbose logs may include file paths,
+              command arguments, and pty events — review before sharing.
+            </span>
+          </div>
+        </label>
       </div>
     </Dialog>
   );

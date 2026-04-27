@@ -109,6 +109,7 @@ export {
   setShowSidebarProgress,
   setFontSmoothing,
   setDesktopNotificationsEnabled,
+  setVerboseLogging,
   setInactiveColumnOpacity,
   setEditorCommand,
   setDockerImage,

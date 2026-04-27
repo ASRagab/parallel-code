@@ -157,6 +157,7 @@ export interface PersistedState {
   customAgents?: AgentDef[];
   keybindingMigrationDismissed?: boolean;
   focusMode?: boolean;
+  verboseLogging?: boolean;
 }
 
 // Panel cell IDs. Shell terminals use "shell:0", "shell:1", etc.
@@ -242,4 +243,5 @@ export interface AppStore {
   focusMode: boolean;
   /** Per-task flag: true when the task is rendering its focus-mode two-column layout. */
   taskSplitMode: Record<string, boolean>;
+  verboseLogging: boolean;
 }

@@ -1,0 +1,220 @@
+// Structured logger for the main process.
+//
+// Pairs with src/lib/log.ts (renderer); both modules expose the same
+// `debug | info | warn | error` surface so call sites read identically.
+// Renderer logs at warn/error (and info when verbose) are forwarded
+// here over LogFromRenderer; this module is the merge point.
+//
+// This is the one place in the codebase where console.{info,debug}
+// is intentional — every other module routes through this logger.
+
+/* eslint-disable no-console */
+
+import type { IpcMain } from 'electron';
+import { IPC } from './ipc/channels.js';
+
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export type LogContext = Record<string, unknown>;
+
+export type LogFromRendererPayload = {
+  level: LogLevel;
+  category: string;
+  msg: string;
+  ctx?: LogContext;
+  level_min: LogLevel;
+  ts: number;
+};
+
+const LEVEL_RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+
+const CTX_MAX_BYTES = 4 * 1024;
+const STACK_MAX_LINES = 50;
+const RENDERER_MALFORMED_SHAPES = new Set<string>();
+
+const isProd = process.env.NODE_ENV === 'production';
+let minLevel: LogLevel = isProd ? 'warn' : 'debug';
+
+let inLogger = false;
+
+export function setMinLevel(level: LogLevel): void {
+  minLevel = level;
+}
+
+export function getMinLevel(): LogLevel {
+  return minLevel;
+}
+
+export function debug(category: string, msg: string, ctx?: LogContext): void {
+  emit('debug', category, msg, ctx);
+}
+
+export function info(category: string, msg: string, ctx?: LogContext): void {
+  emit('info', category, msg, ctx);
+}
+
+export function warn(category: string, msg: string, ctx?: LogContext): void {
+  emit('warn', category, msg, ctx);
+}
+
+export function error(category: string, msg: string, err: unknown, ctx?: LogContext): void {
+  emit('error', category, msg, ctx, err);
+}
+
+function emit(
+  level: LogLevel,
+  category: string,
+  msg: string,
+  ctx: LogContext | undefined,
+  err?: unknown,
+): void {
+  if (inLogger) return;
+  if (LEVEL_RANK[level] < LEVEL_RANK[minLevel]) return;
+  inLogger = true;
+  try {
+    const ts = formatTimestamp(Date.now());
+    const ctxStr = serialiseCtx(ctx);
+    const head = `[${ts}] ${level.toUpperCase()} ${category} — ${msg}${ctxStr}`;
+    writeConsole(level, head);
+    if (level === 'error') {
+      const stack = stackFrom(err);
+      if (stack !== null) writeConsole(level, stack);
+    }
+  } catch {
+    // Logger never throws into the caller.
+  } finally {
+    inLogger = false;
+  }
+}
+
+function writeConsole(level: LogLevel, line: string): void {
+  try {
+    if (level === 'error') console.error(line);
+    else if (level === 'warn') console.warn(line);
+    else if (level === 'info') console.info(line);
+    else console.debug(line);
+  } catch {
+    // ignore — logger never throws
+  }
+}
+
+function formatTimestamp(epochMs: number): string {
+  try {
+    const d = new Date(epochMs);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    const ms = String(d.getMilliseconds()).padStart(3, '0');
+    return `${hh}:${mm}:${ss}.${ms}`;
+  } catch {
+    return '00:00:00.000';
+  }
+}
+
+function serialiseCtx(ctx: LogContext | undefined): string {
+  if (ctx === undefined) return '';
+  let body: string;
+  try {
+    body = JSON.stringify(ctx, replacerWithCircular());
+  } catch {
+    try {
+      const safe: Record<string, unknown> = {};
+      for (const k of Object.keys(ctx)) {
+        try {
+          JSON.stringify(ctx[k], replacerWithCircular());
+          safe[k] = ctx[k];
+        } catch {
+          safe[k] = '[unserialisable]';
+        }
+      }
+      body = JSON.stringify(safe);
+    } catch {
+      return '';
+    }
+  }
+  if (body.length > CTX_MAX_BYTES) body = body.slice(0, CTX_MAX_BYTES) + '…';
+  return ' ' + body;
+}
+
+function replacerWithCircular(): (k: string, v: unknown) => unknown {
+  const seen = new WeakSet<object>();
+  return (_k, v) => {
+    if (typeof v === 'object' && v !== null) {
+      if (seen.has(v)) return '[circular]';
+      seen.add(v);
+      if (v instanceof Node || (v as { nodeType?: number })?.nodeType !== undefined) {
+        return '[node]';
+      }
+    }
+    if (typeof v === 'function') return '[function]';
+    return v;
+  };
+}
+
+function stackFrom(err: unknown): string | null {
+  if (err === undefined) return null;
+  if (err instanceof Error && typeof err.stack === 'string') return clipStack(err.stack);
+  if (err && typeof err === 'object' && typeof (err as { stack?: unknown }).stack === 'string') {
+    return clipStack((err as { stack: string }).stack);
+  }
+  if (err === null) return 'null';
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+function clipStack(stack: string): string {
+  const lines = stack.split('\n');
+  if (lines.length <= STACK_MAX_LINES) return stack;
+  return lines.slice(0, STACK_MAX_LINES).join('\n') + '\n…';
+}
+
+const VALID_LEVELS: ReadonlySet<string> = new Set<LogLevel>(['debug', 'info', 'warn', 'error']);
+
+export function isValidPayload(value: unknown): value is LogFromRendererPayload {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  if (!VALID_LEVELS.has(v.level as string)) return false;
+  if (!VALID_LEVELS.has(v.level_min as string)) return false;
+  if (typeof v.category !== 'string') return false;
+  if (typeof v.msg !== 'string') return false;
+  if (typeof v.ts !== 'number') return false;
+  if (v.ctx !== undefined && (typeof v.ctx !== 'object' || v.ctx === null)) return false;
+  return true;
+}
+
+function payloadShape(value: unknown): string {
+  if (!value || typeof value !== 'object') return typeof value;
+  const v = value as Record<string, unknown>;
+  return [
+    `level=${typeof v.level}`,
+    `category=${typeof v.category}`,
+    `msg=${typeof v.msg}`,
+    `ctx=${v.ctx === undefined ? 'undefined' : typeof v.ctx}`,
+    `level_min=${typeof v.level_min}`,
+    `ts=${typeof v.ts}`,
+  ].join(',');
+}
+
+/**
+ * Wire the LogFromRenderer IPC handler. Call once at app startup.
+ */
+export function registerLogHandler(ipc: IpcMain): void {
+  ipc.handle(IPC.LogFromRenderer, (_e, raw) => {
+    if (!isValidPayload(raw)) {
+      const shape = payloadShape(raw);
+      if (!RENDERER_MALFORMED_SHAPES.has(shape)) {
+        RENDERER_MALFORMED_SHAPES.add(shape);
+        warn('log.ipc', 'malformed LogFromRenderer payload dropped', { shape });
+      }
+      return;
+    }
+    // Reconcile main's level from renderer's reported minimum.
+    if (LEVEL_RANK[raw.level_min] < LEVEL_RANK[minLevel]) minLevel = raw.level_min;
+    // Forward the entry through main's normal pipeline.
+    emit(raw.level, `r.${raw.category}`, raw.msg, raw.ctx);
+  });
+}

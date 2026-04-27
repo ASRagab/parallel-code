@@ -14,6 +14,7 @@ import { WindowTitleBar } from './components/WindowTitleBar';
 import { FocusModeTaskIndicators } from './components/FocusModeTaskIndicators';
 import { WindowResizeHandles } from './components/WindowResizeHandles';
 import { theme } from './lib/theme';
+import * as log from './lib/log';
 import {
   store,
   loadAgents,
@@ -250,6 +251,11 @@ function App() {
   // xterm's ScreenDprMonitor to re-render at the correct resolution.
   createEffect(() => {
     window.electron.setZoomFactor(store.globalScale);
+  });
+
+  // Sync the renderer logger's verbose state with the persisted setting.
+  createEffect(() => {
+    log.setVerbose(store.verboseLogging);
   });
 
   onMount(async () => {

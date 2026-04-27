@@ -65,6 +65,7 @@ export async function saveState(): Promise<void> {
     customAgents: store.customAgents.length > 0 ? [...store.customAgents] : undefined,
     keybindingMigrationDismissed: store.keybindingMigrationDismissed || undefined,
     focusMode: store.focusMode || undefined,
+    verboseLogging: store.verboseLogging || undefined,
   };
 
   for (const taskId of store.taskOrder) {
@@ -252,6 +253,7 @@ interface LegacyPersistedState {
   terminals?: unknown;
   keybindingMigrationDismissed?: unknown;
   focusMode?: unknown;
+  verboseLogging?: unknown;
 }
 
 export async function loadState(): Promise<void> {
@@ -388,6 +390,8 @@ export async function loadState(): Promise<void> {
       s.editorCommand = typeof rawEditorCommand === 'string' ? rawEditorCommand.trim() : '';
 
       s.focusMode = raw.focusMode === true;
+
+      s.verboseLogging = typeof raw.verboseLogging === 'boolean' ? raw.verboseLogging : false;
 
       const rawDockerImage = raw.dockerImage;
       s.dockerImage =

@@ -1,9 +1,10 @@
-import { app, BrowserWindow, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 import { registerAllHandlers } from './ipc/register.js';
+import { registerLogHandler } from './log.js';
 import { killAllAgents } from './ipc/pty.js';
 import { stopAllPlanWatchers } from './ipc/plans.js';
 import { stopAllStepsWatchers } from './ipc/steps.js';
@@ -124,6 +125,7 @@ function createWindow() {
     },
   });
 
+  registerLogHandler(ipcMain);
   registerAllHandlers(mainWindow);
 
   // Open links in external browser instead of inside Electron

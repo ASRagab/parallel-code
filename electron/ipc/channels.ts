@@ -129,4 +129,7 @@ export enum IPC {
   StartPrChecksWatcher = 'start_pr_checks_watcher',
   StopPrChecksWatcher = 'stop_pr_checks_watcher',
   PrChecksUpdate = 'pr_checks_update',
+
+  // Logging
+  LogFromRenderer = 'log_from_renderer',
 }

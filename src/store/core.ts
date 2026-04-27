@@ -70,6 +70,7 @@ export const [store, setStore] = createStore<AppStore>({
   keybindingMigrationDismissed: false,
   focusMode: false,
   taskSplitMode: {},
+  verboseLogging: false,
 });
 
 type CleanupPanelStore = Pick<
