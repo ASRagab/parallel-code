@@ -162,16 +162,15 @@ function replacerWithCircular(): (k: string, v: unknown) => unknown {
 function stackFrom(err: unknown): string | null {
   if (err === undefined) return null;
   if (err instanceof Error && typeof err.stack === 'string') return clipStack(err.stack);
-  if (err && typeof err === 'object' && typeof (err as { stack?: unknown }).stack === 'string') {
-    return clipStack((err as { stack: string }).stack);
+  if (err && typeof err === 'object') {
+    const candidate = (err as { stack?: unknown }).stack;
+    if (typeof candidate === 'string') return clipStack(candidate);
+    // Non-string stack property: per spec, ignored. No stack section.
+    return null;
   }
   if (err === null) return 'null';
   if (typeof err === 'string') return err;
-  try {
-    return JSON.stringify(err);
-  } catch {
-    return String(err);
-  }
+  return null;
 }
 
 function clipStack(stack: string): string {
