@@ -375,7 +375,13 @@ export function TaskPanel(props: TaskPanelProps) {
           onTitleEditRef={(h) => (titleEditHandle = h)}
         />
       </div>
-      <div style={{ flex: '0 0 28px', overflow: 'hidden' }}>
+      <div
+        style={{
+          flex: '0 0 29px',
+          overflow: 'hidden',
+          'border-bottom': `1px solid ${theme.border}`,
+        }}
+      >
         <TaskBranchInfoBar task={props.task} onEditProject={(id) => setEditingProjectId(id)} />
       </div>
       <div style={{ flex: '1', 'min-height': '0' }}>

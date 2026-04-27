@@ -526,7 +526,9 @@ html[data-look='workbench'] {
   --island-bg: #252526;
   --island-border: #2b2b2b;
   --island-radius: 0;
-  --task-container-bg: #252526;
+  /* Container matches panel so resize-handle gaps inside a column blend
+     into the panel surface (islands-style). Only the 1px hairline reads. */
+  --task-container-bg: #1f1f1f;
   --task-panel-bg: #1f1f1f;
 }
 
