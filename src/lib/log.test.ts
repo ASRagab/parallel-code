@@ -147,20 +147,25 @@ describe('renderer logger — rate cap', () => {
   });
 
   it('suppression notice survives a new entry arriving after window-end', () => {
-    // 60 entries at t=0 → 50 forwarded, 10 suppressed, timer scheduled.
+    // 60 entries at t=0 → 50 forwarded, 10 suppressed, timer scheduled
+    // for t=1000.
     for (let i = 0; i < 60; i++) log.warn('rate-cap-3', `msg ${i}`);
     expect(invokeMock).toHaveBeenCalledTimes(50);
 
-    // Advance past window end. New entry arrives at t≈1100; must not stomp
-    // the suppressed count before the timer reads it.
-    vi.advanceTimersByTime(1_100);
+    // Move the clock past window-end WITHOUT firing the pending timer
+    // (setSystemTime doesn't drain the timer queue, unlike advanceTimersByTime).
+    vi.setSystemTime(1_000_000 + 1_100);
+    // A new entry arrives in the gap. It belongs to a fresh window and
+    // must not corrupt the suppressed-count the timer is about to report.
     log.warn('rate-cap-3', 'after-window');
-    vi.advanceTimersByTime(0);
-    const notice = invokeMock.mock.calls.find((c) =>
+    // Now run the pending timer. The notice must accurately report the
+    // 10 suppressed entries from the original window — not 11, not 0.
+    vi.runAllTimers();
+    const notices = invokeMock.mock.calls.filter((c) =>
       String((c[1] as { msg?: unknown }).msg ?? '').startsWith('rate-limit suppressed'),
     );
-    expect(notice).toBeDefined();
-    expect((notice?.[1] as { msg: string }).msg).toMatch(/suppressed 10 entries/);
+    expect(notices).toHaveLength(1);
+    expect((notices[0][1] as { msg: string }).msg).toMatch(/suppressed 10 entries/);
   });
 });
 

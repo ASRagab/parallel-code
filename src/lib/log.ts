@@ -34,7 +34,11 @@ let inLogger = false;
 
 type RateBucket = { windowStart: number; count: number; suppressed: number };
 const rateBuckets = new Map<string, RateBucket>();
-const pendingNotices = new Map<string, ReturnType<typeof setTimeout>>();
+// Each pending notice captures the bucket it belongs to so a new entry
+// arriving after window-end can roll the live bucket without disturbing
+// the count the timer is about to read.
+type PendingNotice = { timer: ReturnType<typeof setTimeout>; bucket: RateBucket };
+const pendingNotices = new Map<string, PendingNotice>();
 
 export function setVerbose(value: boolean): void {
   verbose = value;
@@ -199,13 +203,7 @@ function forwardIfNeeded(
 
 function takeRateBudget(category: string, nowMs: number): boolean {
   let bucket = rateBuckets.get(category);
-  // Don't roll the window if a suppression notice is still pending —
-  // overwriting the bucket here would lose the `suppressed` count before
-  // the timer can read it. The notice path will reset the bucket itself.
-  if ((!bucket || nowMs - bucket.windowStart >= RATE_WINDOW_MS) && !pendingNotices.has(category)) {
-    bucket = { windowStart: nowMs, count: 0, suppressed: 0 };
-    rateBuckets.set(category, bucket);
-  } else if (!bucket) {
+  if (!bucket || nowMs - bucket.windowStart >= RATE_WINDOW_MS) {
     bucket = { windowStart: nowMs, count: 0, suppressed: 0 };
     rateBuckets.set(category, bucket);
   }
@@ -216,31 +214,30 @@ function takeRateBudget(category: string, nowMs: number): boolean {
   bucket.suppressed += 1;
   if (!pendingNotices.has(category)) {
     const remaining = RATE_WINDOW_MS - (nowMs - bucket.windowStart);
-    pendingNotices.set(
-      category,
-      setTimeout(() => emitSuppressionNotice(category), Math.max(0, remaining)),
+    // Capture THIS bucket in the closure so the timer reads its count
+    // even if takeRateBudget rolls a fresh bucket later. Otherwise an
+    // entry arriving after window-end but before the timer fires would
+    // overwrite `bucket` with `suppressed: 0` and the notice would say
+    // zero (or stomp the previous suppressed count).
+    const captured = bucket;
+    const timer = setTimeout(
+      () => {
+        pendingNotices.delete(category);
+        if (captured.suppressed === 0) return;
+        invokeForward({
+          level: 'warn',
+          category,
+          msg: `rate-limit suppressed ${captured.suppressed} entries`,
+          ctx: undefined,
+          level_min: minLevel,
+          ts: Date.now(),
+        });
+      },
+      Math.max(0, remaining),
     );
+    pendingNotices.set(category, { timer, bucket: captured });
   }
   return false;
-}
-
-function emitSuppressionNotice(category: string): void {
-  pendingNotices.delete(category);
-  const bucket = rateBuckets.get(category);
-  // Reset the bucket regardless of suppressed count so a future entry
-  // starts a fresh window. Without this the `pendingNotices`-blocked path
-  // in takeRateBudget would leave a stale bucket in place forever.
-  rateBuckets.delete(category);
-  if (!bucket || bucket.suppressed === 0) return;
-  const ts = Date.now();
-  invokeForward({
-    level: 'warn',
-    category,
-    msg: `rate-limit suppressed ${bucket.suppressed} entries`,
-    ctx: undefined,
-    level_min: minLevel,
-    ts,
-  });
 }
 
 type ForwardPayload = {

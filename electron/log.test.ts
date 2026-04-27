@@ -64,4 +64,16 @@ describe('main logger — payload validation', () => {
   it('accepts a normally-sized ctx', () => {
     expect(isValidPayload({ ...base, ctx: { taskId: 't1', err: 'short' } })).toBe(true);
   });
+
+  it('rejects oversized circular ctx (size cap is not bypassable via cycles)', () => {
+    const big: Record<string, unknown> = { s: 'x'.repeat(20_000) };
+    big.self = big;
+    expect(isValidPayload({ ...base, ctx: big })).toBe(false);
+  });
+
+  it('accepts a small circular ctx', () => {
+    const small: Record<string, unknown> = { name: 'small' };
+    small.self = small;
+    expect(isValidPayload({ ...base, ctx: small })).toBe(true);
+  });
 });

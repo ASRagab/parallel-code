@@ -78,11 +78,23 @@ export function installIpcTracing(ipcMain: IpcMain): void {
   handleProxy.handle = (channel: string, listener: HandleListener): void => {
     original(channel, (event, ...args) => {
       // Fast-path: when the logger's minimum level is above `debug`, skip
-      // the trace wrapper entirely. This preserves the synchronous return
-      // shape for sync handlers (no microtask hop) and avoids two unused
-      // debug() calls per dispatch on the WriteToAgent-style hot paths.
+      // the dispatch and completion debug entries (which are level-gated
+      // anyway) but still surface failures via warn. Sync handlers keep
+      // their synchronous return shape on the success path.
       if (getMinLevel() !== 'debug') {
-        return listener(event, ...args);
+        try {
+          const result = listener(event, ...args);
+          if (result instanceof Promise) {
+            return result.catch((err) => {
+              warn('ipc', `${channel} err`, { err: errMessage(err) });
+              throw err;
+            });
+          }
+          return result;
+        } catch (err) {
+          warn('ipc', `${channel} err`, { err: errMessage(err) });
+          throw err;
+        }
       }
       return tracedDispatch(channel, listener, event, args);
     });

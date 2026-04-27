@@ -192,19 +192,31 @@ export function isValidPayload(value: unknown): value is LogFromRendererPayload 
   if (typeof v.ts !== 'number') return false;
   if (v.ctx !== undefined) {
     if (typeof v.ctx !== 'object' || v.ctx === null || Array.isArray(v.ctx)) return false;
-    // Bound input ctx size so a renderer cannot OOM main with a huge object.
-    // Trial-stringify; reject if the wire-form size is unreasonable.
+    // Bound input ctx size so a renderer cannot OOM main with a huge
+    // object. Use a circular-safe stringify so a circular reference
+    // doesn't bypass the bound by throwing.
     let size = 0;
     try {
-      size = JSON.stringify(v.ctx).length;
+      size = JSON.stringify(v.ctx, ctxSizeReplacer()).length;
     } catch {
-      // Unserialisable here is not a hard rejection — emit() has its own
-      // safe-fallback. Treat as size 0 so we accept the entry.
-      size = 0;
+      // Stringify still failed — reject rather than silently accept.
+      return false;
     }
     if (size > CTX_MAX_BYTES_INPUT) return false;
   }
   return true;
+}
+
+function ctxSizeReplacer(): (k: string, v: unknown) => unknown {
+  const seen = new WeakSet<object>();
+  return (_k, v) => {
+    if (typeof v === 'object' && v !== null) {
+      if (seen.has(v)) return '[circular]';
+      seen.add(v);
+    }
+    if (typeof v === 'function') return '[function]';
+    return v;
+  };
 }
 
 function payloadShape(value: unknown): string {
