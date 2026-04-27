@@ -3,6 +3,7 @@ import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { store, setStore } from './core';
 import type { WorktreeStatus } from '../ipc/types';
+import { warn as logWarn } from '../lib/log';
 
 // --- Trust-specific patterns (subset of QUESTION_PATTERNS) ---
 // These are auto-accepted when autoTrustFolders is enabled.
@@ -574,7 +575,9 @@ function tryAutoTrust(agentId: string, rawTail: string): boolean {
     // Start the settling period — blocks auto-send for POST_AUTO_TRUST_SETTLE_MS
     // to give slow-starting agents (e.g. Claude Code) time to fully initialize.
     state.autoTrustAcceptedAt = Date.now();
-    invoke(IPC.WriteToAgent, { agentId, data: '\r' }).catch(() => {});
+    invoke(IPC.WriteToAgent, { agentId, data: '\r' }).catch((err) => {
+      logWarn('tasks.autoTrust', 'WriteToAgent failed during auto-trust accept', { err });
+    });
     // Cooldown: ignore trust patterns for 1s so the same dialog
     // isn't re-matched while the PTY output transitions.
     // (The tail buffer is cleared above, so re-detection is only possible

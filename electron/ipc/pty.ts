@@ -8,6 +8,7 @@ import type { BrowserWindow } from 'electron';
 import { RingBuffer } from '../remote/ring-buffer.js';
 import { resolveUserShell } from '../user-shell.js';
 import { ensureClaudeSandboxFiles, ensureSandboxExcludes } from './git.js';
+import { debug as logDebug } from '../log.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,6 +48,9 @@ export function onPtyEvent(event: PtyEventType, listener: PtyEventListener): () 
 }
 
 function emitPtyEvent(event: PtyEventType, agentId: string, data?: unknown): void {
+  if (event === 'spawn' || event === 'exit') {
+    logDebug('pty', `${event} ${agentId}`, data ? { data } : undefined);
+  }
   eventListeners.get(event)?.forEach((fn) => fn(agentId, data));
 }
 

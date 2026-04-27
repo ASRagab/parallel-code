@@ -13,6 +13,7 @@ import { isMac } from '../lib/platform';
 import { resolvedBindings } from '../store/keybindings';
 import { matchesKeyEvent } from '../lib/keybindings';
 import { store, setTaskLastInputAt } from '../store/store';
+import { warn as logWarn } from '../lib/log';
 import { registerTerminal, unregisterTerminal, markDirty } from '../lib/terminalFitManager';
 import type { PtyOutput } from '../ipc/types';
 
@@ -250,7 +251,9 @@ export function TerminalView(props: TerminalViewProps) {
             // Fall back to clipboard image → save to temp file and paste path
             const filePath = await invoke<string | null>(IPC.SaveClipboardImage);
             if (filePath) enqueueInput(filePath);
-          })().catch(() => {});
+          })().catch((err: unknown) => {
+            logWarn('terminal.paste', 'paste handler failed', { err });
+          });
           return false;
         }
 
@@ -347,7 +350,8 @@ export function TerminalView(props: TerminalViewProps) {
         // Resume PTY reader when xterm.js has caught up
         if (watermark < FLOW_LOW && ptyPaused) {
           ptyPaused = false;
-          invoke(IPC.ResumeAgent, { agentId }).catch(() => {
+          invoke(IPC.ResumeAgent, { agentId }).catch((err: unknown) => {
+            logWarn('terminal.flow', 'ResumeAgent failed', { err });
             ptyPaused = false;
           });
         }
@@ -381,7 +385,8 @@ export function TerminalView(props: TerminalViewProps) {
       // Pause PTY reader when xterm.js falls behind
       if (watermark > FLOW_HIGH && !ptyPaused) {
         ptyPaused = true;
-        invoke(IPC.PauseAgent, { agentId }).catch(() => {
+        invoke(IPC.PauseAgent, { agentId }).catch((err: unknown) => {
+          logWarn('terminal.flow', 'PauseAgent failed', { err });
           ptyPaused = false;
         });
       }

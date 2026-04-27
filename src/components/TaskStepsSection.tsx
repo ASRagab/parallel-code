@@ -5,6 +5,7 @@ import { useFocusRegistration } from '../lib/focus-registration';
 import { store, setTaskFocusedPanel } from '../store/store';
 import type { Task } from '../store/types';
 import type { StepEntry } from '../ipc/types';
+import { warn as logWarn } from '../lib/log';
 
 const STATUS_COLORS: Record<string, string> = {
   starting: '#fb923c',
@@ -210,7 +211,9 @@ function CopyButton(props: { text: string; visible: boolean; label: string }) {
               setCopied(false);
             }, 1200);
           })
-          .catch(() => {});
+          .catch((err: unknown) => {
+            logWarn('clipboard', 'writeText failed', { err });
+          });
       }}
       style={{
         background: 'transparent',

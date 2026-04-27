@@ -1,10 +1,26 @@
-import { execFile, execFileSync, spawn } from 'child_process';
+import { execFile, execFileSync as _execFileSync, spawn } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import type { BrowserWindow } from 'electron';
+import { debug as logDebug } from '../log.js';
 
-const exec = promisify(execFile);
+const _exec = promisify(execFile);
+
+/**
+ * Trace + run a git command (or any execFile invocation).
+ * Emits a `debug` entry under category `git` with the args before
+ * execution so verbose logs can reconstruct the command stream.
+ */
+const exec: typeof _exec = ((cmd: string, args: string[], options?: unknown) => {
+  if (cmd === 'git') logDebug('git', args.join(' '));
+  return (_exec as unknown as (...a: unknown[]) => unknown)(cmd, args, options);
+}) as typeof _exec;
+
+const execFileSync: typeof _execFileSync = ((cmd: string, args: string[], options?: unknown) => {
+  if (cmd === 'git') logDebug('git', args.join(' '));
+  return (_execFileSync as unknown as (...a: unknown[]) => unknown)(cmd, args, options);
+}) as typeof _execFileSync;
 
 // --- Types ---
 

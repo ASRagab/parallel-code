@@ -4,6 +4,7 @@ import { sf } from '../lib/fontScale';
 import { Channel, invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { store } from '../store/store';
+import { warn as logWarn } from '../lib/log';
 
 interface AskCodeCardProps {
   requestId: string;
@@ -70,7 +71,9 @@ export function AskCodeCard(props: AskCodeCardProps) {
   });
 
   function cancel() {
-    invoke(IPC.CancelAskAboutCode, { requestId: props.requestId }).catch(() => {});
+    invoke(IPC.CancelAskAboutCode, { requestId: props.requestId }).catch((err: unknown) => {
+      logWarn('askCode', 'CancelAskAboutCode failed', { err });
+    });
     channel.cleanup?.();
   }
 

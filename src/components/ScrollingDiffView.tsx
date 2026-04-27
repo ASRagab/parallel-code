@@ -8,6 +8,7 @@ import { highlightLines, detectLang } from '../lib/shiki-highlighter';
 import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import type { FileDiff, Hunk, DiffLine } from '../lib/unified-diff-parser';
+import { debug as logDebug, warn as logWarn } from '../lib/log';
 import type { FileDiffResult } from '../ipc/types';
 import { getDiffSelection, type DiffSelection } from '../lib/diff-selection';
 import { AskCodeCard } from './AskCodeCard';
@@ -259,8 +260,10 @@ function HunkView(props: {
     const code = props.hunk.lines.map((l) => l.content).join('\n');
     highlightLines(code, props.lang)
       .then((result) => setHighlighted(result))
-      .catch(() => {
-        /* highlight failure is non-fatal — fallback to plain text */
+      .catch((err: unknown) => {
+        // Non-fatal — fallback to plain text. Debug-level so it never
+        // dominates verbose logs (highlighting is best-effort).
+        logDebug('diff.highlight', 'highlightLines failed', { err });
       });
   });
 
@@ -343,9 +346,12 @@ function GapView(props: {
       const code = gapLines.map((l) => l.content).join('\n');
       highlightLines(code, props.lang)
         .then(setHighlighted)
-        .catch(() => {});
-    } catch {
-      /* fetch failed — keep collapsed */
+        .catch((err: unknown) => {
+          logDebug('diff.highlight', 'highlightLines failed', { err });
+        });
+    } catch (err) {
+      // fetch failed — keep collapsed; log so verbose users see why
+      logWarn('diff.expand', 'failed to expand context lines', { err });
     } finally {
       setLoading(false);
     }
@@ -434,7 +440,9 @@ function TrailingGap(props: {
     const code = gapLines.map((l) => l.content).join('\n');
     highlightLines(code, props.lang)
       .then(setHighlighted)
-      .catch(() => {});
+      .catch((err: unknown) => {
+        logDebug('diff.highlight', 'highlightLines failed', { err });
+      });
   }
 
   let cachedGapLines: DiffLine[] | null = null;

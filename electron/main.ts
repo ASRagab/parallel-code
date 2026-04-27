@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 import { registerAllHandlers } from './ipc/register.js';
 import { registerLogHandler } from './log.js';
+import { installIpcTracing } from './ipc/trace.js';
 import { killAllAgents } from './ipc/pty.js';
 import { stopAllPlanWatchers } from './ipc/plans.js';
 import { stopAllStepsWatchers } from './ipc/steps.js';
@@ -125,6 +126,7 @@ function createWindow() {
     },
   });
 
+  installIpcTracing(ipcMain);
   registerLogHandler(ipcMain);
   registerAllHandlers(mainWindow);
 

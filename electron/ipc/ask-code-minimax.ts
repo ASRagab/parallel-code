@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron';
+import { debug as logDebug } from '../log.js';
 
 interface MinimaxAskCodeRequest {
   requestId: string;
@@ -111,7 +112,9 @@ export function askAboutCodeMinimax(win: BrowserWindow, args: MinimaxAskCodeRequ
       let aborted = false;
       const onAbort = () => {
         aborted = true;
-        reader.cancel().catch(() => {});
+        reader.cancel().catch((err) => {
+          logDebug('askCode.minimax', 'reader.cancel rejected', { err: String(err) });
+        });
       };
       controller.signal.addEventListener('abort', onAbort, { once: true });
 

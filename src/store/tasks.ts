@@ -14,6 +14,7 @@ import {
   rescheduleTaskStatusPolling,
 } from './taskStatus';
 import { recordMergedLines, recordTaskCompleted } from './completion';
+import { warn as logWarn } from '../lib/log';
 import { cleanTaskName } from '../lib/clean-task-name';
 import type {
   AgentDef,
@@ -536,7 +537,8 @@ export function runBookmarkInTask(taskId: string, command: string): void {
       // Mark busy immediately so rapid clicks don't reuse the same shell.
       markAgentBusy(shellId);
       setTaskFocusedPanel(taskId, `shell:${i}`);
-      invoke(IPC.WriteToAgent, { agentId: shellId, data: command + '\r' }).catch(() => {
+      invoke(IPC.WriteToAgent, { agentId: shellId, data: command + '\r' }).catch((err) => {
+        logWarn('tasks.shell', 'WriteToAgent failed; falling back to spawnShell', { err });
         spawnShellForTask(taskId, command);
       });
       return;
@@ -549,7 +551,9 @@ export function runBookmarkInTask(taskId: string, command: string): void {
 export async function closeShell(taskId: string, shellId: string): Promise<void> {
   const closedIndex = store.tasks[taskId]?.shellAgentIds.indexOf(shellId) ?? -1;
 
-  await invoke(IPC.KillAgent, { agentId: shellId }).catch(() => {});
+  await invoke(IPC.KillAgent, { agentId: shellId }).catch((err) => {
+    logWarn('tasks.shell', 'KillAgent failed during closeShell', { err });
+  });
   clearAgentActivity(shellId);
   setStore(
     produce((s) => {

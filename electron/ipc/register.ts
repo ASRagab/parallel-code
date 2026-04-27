@@ -74,6 +74,17 @@ import {
   assertOptionalString,
   assertOptionalBoolean,
 } from './validate.js';
+import { warn as logWarn } from '../log.js';
+
+function errMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
 
 /** Reject paths that are non-absolute or attempt directory traversal. */
 function validatePath(p: unknown, label: string): void {
@@ -265,7 +276,11 @@ export function registerAllHandlers(win: BrowserWindow): void {
       args.branchPrefix ?? 'task',
       baseBranch,
     );
-    result.then((r: { id: string }) => taskNames.set(r.id, args.name)).catch(() => {});
+    result
+      .then((r: { id: string }) => taskNames.set(r.id, args.name))
+      .catch((err: unknown) => {
+        logWarn('tasks', 'createTask resolution failed', { err: errMessage(err) });
+      });
     return result;
   });
   ipcMain.handle(IPC.DeleteTask, (_e, args) => {
