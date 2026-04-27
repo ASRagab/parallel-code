@@ -46,7 +46,7 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
   };
 
   return (
-    <InfoBar>
+    <InfoBar class="task-branch-info-bar">
       {(() => {
         const project = getProject(props.task.projectId);
         return (

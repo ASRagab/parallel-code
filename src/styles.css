@@ -470,8 +470,8 @@ html[data-look='islands-dark'] .resize-handle-v::before {
   content: '';
   position: absolute;
   top: 50%;
-  left: 12px;
-  right: 12px;
+  left: 0;
+  right: 0;
   height: 1px;
   background: var(--border);
   transform: translateY(-50%);
@@ -482,12 +482,18 @@ html[data-look='islands-dark'] .resize-handle-h::before {
   content: '';
   position: absolute;
   left: 50%;
-  top: 12px;
-  bottom: 12px;
+  top: 0;
+  bottom: 0;
   width: 1px;
   background: var(--border);
   transform: translateX(-50%);
   pointer-events: none;
+}
+
+/* Islands Dark: bottom hairline under the project/branch info row,
+   matching the inter-panel divider. */
+html[data-look='islands-dark'] .task-branch-info-bar {
+  border-bottom: 1px solid var(--border);
 }
 
 * {
