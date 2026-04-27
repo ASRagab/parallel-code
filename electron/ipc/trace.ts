@@ -5,7 +5,7 @@
 // their args; all others omit them by default (default-deny).
 
 import type { IpcMain, IpcMainInvokeEvent } from 'electron';
-import { debug, warn } from '../log.js';
+import { debug, getMinLevel, warn } from '../log.js';
 import { IPC } from './channels.js';
 
 /**
@@ -76,19 +76,35 @@ export function installIpcTracing(ipcMain: IpcMain): void {
   const original = handleProxy.handle.bind(ipcMain);
 
   handleProxy.handle = (channel: string, listener: HandleListener): void => {
-    original(channel, async (event, ...args) => {
-      const includePayload = SAFE_FOR_TRACE.has(channel);
-      debug('ipc', channel, includePayload ? { args } : undefined);
-      try {
-        const result = await listener(event, ...args);
-        debug('ipc', `${channel} ok`);
-        return result;
-      } catch (err) {
-        warn('ipc', `${channel} err`, { err: errMessage(err) });
-        throw err;
+    original(channel, (event, ...args) => {
+      // Fast-path: when the logger's minimum level is above `debug`, skip
+      // the trace wrapper entirely. This preserves the synchronous return
+      // shape for sync handlers (no microtask hop) and avoids two unused
+      // debug() calls per dispatch on the WriteToAgent-style hot paths.
+      if (getMinLevel() !== 'debug') {
+        return listener(event, ...args);
       }
+      return tracedDispatch(channel, listener, event, args);
     });
   };
 
   handleProxy.__pcTracePatched = true;
+}
+
+async function tracedDispatch(
+  channel: string,
+  listener: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown,
+  event: IpcMainInvokeEvent,
+  args: unknown[],
+): Promise<unknown> {
+  const includePayload = SAFE_FOR_TRACE.has(channel);
+  debug('ipc', channel, includePayload ? { args } : undefined);
+  try {
+    const result = await listener(event, ...args);
+    debug('ipc', `${channel} ok`);
+    return result;
+  } catch (err) {
+    warn('ipc', `${channel} err`, { err: errMessage(err) });
+    throw err;
+  }
 }

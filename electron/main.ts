@@ -126,8 +126,11 @@ function createWindow() {
     },
   });
 
-  installIpcTracing(ipcMain);
+  // Order matters: register the LogFromRenderer handler BEFORE installing
+  // the IPC tracing wrapper so log forwards don't themselves emit ipc/git
+  // debug traces (which would triple log volume in dev/verbose).
   registerLogHandler(ipcMain);
+  installIpcTracing(ipcMain);
   registerAllHandlers(mainWindow);
 
   // Open links in external browser instead of inside Electron

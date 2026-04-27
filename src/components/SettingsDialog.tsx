@@ -682,7 +682,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
             <span style={{ 'font-size': '14px', color: theme.fg }}>Verbose logging</span>
             <span style={{ 'font-size': '12px', color: theme.fgSubtle }}>
               Emit debug-level logs to the developer console. Verbose logs may include file paths,
-              command arguments, and pty events — review before sharing.
+              branch names, commit messages, IPC channel activity, and pty lifecycle events. Review
+              the contents before sharing.
             </span>
           </div>
         </label>

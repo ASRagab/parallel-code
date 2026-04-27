@@ -46,4 +46,22 @@ describe('main logger — payload validation', () => {
     expect(isValidPayload(undefined)).toBe(false);
     expect(isValidPayload('payload')).toBe(false);
   });
+
+  it('rejects arrays as ctx', () => {
+    expect(isValidPayload({ ...base, ctx: [1, 2, 3] })).toBe(false);
+  });
+
+  it('rejects oversized category and msg', () => {
+    expect(isValidPayload({ ...base, category: 'x'.repeat(257) })).toBe(false);
+    expect(isValidPayload({ ...base, msg: 'x'.repeat(4097) })).toBe(false);
+  });
+
+  it('rejects ctx whose serialised size exceeds the bound', () => {
+    const big = { s: 'x'.repeat(20_000) };
+    expect(isValidPayload({ ...base, ctx: big })).toBe(false);
+  });
+
+  it('accepts a normally-sized ctx', () => {
+    expect(isValidPayload({ ...base, ctx: { taskId: 't1', err: 'short' } })).toBe(true);
+  });
 });

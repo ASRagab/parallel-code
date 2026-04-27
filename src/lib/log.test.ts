@@ -129,7 +129,7 @@ describe('renderer logger — rate cap', () => {
   });
 
   it('caps forwards at 50 per category per rolling second; emits one notice', () => {
-    for (let i = 0; i < 60; i++) log.warn('flood', `msg ${i}`);
+    for (let i = 0; i < 60; i++) log.warn('rate-cap-1', `msg ${i}`);
     expect(invokeMock).toHaveBeenCalledTimes(50);
     vi.advanceTimersByTime(2_000);
     // Suppression-notice forwarded once, with the count.
@@ -139,11 +139,28 @@ describe('renderer logger — rate cap', () => {
   });
 
   it('verbose toggle mid-window does not reset the counter', () => {
-    for (let i = 0; i < 50; i++) log.warn('flood', `m ${i}`);
+    for (let i = 0; i < 50; i++) log.warn('rate-cap-2', `m ${i}`);
     expect(invokeMock).toHaveBeenCalledTimes(50);
     log.setVerbose(true); // mid-window
-    log.warn('flood', 'extra');
+    log.warn('rate-cap-2', 'extra');
     expect(invokeMock).toHaveBeenCalledTimes(50); // still suppressed
+  });
+
+  it('suppression notice survives a new entry arriving after window-end', () => {
+    // 60 entries at t=0 → 50 forwarded, 10 suppressed, timer scheduled.
+    for (let i = 0; i < 60; i++) log.warn('rate-cap-3', `msg ${i}`);
+    expect(invokeMock).toHaveBeenCalledTimes(50);
+
+    // Advance past window end. New entry arrives at t≈1100; must not stomp
+    // the suppressed count before the timer reads it.
+    vi.advanceTimersByTime(1_100);
+    log.warn('rate-cap-3', 'after-window');
+    vi.advanceTimersByTime(0);
+    const notice = invokeMock.mock.calls.find((c) =>
+      String((c[1] as { msg?: unknown }).msg ?? '').startsWith('rate-limit suppressed'),
+    );
+    expect(notice).toBeDefined();
+    expect((notice?.[1] as { msg: string }).msg).toMatch(/suppressed 10 entries/);
   });
 });
 

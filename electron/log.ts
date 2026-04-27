@@ -142,7 +142,11 @@ function replacerWithCircular(): (k: string, v: unknown) => unknown {
     if (typeof v === 'object' && v !== null) {
       if (seen.has(v)) return '[circular]';
       seen.add(v);
-      if (v instanceof Node || (v as { nodeType?: number })?.nodeType !== undefined) {
+      // `Node` is a DOM global, undefined in the main process. Guard the
+      // instanceof check so it doesn't ReferenceError on every plain object.
+      // (The renderer-side logger has the same guard.)
+      const hasNodeType = (v as { nodeType?: unknown }).nodeType;
+      if (typeof hasNodeType === 'number') {
         return '[node]';
       }
     }
@@ -174,15 +178,32 @@ function clipStack(stack: string): string {
 
 const VALID_LEVELS: ReadonlySet<string> = new Set<LogLevel>(['debug', 'info', 'warn', 'error']);
 
+const CATEGORY_MAX_LEN = 256;
+const MSG_MAX_LEN = 4096;
+const CTX_MAX_BYTES_INPUT = 16 * 1024;
+
 export function isValidPayload(value: unknown): value is LogFromRendererPayload {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   if (!VALID_LEVELS.has(v.level as string)) return false;
   if (!VALID_LEVELS.has(v.level_min as string)) return false;
-  if (typeof v.category !== 'string') return false;
-  if (typeof v.msg !== 'string') return false;
+  if (typeof v.category !== 'string' || v.category.length > CATEGORY_MAX_LEN) return false;
+  if (typeof v.msg !== 'string' || v.msg.length > MSG_MAX_LEN) return false;
   if (typeof v.ts !== 'number') return false;
-  if (v.ctx !== undefined && (typeof v.ctx !== 'object' || v.ctx === null)) return false;
+  if (v.ctx !== undefined) {
+    if (typeof v.ctx !== 'object' || v.ctx === null || Array.isArray(v.ctx)) return false;
+    // Bound input ctx size so a renderer cannot OOM main with a huge object.
+    // Trial-stringify; reject if the wire-form size is unreasonable.
+    let size = 0;
+    try {
+      size = JSON.stringify(v.ctx).length;
+    } catch {
+      // Unserialisable here is not a hard rejection — emit() has its own
+      // safe-fallback. Treat as size 0 so we accept the entry.
+      size = 0;
+    }
+    if (size > CTX_MAX_BYTES_INPUT) return false;
+  }
   return true;
 }
 
@@ -212,8 +233,12 @@ export function registerLogHandler(ipc: IpcMain): void {
       }
       return;
     }
-    // Reconcile main's level from renderer's reported minimum.
-    if (LEVEL_RANK[raw.level_min] < LEVEL_RANK[minLevel]) minLevel = raw.level_min;
+    // Reconcile main's level from the renderer's reported minimum so a
+    // verbose-toggle change in the renderer converges in one round-trip.
+    // We assign rather than only-lower so flipping verbose OFF actually
+    // restores main's floor (a previous version only lowered, which left
+    // main stuck at debug forever).
+    minLevel = raw.level_min;
     // Forward the entry through main's normal pipeline.
     emit(raw.level, `r.${raw.category}`, raw.msg, raw.ctx);
   });
