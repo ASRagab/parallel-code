@@ -1,7 +1,8 @@
-import { Show, createEffect, onCleanup, type JSX } from 'solid-js';
+import { Show, createEffect, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { createFocusRestore } from '../lib/focus-restore';
 import { createFocusTrap } from '../lib/focus-trap';
+import { isTopmost, popDialog, pushDialog } from '../lib/dialog-stack';
 import { theme } from '../lib/theme';
 
 interface DialogProps {
@@ -10,11 +11,16 @@ interface DialogProps {
   width?: string;
   zIndex?: number;
   panelStyle?: JSX.CSSProperties;
+  /** Element id whose text labels this dialog (sets aria-labelledby). */
+  labelledBy?: string;
+  /** Element id (or space-separated list) describing this dialog (aria-describedby). */
+  describedBy?: string;
   children: JSX.Element;
 }
 
 export function Dialog(props: DialogProps) {
   let panelRef: HTMLDivElement | undefined;
+  const dialogId = createUniqueId();
 
   createFocusRestore(() => props.open);
   createFocusTrap(
@@ -22,11 +28,22 @@ export function Dialog(props: DialogProps) {
     () => panelRef,
   );
 
-  // Escape key → close
+  // Register / unregister with the global dialog stack so only the
+  // topmost panel claims aria-modal.
+  createEffect(() => {
+    if (!props.open) return;
+    pushDialog(dialogId);
+    onCleanup(() => popDialog(dialogId));
+  });
+
+  // Escape closes only the topmost dialog.
   createEffect(() => {
     if (!props.open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') props.onClose();
+      if (e.key !== 'Escape') return;
+      if (!isTopmost(dialogId)) return;
+      e.stopPropagation();
+      props.onClose();
     };
     document.addEventListener('keydown', handler);
     onCleanup(() => document.removeEventListener('keydown', handler));
@@ -84,6 +101,10 @@ export function Dialog(props: DialogProps) {
           <div
             ref={panelRef}
             tabIndex={0}
+            role="dialog"
+            aria-modal={isTopmost(dialogId) ? 'true' : undefined}
+            aria-labelledby={props.labelledBy}
+            aria-describedby={props.describedBy}
             class="dialog-panel"
             style={{
               background: theme.islandBg,

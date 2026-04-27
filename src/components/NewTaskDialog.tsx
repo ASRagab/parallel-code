@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, For, onCleanup } from 'solid-js';
+import { createSignal, createEffect, createUniqueId, Show, For, onCleanup } from 'solid-js';
 import { Dialog } from './Dialog';
 import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
@@ -64,6 +64,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
   } | null>(null);
   const [branchPrefix, setBranchPrefix] = createSignal('');
   let promptRef!: HTMLTextAreaElement;
+  const titleId = createUniqueId();
   let formRef!: HTMLFormElement;
   let buildOutputRef!: HTMLPreElement;
 
@@ -548,6 +549,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
       open={props.open}
       onClose={props.onClose}
       width={store.availableAgents.length > 8 ? 'min(840px, calc(100vw - 48px))' : '560px'}
+      labelledBy={titleId}
       panelStyle={{ gap: '20px' }}
     >
       <form
@@ -561,6 +563,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
       >
         <div>
           <h2
+            id={titleId}
             style={{
               margin: '0',
               'font-size': '17px',

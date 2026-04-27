@@ -1,4 +1,4 @@
-import { Show, createEffect, type JSX } from 'solid-js';
+import { Show, createEffect, createUniqueId, type JSX } from 'solid-js';
 import { Dialog } from './Dialog';
 import { theme } from '../lib/theme';
 
@@ -13,12 +13,17 @@ interface ConfirmDialogProps {
   confirmDisabled?: boolean;
   autoFocusCancel?: boolean;
   width?: string;
+  /** When set, takes precedence over the auto-generated title id. */
+  labelledBy?: string;
+  describedBy?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 export function ConfirmDialog(props: ConfirmDialogProps) {
   let cancelRef: HTMLButtonElement | undefined;
+  const generatedTitleId = createUniqueId();
+  const useGeneratedId = () => props.labelledBy === undefined;
 
   // Auto-focus the cancel button (or let Dialog's panel get focus)
   createEffect(() => {
@@ -36,8 +41,15 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   });
 
   return (
-    <Dialog open={props.open} onClose={props.onCancel} width={props.width}>
+    <Dialog
+      open={props.open}
+      onClose={props.onCancel}
+      width={props.width}
+      labelledBy={props.labelledBy ?? generatedTitleId}
+      describedBy={props.describedBy}
+    >
       <h2
+        id={useGeneratedId() ? generatedTitleId : undefined}
         style={{
           margin: '0',
           'font-size': '17px',

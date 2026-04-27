@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createEffect, on } from 'solid-js';
+import { For, Show, createSignal, createEffect, createUniqueId, on } from 'solid-js';
 import { Dialog } from './Dialog';
 import {
   getAvailableTerminalFonts,
@@ -41,6 +41,7 @@ function ensureSelectedFont(available: string[]): string[] {
 }
 
 export function SettingsDialog(props: SettingsDialogProps) {
+  const titleId = createUniqueId();
   const [fonts, setFonts] = createSignal<string[]>(ensureSelectedFont(getAvailableTerminalFonts()));
 
   // Fetch system fonts when the dialog opens
@@ -63,6 +64,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       onClose={props.onClose}
       width="640px"
       zIndex={1100}
+      labelledBy={titleId}
       panelStyle={{ 'max-width': 'calc(100vw - 32px)', padding: '24px', gap: '18px' }}
     >
       <div
@@ -74,6 +76,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       >
         <div style={{ display: 'flex', 'flex-direction': 'column', gap: '4px' }}>
           <h2
+            id={titleId}
             style={{
               margin: '0',
               'font-size': '17px',
@@ -101,6 +104,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
         </div>
         <button
           onClick={() => props.onClose()}
+          aria-label="Close settings"
           style={{
             background: 'transparent',
             border: 'none',

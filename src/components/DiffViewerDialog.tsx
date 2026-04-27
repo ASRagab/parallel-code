@@ -1,4 +1,4 @@
-import { Show, createSignal, createEffect, onCleanup } from 'solid-js';
+import { Show, createSignal, createEffect, createUniqueId, onCleanup } from 'solid-js';
 import { Dialog } from './Dialog';
 import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
@@ -54,11 +54,13 @@ export function compileDiffReview(annotations: ReviewAnnotation[]): string {
 }
 
 export function DiffViewerDialog(props: DiffViewerDialogProps) {
+  const titleId = createUniqueId();
   return (
     <Dialog
       open={props.scrollToFile !== null}
       onClose={props.onClose}
       width="90vw"
+      labelledBy={titleId}
       panelStyle={{
         height: '85vh',
         'max-width': '1400px',
@@ -67,6 +69,9 @@ export function DiffViewerDialog(props: DiffViewerDialogProps) {
         gap: '0',
       }}
     >
+      <h2 id={titleId} class="dialog-sr-only">
+        Diff viewer: {props.scrollToFile ?? 'all changes'}
+      </h2>
       <Show when={props.scrollToFile !== null}>
         <ReviewProvider
           taskId={props.taskId}

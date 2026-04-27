@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onCleanup, createEffect } from 'solid-js';
+import { For, Show, createSignal, createUniqueId, onCleanup, createEffect } from 'solid-js';
 import { Dialog } from './Dialog';
 import { confirm as appConfirm } from '../lib/dialog';
 import { theme } from '../lib/theme';
@@ -93,6 +93,7 @@ interface ConflictInfo {
 }
 
 export function HelpDialog(props: HelpDialogProps) {
+  const titleId = createUniqueId();
   const [recordingId, setRecordingId] = createSignal<string | null>(null);
   const [conflictInfo, setConflictInfo] = createSignal<ConflictInfo | null>(null);
 
@@ -223,7 +224,13 @@ export function HelpDialog(props: HelpDialogProps) {
   }
 
   return (
-    <Dialog open={props.open} onClose={props.onClose} width="540px" panelStyle={{ gap: '20px' }}>
+    <Dialog
+      open={props.open}
+      onClose={props.onClose}
+      width="540px"
+      labelledBy={titleId}
+      panelStyle={{ gap: '20px' }}
+    >
       {/* Header */}
       <div
         style={{
@@ -232,11 +239,15 @@ export function HelpDialog(props: HelpDialogProps) {
           'justify-content': 'space-between',
         }}
       >
-        <h2 style={{ margin: '0', 'font-size': '17px', color: theme.fg, 'font-weight': '600' }}>
+        <h2
+          id={titleId}
+          style={{ margin: '0', 'font-size': '17px', color: theme.fg, 'font-weight': '600' }}
+        >
           Keyboard Shortcuts
         </h2>
         <button
           onClick={() => props.onClose()}
+          aria-label="Close help"
           style={{
             background: 'transparent',
             border: 'none',

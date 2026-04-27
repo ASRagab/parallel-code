@@ -66,6 +66,50 @@ body.font-smoothing {
   text-rendering: geometricPrecision;
 }
 
+/* Visible keyboard focus indicators inside dialogs.
+   Scoped to .dialog-panel (a class hook) so it works through Solid <Portal>
+   mounting, where descendant selectors rooted at the app shell would not
+   match. The selector list mirrors the spec's interactive-role enumeration
+   so icon buttons, toggles, and ARIA widgets all pick up the indicator. */
+.dialog-panel
+  :is(
+    button,
+    input,
+    select,
+    textarea,
+    a[href],
+    [tabindex]:not([tabindex='-1']),
+    [role='button'],
+    [role='switch'],
+    [role='checkbox'],
+    [role='link'],
+    [role='menuitem'],
+    [role='menuitemradio'],
+    [role='menuitemcheckbox'],
+    [role='tab'],
+    [role='option'],
+    [role='combobox'],
+    [role='radio']
+  ):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Visually-hidden utility for accessible dialog titles
+   (DiffViewerDialog uses this for its programmatic heading). Clip pattern
+   keeps the node in the accessibility tree, unlike display:none. */
+.dialog-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .app-shell {
   position: relative;
   isolation: isolate;
