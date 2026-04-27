@@ -204,6 +204,10 @@ child only when `stepsEnabled` is true.
 - **WHEN** `stepsEnabled` is true and no steps have arrived yet
 - **THEN** the steps section renders at 28 px (header only)
 - **AND** expands to 110 px once the first step arrives
+- **AND** unpinned automatic growth from additional step entries is capped at
+  160 px, with overflow scrolling inside the panel
+- **AND** user-resized panel sizes are not constrained by the automatic growth
+  cap
 
 #### Scenario: Panel hidden when disabled
 

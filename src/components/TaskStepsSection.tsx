@@ -338,11 +338,9 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
           : 'false'
       }
       style={{
-        // `height: 100%` lets the panel fill when it's sized by a flex
-        // absorber; `max-height: 40vh` caps growth when it's content-sized,
-        // so a long step list scrolls internally (via the `flex: 1;
-        // overflow: auto` body below) instead of pushing the AI terminal
-        // and prompt out of the visible area.
+        // `height: 100%` lets the panel fill when it's sized by a user pin or
+        // flex absorber. The ResizablePanel wrapper caps unpinned auto-growth;
+        // this viewport cap remains a secondary guard for narrow layouts.
         height: '100%',
         'max-height': '40vh',
         display: 'flex',

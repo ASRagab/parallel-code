@@ -41,6 +41,8 @@ interface TaskPanelProps {
   isActive: boolean;
 }
 
+const STEPS_PANEL_AUTO_MAX_PX = 160;
+
 export function TaskPanel(props: TaskPanelProps) {
   const [showCloseConfirm, setShowCloseConfirm] = createSignal(false);
   const [planFullscreen, setPlanFullscreen] = createSignal(false);
@@ -277,6 +279,7 @@ export function TaskPanel(props: TaskPanelProps) {
   const stepsSectionChild: PanelChild = {
     id: 'steps-section',
     minSize: 28,
+    maxAutoSize: STEPS_PANEL_AUTO_MAX_PX,
     content: () => stepsSectionEl,
   };
 
