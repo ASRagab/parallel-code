@@ -391,7 +391,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   return (
     <div
       ref={props.ref}
-      class="focusable-panel"
+      class="focusable-panel changed-files-list-panel"
       data-panel-focused={props.panelFocused ? 'true' : 'false'}
       tabIndex={0}
       onKeyDown={handleKeyDown}

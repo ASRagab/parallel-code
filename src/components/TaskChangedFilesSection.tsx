@@ -35,6 +35,10 @@ export function TaskChangedFilesSection(props: TaskChangedFilesSectionProps) {
 
   return (
     <div
+      class="task-changed-files-section focusable-panel"
+      data-panel-focused={
+        props.isActive && store.focusedPanel[props.task.id] === 'changed-files' ? 'true' : 'false'
+      }
       style={{
         // `height: 100%` fills when the panel is an absorber (notes-split
         // horizontal, 50/50 with notes). `min-height` gives the content-sized

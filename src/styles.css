@@ -410,6 +410,39 @@ html[data-look='islands-dark'] {
   background: none !important;
 }
 
+html[data-look='islands-dark'] .task-column,
+html[data-look='islands-dark'] .task-column.active {
+  margin: 0 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-look='islands-dark'] .tiling-layout-strip > .resize-handle-h {
+  margin: 0 -3px;
+  position: relative;
+  z-index: 3;
+}
+
+html[data-look='islands-dark'] .tiling-layout-strip > .resize-handle-h::before {
+  display: none;
+}
+
+html[data-look='islands-dark'] .sidebar-shell {
+  padding: 6px 3px 6px 6px;
+  box-sizing: border-box;
+}
+
+html[data-look='islands-dark'] .sidebar-panel {
+  padding: 14px !important;
+  gap: 14px !important;
+  background: var(--island-bg);
+  border: 1px solid var(--island-border);
+  border-radius: var(--island-radius);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
 /* Islands Dark: prompt textarea sits flush in its panel (matches the notes
    textarea pattern) instead of as a chromed input field. */
 html[data-look='islands-dark'] .prompt-input-panel {
@@ -456,6 +489,69 @@ html[data-look='islands-dark'] .prompt-send-btn:disabled {
   background: transparent !important;
   color: var(--fg-subtle) !important;
   border: 1px solid var(--border) !important;
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode {
+  background: transparent !important;
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode .task-header-stack {
+  margin-bottom: 5px;
+  background: var(--task-panel-bg);
+  border: 1px solid var(--island-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode .task-branch-info-bar {
+  border-bottom: none;
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode .focusable-panel {
+  background: var(--task-panel-bg) !important;
+  border: 1px solid var(--island-border);
+  border-radius: 8px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode .shell-terminals-row {
+  background: transparent !important;
+  gap: 5px !important;
+  margin-top: 5px !important;
+}
+
+html[data-look='islands-dark']
+  .task-column.focus-mode
+  .task-changed-files-section
+  .changed-files-list-panel {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html[data-look='islands-dark']
+  .task-column.focus-mode
+  .task-changed-files-section
+  .changed-files-list-panel::after {
+  content: none;
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode .prompt-input-panel {
+  padding: 0 !important;
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode .resize-handle::before {
+  display: none;
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode .resize-handle-h {
+  width: 5px;
+}
+
+html[data-look='islands-dark'] .task-column.focus-mode .resize-handle-v {
+  height: 5px;
 }
 
 /* Islands Dark: hairline between adjacent sub-panels (notes ↔ changed-files,
@@ -735,7 +831,7 @@ textarea::placeholder {
   height: 100%;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 2px 4px;
+  padding: 2px 6px 2px 4px;
 }
 
 .tiling-layout-scroll-affordance {

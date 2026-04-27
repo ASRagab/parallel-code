@@ -18,6 +18,11 @@ export interface LookPresetOption {
 
 export const LOOK_PRESETS: LookPresetOption[] = [
   {
+    id: 'islands-dark',
+    label: 'Islands Dark',
+    description: 'JetBrains-inspired dark panels on a tinted frame',
+  },
+  {
     id: 'minimal',
     label: 'Minimal',
     description: 'Flat monochrome with warm off-white accent',
@@ -56,11 +61,6 @@ export const LOOK_PRESETS: LookPresetOption[] = [
     id: 'zenburnesque',
     label: 'Zenburnesque',
     description: 'Warm sage and muted earth tones',
-  },
-  {
-    id: 'islands-dark',
-    label: 'Islands Dark',
-    description: 'JetBrains-inspired dark panels on a tinted frame',
   },
   {
     id: 'workbench',

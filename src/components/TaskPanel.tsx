@@ -349,7 +349,7 @@ export function TaskPanel(props: TaskPanelProps) {
   return (
     <div
       ref={panelRef}
-      class={`task-column ${props.isActive ? 'active' : ''}`}
+      class={`task-column ${props.isActive ? 'active' : ''}${store.focusMode ? ' focus-mode' : ''}`}
       style={{
         display: 'flex',
         'flex-direction': 'column',
@@ -367,21 +367,31 @@ export function TaskPanel(props: TaskPanelProps) {
         closingError={props.task.closingError}
         onRetry={() => retryCloseTask(props.task.id)}
       />
-      {/* Title + branch bars live outside <Show> so they don't remount on layout flips. */}
-      <div style={{ flex: '0 0 50px', overflow: 'hidden' }}>
-        <TaskTitleBar
-          task={props.task}
-          isActive={props.isActive}
-          onClose={() => setShowCloseConfirm(true)}
-          onMerge={() => setShowMergeConfirm(true)}
-          onPush={() => setShowPushConfirm(true)}
-          pushing={pushing()}
-          pushSuccess={pushSuccess()}
-          onTitleEditRef={(h) => (titleEditHandle = h)}
-        />
-      </div>
-      <div style={{ flex: '0 0 28px', overflow: 'hidden' }}>
-        <TaskBranchInfoBar task={props.task} onEditProject={(id) => setEditingProjectId(id)} />
+      <div
+        class="task-header-stack"
+        style={{
+          flex: '0 0 78px',
+          display: 'flex',
+          'flex-direction': 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Title + branch bars live outside <Show> so they don't remount on layout flips. */}
+        <div style={{ flex: '0 0 50px', overflow: 'hidden' }}>
+          <TaskTitleBar
+            task={props.task}
+            isActive={props.isActive}
+            onClose={() => setShowCloseConfirm(true)}
+            onMerge={() => setShowMergeConfirm(true)}
+            onPush={() => setShowPushConfirm(true)}
+            pushing={pushing()}
+            pushSuccess={pushSuccess()}
+            onTitleEditRef={(h) => (titleEditHandle = h)}
+          />
+        </div>
+        <div style={{ flex: '0 0 28px', overflow: 'hidden' }}>
+          <TaskBranchInfoBar task={props.task} onEditProject={(id) => setEditingProjectId(id)} />
+        </div>
       </div>
       <div style={{ flex: '1', 'min-height': '0' }}>
         <Show

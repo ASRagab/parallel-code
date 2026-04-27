@@ -185,6 +185,7 @@ export function TaskShellSection(props: TaskShellSectionProps) {
       </div>
       <Show when={props.task.shellAgentIds.length > 0}>
         <div
+          class="shell-terminals-row"
           style={{
             flex: '1',
             display: 'flex',

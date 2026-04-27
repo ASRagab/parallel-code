@@ -57,7 +57,7 @@ export function TaskTitleBar(props: TaskTitleBarProps) {
 
   return (
     <div
-      class={props.isActive ? 'island-header-active' : ''}
+      class={`task-title-bar${props.isActive ? ' island-header-active' : ''}`}
       style={{
         display: 'flex',
         'align-items': 'center',

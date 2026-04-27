@@ -313,6 +313,7 @@ export function Sidebar() {
   return (
     <div
       ref={sidebarRef}
+      class="sidebar-shell"
       style={{
         width: `${sidebarWidth()}px`,
         'min-width': `${SIDEBAR_MIN_WIDTH}px`,
@@ -323,6 +324,7 @@ export function Sidebar() {
       }}
     >
       <div
+        class="sidebar-panel"
         style={{
           flex: '1',
           'min-width': '0',
