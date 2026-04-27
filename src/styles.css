@@ -602,16 +602,27 @@ textarea::placeholder {
   content: '';
   position: absolute;
   top: 50%;
-  transform: translateY(-50%);
 }
 
+/* Circular outline that wraps the chevron — also the click target */
 .tiling-layout-scroll-affordance::before {
-  width: 1px;
-  height: 100%;
-  background: color-mix(in srgb, var(--border-focus) 68%, var(--accent) 12%);
-  opacity: 0.72;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--border-focus) 68%, var(--accent) 12%);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  transform: translateY(-50%);
+  opacity: 0.9;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
+.tiling-layout-scroll-affordance:hover::before {
+  opacity: 1;
+  border-color: var(--accent-hover);
+}
+
+/* Chevron arrow */
 .tiling-layout-scroll-affordance::after {
   width: 8px;
   height: 8px;
@@ -635,7 +646,7 @@ textarea::placeholder {
 }
 
 .tiling-layout-scroll-affordance-left::after {
-  left: 10px;
+  left: 9px;
   border-left: 2px solid color-mix(in srgb, var(--accent-hover) 78%, white 22%);
   transform: translateY(-50%) rotate(-45deg);
 }
@@ -656,13 +667,13 @@ textarea::placeholder {
 }
 
 .tiling-layout-scroll-affordance-right::after {
-  right: 10px;
+  right: 9px;
   border-right: 2px solid color-mix(in srgb, var(--accent-hover) 78%, white 22%);
   transform: translateY(-50%) rotate(45deg);
 }
 
 .tiling-layout-scroll-affordance-attention::before {
-  background: color-mix(in srgb, var(--warning) 72%, var(--accent) 14%);
+  border-color: color-mix(in srgb, var(--warning) 72%, var(--accent) 14%);
   opacity: 0.95;
 }
 

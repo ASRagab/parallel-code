@@ -599,8 +599,11 @@ export function TilingLayout() {
       <Show when={hasOverflowLeft()}>
         <div
           class={`tiling-layout-scroll-affordance tiling-layout-scroll-affordance-left${offscreenAttention().left ? ' tiling-layout-scroll-affordance-attention' : ''}`}
+          onClick={() => containerRef?.scrollTo({ left: 0, behavior: 'smooth' })}
           title={
-            offscreenAttention().left ? 'Tasks need attention off-screen to the left' : undefined
+            offscreenAttention().left
+              ? 'Tasks need attention off-screen to the left — click to scroll'
+              : 'Scroll to start'
           }
         />
       </Show>
@@ -608,8 +611,16 @@ export function TilingLayout() {
       <Show when={hasOverflowRight()}>
         <div
           class={`tiling-layout-scroll-affordance tiling-layout-scroll-affordance-right${offscreenAttention().right ? ' tiling-layout-scroll-affordance-attention' : ''}`}
+          onClick={() =>
+            containerRef?.scrollTo({
+              left: containerRef.scrollWidth - containerRef.clientWidth,
+              behavior: 'smooth',
+            })
+          }
           title={
-            offscreenAttention().right ? 'Tasks need attention off-screen to the right' : undefined
+            offscreenAttention().right
+              ? 'Tasks need attention off-screen to the right — click to scroll'
+              : 'Scroll to end'
           }
         />
       </Show>
