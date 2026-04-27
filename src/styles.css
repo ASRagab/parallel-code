@@ -632,13 +632,6 @@ textarea::placeholder {
 
 .tiling-layout-scroll-affordance-left {
   left: 4px;
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--border-focus) 16%, var(--accent) 6%),
-    color-mix(in srgb, var(--accent) 8%, transparent) 28%,
-    color-mix(in srgb, var(--accent) 4%, transparent) 52%,
-    transparent 100%
-  );
 }
 
 .tiling-layout-scroll-affordance-left::before {
@@ -653,13 +646,6 @@ textarea::placeholder {
 
 .tiling-layout-scroll-affordance-right {
   right: 4px;
-  background: linear-gradient(
-    to left,
-    color-mix(in srgb, var(--border-focus) 16%, var(--accent) 6%),
-    color-mix(in srgb, var(--accent) 8%, transparent) 28%,
-    color-mix(in srgb, var(--accent) 4%, transparent) 52%,
-    transparent 100%
-  );
 }
 
 .tiling-layout-scroll-affordance-right::before {
@@ -679,27 +665,6 @@ textarea::placeholder {
 
 .tiling-layout-scroll-affordance-attention::after {
   border-top-color: color-mix(in srgb, var(--warning) 82%, white 18%);
-  animation: statusPulse 1.4s ease-in-out infinite;
-}
-
-.tiling-layout-scroll-affordance-attention.tiling-layout-scroll-affordance-left {
-  background: linear-gradient(
-    to right,
-    color-mix(in srgb, var(--warning) 18%, transparent),
-    color-mix(in srgb, var(--warning) 10%, transparent) 28%,
-    color-mix(in srgb, var(--warning) 5%, transparent) 52%,
-    transparent 100%
-  );
-}
-
-.tiling-layout-scroll-affordance-attention.tiling-layout-scroll-affordance-right {
-  background: linear-gradient(
-    to left,
-    color-mix(in srgb, var(--warning) 18%, transparent),
-    color-mix(in srgb, var(--warning) 10%, transparent) 28%,
-    color-mix(in srgb, var(--warning) 5%, transparent) 52%,
-    transparent 100%
-  );
 }
 
 .tiling-layout-scroll-affordance-attention.tiling-layout-scroll-affordance-left::after {
