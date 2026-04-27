@@ -50,6 +50,7 @@ const terminalBackground: Record<LookPreset, string> = {
   minimal: '#252520',
   zenburnesque: '#2e2d2a',
   'islands-dark': '#181a1d',
+  workbench: '#1f1f1f',
 };
 
 /** Returns an xterm-compatible theme object for the given preset */

@@ -7,7 +7,8 @@ export type LookPreset =
   | 'glacier'
   | 'minimal'
   | 'zenburnesque'
-  | 'islands-dark';
+  | 'islands-dark'
+  | 'workbench';
 
 export interface LookPresetOption {
   id: LookPreset;
@@ -60,6 +61,11 @@ export const LOOK_PRESETS: LookPresetOption[] = [
     id: 'islands-dark',
     label: 'Islands Dark',
     description: 'JetBrains-inspired dark panels on a tinted frame',
+  },
+  {
+    id: 'workbench',
+    label: 'Workbench',
+    description: 'VS Code-inspired flat three-tier dark with cobalt blue',
   },
 ];
 
