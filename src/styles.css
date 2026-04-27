@@ -490,9 +490,11 @@ html[data-look='islands-dark'] .resize-handle-h::before {
   pointer-events: none;
 }
 
-/* Islands Dark: bottom hairline under the project/branch info row,
-   matching the inter-panel divider. */
-html[data-look='islands-dark'] .task-branch-info-bar {
+/* Bottom hairline under the project/branch info row — matches the
+   inter-panel divider for themes that use full-bleed seams instead of
+   gapped islands (islands-dark, workbench). */
+html[data-look='islands-dark'] .task-branch-info-bar,
+html[data-look='workbench'] .task-branch-info-bar {
   border-bottom: 1px solid var(--border);
 }
 
