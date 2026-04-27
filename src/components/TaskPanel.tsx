@@ -11,7 +11,6 @@ import {
   clearPendingAction,
   showNotification,
   setTaskSplitMode,
-  deletePanelUserSize,
 } from '../store/store';
 import { useFocusRegistration } from '../lib/focus-registration';
 import { ResizablePanel, type PanelChild } from './ResizablePanel';
@@ -90,20 +89,6 @@ export function TaskPanel(props: TaskPanelProps) {
     setTaskSplitMode(props.task.id, useSplit());
   });
   onCleanup(() => setTaskSplitMode(props.task.id, false));
-
-  // Stack-mode: shell-section is a non-absorber whose wrapper locks to the
-  // user's dragged pin. When the last terminal closes, the inner content
-  // collapses to the 28 px toolbar but the wrapper keeps the pinned height,
-  // leaving an empty band above the AI terminal. Drop the pin so the flex-
-  // first tree falls back to content size and the absorber reclaims the space.
-  createEffect(() => {
-    if (props.task.shellAgentIds.length === 0) {
-      deletePanelUserSize([
-        `task:${props.task.id}:shell-section`,
-        `task:${props.task.id}:split-right:shell-section`,
-      ]);
-    }
-  });
 
   const editingProject = () => {
     const id = editingProjectId();
@@ -295,9 +280,13 @@ export function TaskPanel(props: TaskPanelProps) {
     content: () => stepsSectionEl,
   };
 
+  // With no terminals open the shell section collapses to its 28 px toolbar.
+  // Mark it noPin so dragging an adjacent handle can't pin it past content
+  // size and leave a visible band of empty space above the AI terminal.
   const shellSectionChild: PanelChild = {
     id: 'shell-section',
     minSize: 28,
+    noPin: () => props.task.shellAgentIds.length === 0,
     content: () => shellSectionEl,
   };
 
