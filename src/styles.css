@@ -546,11 +546,15 @@ html[data-look='workbench'] [data-task-id] {
 /* Task containers: kill radius, margin, and the active-state glow. The 1px
    border on each column already draws the seam at the chrome edges; the
    resize-handle hairline carries it through the inter-column gap. Active
-   column gets a top accent stripe (mirrors VS Code's focused-tab indicator). */
+   column gets a top accent stripe (mirrors VS Code's focused-tab indicator).
+   Outer border is bumped above --border so it reads as the column
+   boundary against the frame, while inner hairlines stay subtle (matches
+   VS Code's editorGroup.border vs. panel.border distinction). */
 html[data-look='workbench'] .task-column {
   margin: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
+  border-color: #3c3c3c !important;
 }
 
 html[data-look='workbench'] .task-column.active {
