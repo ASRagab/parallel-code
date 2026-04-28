@@ -262,6 +262,7 @@ export function ResizablePanel(props: ResizablePanelProps) {
         {(child, i) => (
           <>
             <div
+              class="rp-cell"
               ref={(el) => {
                 wrapperRefs[i()] = el;
               }}
