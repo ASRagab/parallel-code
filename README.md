@@ -28,11 +28,11 @@
 
 ## Screenshots
 
-| Agent working on a task                     | Commit & merge workflow           |
-| ------------------------------------------- | --------------------------------- |
-| ![Agent working](screens/agent-working.png) | ![Workflow](screens/workflow.png) |
-| **Direct mode (main branch)**               | **Themes**                        |
-| ![Direct mode](screens/direct-mode.png)     | ![Themes](screens/themes.png)     |
+| Multiple agents in parallel                           | Focused view on a single task                 |
+| ----------------------------------------------------- | --------------------------------------------- |
+| ![Overview](screens/islands-overview.png)             | ![Focus view](screens/islands-focus-view.png) |
+| **Diff review with inline comments**                  | **AI Arena — race agents head-to-head**       |
+| ![Diff review](screens/diff-dialog-code-comments.png) | ![AI Arena](screens/ai-arena-mode.png)        |
 
 ## Why Parallel Code?
 
@@ -83,7 +83,13 @@ When you're happy with the result, merge the branch back to main from the sideba
 ## Demo
 
 <p align="center">
-  <video src="screens/showcase.mp4" width="800" controls></video>
+  <a href="screens/showcase.mp4">
+    <img src="screens/best-video.gif" alt="Watch the demo" width="800">
+  </a>
+</p>
+
+<p align="center">
+  <em><a href="screens/showcase.mp4">▶ Watch the showcase (MP4)</a></em>
 </p>
 
 ## Getting Started
