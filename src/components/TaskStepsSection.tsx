@@ -310,11 +310,26 @@ export function TaskStepsSection(props: TaskStepsSectionProps) {
     return Date.parse(li) > Date.parse(normalizeIsoTimestamp(last.timestamp));
   });
 
+  // Pin to bottom on every new step. Defer to rAF (and a follow-up rAF) so the
+  // scroll happens after the parent ResizablePanel's content-driven auto-grow
+  // has settled — otherwise scrollHeight read at effect-time can be stale and
+  // leave the latest entry partially below the fold once the wrapper resizes.
   createEffect(() => {
     const len = steps().length;
-    if (len > 0 && scrollRef) {
+    if (len === 0) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      if (!scrollRef) return;
       scrollRef.scrollTop = scrollRef.scrollHeight;
-    }
+      raf2 = requestAnimationFrame(() => {
+        if (!scrollRef) return;
+        scrollRef.scrollTop = scrollRef.scrollHeight;
+      });
+    });
+    onCleanup(() => {
+      cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+    });
   });
 
   function toggleHistory(originalIndex: number) {
