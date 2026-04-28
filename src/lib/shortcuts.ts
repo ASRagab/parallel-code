@@ -40,6 +40,63 @@ export function registerShortcut(shortcut: Shortcut): () => void {
   };
 }
 
+interface ZoomShortcutHandlers {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetZoom: () => void;
+}
+
+export function registerZoomShortcuts(handlers: ZoomShortcutHandlers): () => void {
+  const cleanups = [
+    // Zoom in/out: variants for keyboard layouts where matches() needs an
+    // exact shift-state match (so each case needs its own registration).
+    //   key '=' no shift  — Ctrl+= on US/UK keyboards
+    //   key '+' shift     — Ctrl+Shift+= on US/UK keyboards
+    //   key '+' no shift  — Ctrl++ on European keyboards and NumPad+
+    registerShortcut({
+      key: '=',
+      cmdOrCtrl: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => handlers.zoomIn(),
+    }),
+    registerShortcut({
+      key: '+',
+      cmdOrCtrl: true,
+      shift: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => handlers.zoomIn(),
+    }),
+    registerShortcut({
+      key: '+',
+      cmdOrCtrl: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => handlers.zoomIn(),
+    }),
+    registerShortcut({
+      key: '-',
+      cmdOrCtrl: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => handlers.zoomOut(),
+    }),
+    // Some layouts require Shift to produce the digit 0, so Ctrl+0 would miss
+    // the registry binding's exact shift-state match without this variant.
+    registerShortcut({
+      key: '0',
+      cmdOrCtrl: true,
+      shift: true,
+      global: true,
+      dialogSafe: true,
+      handler: () => handlers.resetZoom(),
+    }),
+  ];
+
+  return () => cleanups.forEach((cleanup) => cleanup());
+}
+
 /** Whether a dialog overlay is currently mounted in the DOM. */
 function isDialogOpen(): boolean {
   return document.querySelector('.dialog-overlay') !== null;

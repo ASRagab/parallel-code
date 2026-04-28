@@ -49,7 +49,7 @@ import {
 } from './store/store';
 import { isGitHubUrl } from './lib/github-url';
 import type { PersistedWindowState } from './store/types';
-import { initShortcuts, registerShortcut, registerFromRegistry } from './lib/shortcuts';
+import { initShortcuts, registerFromRegistry, registerZoomShortcuts } from './lib/shortcuts';
 import { resolvedBindings, loadKeybindings, dismissMigrationBanner } from './store/keybindings';
 import { setupAutosave } from './store/autosave';
 import { isMac, mod } from './lib/platform';
@@ -510,39 +510,10 @@ function App() {
       resetZoom: () => resetGlobalScale(),
     };
 
-    // Zoom in/out: variants for keyboard layouts where matches() needs an
-    // exact shift-state match (so each case needs its own registration).
-    //   key '=' no shift  — Ctrl+= on US/UK keyboards
-    //   key '+' shift     — Ctrl+Shift+= on US/UK keyboards
-    //   key '+' no shift  — Ctrl++ on European keyboards and NumPad+
-    registerShortcut({
-      key: '=',
-      cmdOrCtrl: true,
-      global: true,
-      dialogSafe: true,
-      handler: () => adjustGlobalScale(1),
-    });
-    registerShortcut({
-      key: '+',
-      cmdOrCtrl: true,
-      shift: true,
-      global: true,
-      dialogSafe: true,
-      handler: () => adjustGlobalScale(1),
-    });
-    registerShortcut({
-      key: '+',
-      cmdOrCtrl: true,
-      global: true,
-      dialogSafe: true,
-      handler: () => adjustGlobalScale(1),
-    });
-    registerShortcut({
-      key: '-',
-      cmdOrCtrl: true,
-      global: true,
-      dialogSafe: true,
-      handler: () => adjustGlobalScale(-1),
+    const cleanupZoomShortcuts = registerZoomShortcuts({
+      zoomIn: () => adjustGlobalScale(1),
+      zoomOut: () => adjustGlobalScale(-1),
+      resetZoom: () => resetGlobalScale(),
     });
 
     createEffect(() => {
@@ -563,6 +534,7 @@ function App() {
       unlistenFocusChanged?.();
       unlistenResized?.();
       unlistenMoved?.();
+      cleanupZoomShortcuts();
     });
   });
 
