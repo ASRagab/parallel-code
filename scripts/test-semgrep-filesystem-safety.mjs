@@ -1,10 +1,18 @@
 #!/usr/bin/env node
 /* global console, process */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+const probe = spawnSync('semgrep', ['--version'], { stdio: 'ignore' });
+if (probe.error?.code === 'ENOENT' || probe.status !== 0) {
+  console.error(
+    'semgrep not installed — install with `brew install semgrep` or `pip install semgrep`',
+  );
+  process.exit(1);
+}
 
 const tmp = mkdtempSync(join(tmpdir(), 'parallel-code-semgrep-'));
 
