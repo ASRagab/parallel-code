@@ -229,6 +229,8 @@ export class Coordinator {
             this.suppressPendingNotificationForTask(task);
             task.reviewNotificationQueued = true;
             const remaining = this.countRemaining(coordinatorId);
+            // The resolver IS `complete` from waitForSignalDone — it handles
+            // finishSignalWait, replay-cache write, and timer cleanup itself.
             firstAnyResolver({
               taskId: task.id,
               name: task.name,
@@ -236,7 +238,6 @@ export class Coordinator {
               signalDoneAt: new Date().toISOString(),
               remaining,
             });
-            this.finishSignalWait(coordinatorId);
           }
           this.maybeQueueReviewNotification(task, 'exited', exitCode ?? null);
           break;
@@ -1926,6 +1927,7 @@ export class Coordinator {
       this.suppressPendingNotificationForTask(task);
       task.reviewNotificationQueued = true;
       const remaining = this.countRemaining(coordinatorId);
+      // Resolver `complete` from waitForSignalDone handles finishSignalWait.
       firstAnyResolver({
         taskId: task.id,
         name: task.name,
@@ -1933,7 +1935,6 @@ export class Coordinator {
         signalDoneAt: new Date().toISOString(),
         remaining,
       });
-      this.finishSignalWait(coordinatorId);
     }
     this.clearAgentBuffers(task.agentId);
     // Delete per-task MCP config tmp file
@@ -2227,7 +2228,11 @@ export class Coordinator {
         signalDoneAt: new Date().toISOString(),
         remaining: 0,
       };
-      for (const resolve of anyResolvers) resolve(syntheticResult);
+      // Snapshot first — each resolver is `complete` from waitForSignalDone,
+      // which splices itself out of the array, and mutating during iteration
+      // would skip waiters.
+      const snapshot = [...anyResolvers];
+      for (const resolve of snapshot) resolve(syntheticResult);
     }
     this.anySignalResolvers.delete(coordinatorTaskId);
     this.activeSignalWaitCounts.delete(coordinatorTaskId);
@@ -2376,6 +2381,7 @@ export class Coordinator {
       // Suppress before finishSignalWait so it doesn't re-stage
       this.suppressPendingNotificationForTask(task);
       const remaining = this.countRemaining(coordinatorId);
+      // Resolver `complete` from waitForSignalDone handles finishSignalWait.
       firstAnyResolver({
         taskId,
         name: task.name,
@@ -2383,7 +2389,6 @@ export class Coordinator {
         signalDoneAt: (task.signalDoneAt ?? new Date()).toISOString(),
         remaining,
       });
-      this.finishSignalWait(coordinatorId);
       // Tell renderer — coordinator already gets result via MCP return value, no UI notification needed
       this.notifyRenderer(IPC.MCP_TaskStateSync, {
         taskId,
@@ -2529,20 +2534,28 @@ export class Coordinator {
 
     return new Promise((resolve) => {
       const timerRef = { value: undefined as ReturnType<typeof setTimeout> | undefined };
+      let settled = false;
 
-      const wrapped = (result: WaitForSignalDoneResult) => {
+      // Single termination path: timer cleanup, resolver removal, active-wait
+      // bookkeeping, replay-cache write, and promise resolution all happen here
+      // regardless of whether the result came from a signal, an exit, a
+      // coordinator close, or the timeout. Idempotent — repeated calls are a
+      // no-op so external callers can shift the resolver out before invoking.
+      const complete = (result: WaitForSignalDoneResult) => {
+        if (settled) return;
+        settled = true;
         if (timerRef.value !== undefined) clearTimeout(timerRef.value);
+        const resolvers = this.anySignalResolvers.get(coordinatorTaskId);
+        if (resolvers) {
+          const idx = resolvers.indexOf(complete);
+          if (idx >= 0) resolvers.splice(idx, 1);
+        }
+        this.finishSignalWait(coordinatorTaskId);
         if (requestId) this.recentlyDelivered.set(coordinatorTaskId, requestId, result);
         resolve(result);
       };
 
       timerRef.value = setTimeout(() => {
-        const resolvers = this.anySignalResolvers.get(coordinatorTaskId);
-        if (resolvers) {
-          const idx = resolvers.indexOf(wrapped);
-          if (idx >= 0) resolvers.splice(idx, 1);
-        }
-        this.finishSignalWait(coordinatorTaskId);
         logWarn('coordinator.signal_wait', `wait_for_signal_done timed out after ${timeoutMs}ms`, {
           coordinatorTaskId,
           reason: 'timeout',
@@ -2550,7 +2563,7 @@ export class Coordinator {
           activeWaitCount: this.activeSignalWaitCounts.get(coordinatorTaskId) ?? 0,
         });
         const remaining = this.countRemaining(coordinatorTaskId);
-        resolve({ remaining, timedOut: true });
+        complete({ remaining, timedOut: true });
       }, timeoutMs);
 
       let resolvers = this.anySignalResolvers.get(coordinatorTaskId);
@@ -2558,7 +2571,7 @@ export class Coordinator {
         resolvers = [];
         this.anySignalResolvers.set(coordinatorTaskId, resolvers);
       }
-      resolvers.push(wrapped);
+      resolvers.push(complete);
     });
   }
 

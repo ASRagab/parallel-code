@@ -5525,6 +5525,24 @@ describe('Coordinator waitForSignalDone — requestId replay after transport fai
     expect(result.taskId).toBe('task-1');
   });
 
+  it('same requestId returns cached timed-out result after a timeout (no second live wait)', async () => {
+    await coordinator.createTask({ name: 'test', prompt: 'do', coordinatorTaskId: 'coord-1' });
+
+    const requestId = 'replay-timeout-id';
+    // First call times out — no unconsumed signal, short timeout.
+    const result1 = await coordinator.waitForSignalDone('coord-1', 25, requestId);
+    expect(result1.timedOut).toBe(true);
+
+    // Retry with the same requestId must replay the cached timed-out result
+    // instead of registering a fresh waiter — otherwise a stale HTTP retry
+    // would inflate activeSignalWaitCounts and re-block the coordinator.
+    const beforeRetry = Date.now();
+    const result2 = await coordinator.waitForSignalDone('coord-1', 10_000, requestId);
+    const elapsed = Date.now() - beforeRetry;
+    expect(result2).toEqual(result1);
+    expect(elapsed).toBeLessThan(100);
+  });
+
   it('cached result for coord-A does not replay for coord-B with the same requestId', async () => {
     coordinator.registerCoordinator('coord-2', 'proj-1');
 
