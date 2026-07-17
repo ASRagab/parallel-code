@@ -10,7 +10,11 @@ import { invoke, fireAndForget, Channel } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { getTerminalFontFamily } from '../lib/fonts';
 import { TERMINAL_SCROLLBACK_LINES, base64ToUint8Array } from '../lib/terminalConstants';
-import { getTerminalTheme, getTerminalThemeForCustom } from '../lib/theme';
+import {
+  getTerminalSearchDecorations,
+  getTerminalTheme,
+  getTerminalThemeForCustom,
+} from '../lib/theme';
 import { matchesGlobalShortcut } from '../lib/shortcuts';
 import { isMac } from '../lib/platform';
 import { resolvedBindings } from '../store/keybindings';
@@ -166,17 +170,6 @@ const openTerminalHttpLinkWithModifier = createTerminalHttpLinkHandler({
 function getTerminalBindings() {
   return resolvedBindings().filter((b) => b.layer === 'terminal');
 }
-
-// Browser-style find: amber highlight for all matches, orange for the active
-// one. Like a browser, the highlight palette is fixed rather than theme-derived.
-// Overview-ruler colors must be solid; match backgrounds carry alpha so the
-// underlying glyphs stay legible on both light and dark terminals.
-const SEARCH_DECORATIONS = {
-  matchBackground: 'rgba(255, 213, 79, 0.4)',
-  matchOverviewRuler: '#ffd54f',
-  activeMatchBackground: 'rgba(255, 138, 0, 0.85)',
-  activeMatchColorOverviewRuler: '#ff8a00',
-} as const;
 
 export function TerminalView(props: TerminalViewProps) {
   let containerRef!: HTMLDivElement;
@@ -359,7 +352,7 @@ export function TerminalView(props: TerminalViewProps) {
       resetSearchResults();
       return;
     }
-    const opts = { incremental, decorations: SEARCH_DECORATIONS };
+    const opts = { incremental, decorations: getTerminalSearchDecorations() };
     if (direction === 'prev') searchAddon.findPrevious(q, opts);
     else searchAddon.findNext(q, opts);
   }
@@ -1190,14 +1183,14 @@ export function TerminalView(props: TerminalViewProps) {
             'align-items': 'center',
             'justify-content': 'center',
             gap: '12px',
-            background: 'rgba(0,0,0,0.85)',
+            background: 'color-mix(in srgb, var(--bg-elevated) 92%, transparent)',
             'font-family': 'var(--font-ui)',
             'z-index': '10',
           }}
         >
           <span
             style={{
-              color: '#ff6b6b',
+              color: 'var(--error)',
               'font-size': '13px',
               'text-align': 'center',
               padding: '0 16px',

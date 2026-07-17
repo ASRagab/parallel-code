@@ -10,7 +10,7 @@ import {
 } from '../lib/fonts';
 import { presetsForTone } from '../lib/look';
 import type { AppearanceMode } from '../lib/look';
-import { theme, sectionLabelStyle, readCssVarsForPreset, terminalBackground } from '../lib/theme';
+import { theme, sectionLabelStyle, readCssVarsForPreset } from '../lib/theme';
 import { themeToCss, detectThemeTone } from '../lib/custom-theme';
 import {
   store,
@@ -259,7 +259,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
 
   function openCloneDialog(presetId: string, label: string) {
     const vars = readCssVarsForPreset(presetId);
-    const bg = terminalBackground[presetId as keyof typeof terminalBackground] ?? '#000000';
+    const bg = vars['--task-panel-bg'] ?? '#000000';
     setCloneCss(themeToCss(`${label} (copy)`, '', bg, vars));
     setEditingThemeId(null);
     setCustomThemeDialogOpen(true);
