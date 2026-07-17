@@ -365,7 +365,7 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
           value={searchQuery()}
           onInput={(e) => setSearchQuery(e.currentTarget.value)}
           style={{
-            background: 'rgba(255,255,255,0.06)',
+            background: 'color-mix(in srgb, var(--fg) 6%, transparent)',
             border: `1px solid ${theme.borderSubtle}`,
             'border-radius': '4px',
             color: theme.fg,

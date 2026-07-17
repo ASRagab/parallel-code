@@ -7,6 +7,7 @@ import {
   collectAllowedVars,
   formatVarLines,
   isHexTerminalBackground,
+  checkThemeContrast,
 } from './custom-theme';
 
 describe('parseThemeCss', () => {
@@ -166,6 +167,22 @@ describe('custom theme helper primitives', () => {
     ).toEqual({ '--bg': '#000' });
   });
 
+  it('supports semantic diff and search colors in custom themes', () => {
+    expect(
+      collectAllowedVars([
+        ['--diff-add-bg', 'rgba(47, 209, 152, 0.1)'],
+        ['--diff-remove-bg', 'rgba(255, 95, 115, 0.1)'],
+        ['--search-match', '#ffd54f'],
+        ['--search-match-active', '#ff8a00'],
+      ]),
+    ).toEqual({
+      '--diff-add-bg': 'rgba(47, 209, 152, 0.1)',
+      '--diff-remove-bg': 'rgba(255, 95, 115, 0.1)',
+      '--search-match': '#ffd54f',
+      '--search-match-active': '#ff8a00',
+    });
+  });
+
   it('can apply CSS value validation when collecting parser declarations', () => {
     expect(
       collectAllowedVars(
@@ -180,6 +197,28 @@ describe('custom theme helper primitives', () => {
 
   it('formats variable lines in supported CSS variable order by default', () => {
     expect(formatVarLines({ '--fg': '#fff', '--bg': '#000' })).toBe('  --bg: #000;\n  --fg: #fff;');
+  });
+});
+
+describe('checkThemeContrast', () => {
+  it('warns when subtle text falls below 3:1 on elevated backgrounds', () => {
+    const warnings = checkThemeContrast({
+      '--bg-elevated': '#ffffff',
+      '--bg-selected': '#ffffff',
+      '--fg': '#000000',
+      '--fg-muted': '#555555',
+      '--fg-subtle': '#aaaaaa',
+      '--accent': '#000000',
+      '--accent-text': '#ffffff',
+    });
+
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        fgVar: '--fg-subtle',
+        bgVar: '--bg-elevated',
+        required: 3,
+      }),
+    ]);
   });
 });
 

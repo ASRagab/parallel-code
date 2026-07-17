@@ -28,6 +28,10 @@ export const CSS_VARS = [
   '--island-radius',
   '--task-container-bg',
   '--task-panel-bg',
+  '--diff-add-bg',
+  '--diff-remove-bg',
+  '--search-match',
+  '--search-match-active',
 ] as const;
 
 export type CssVar = (typeof CSS_VARS)[number];
@@ -110,6 +114,10 @@ const CSS_VAR_DESCRIPTIONS: Record<CssVar, string> = {
   '--task-container-bg': 'Background of the task list container within an island',
   '--task-panel-bg':
     'Content panel backgrounds inside tasks (conceptually matches terminalBackground)',
+  '--diff-add-bg': 'Background tint for added diff lines',
+  '--diff-remove-bg': 'Background tint for removed diff lines',
+  '--search-match': 'Background color for search matches',
+  '--search-match-active': 'Background color for the active search match',
 };
 
 export function validateCustomTheme(input: unknown): Omit<CustomTheme, 'id'> {
@@ -283,6 +291,7 @@ export interface ContrastWarning {
 const CONTRAST_PAIRS: [CssVar, CssVar, number][] = [
   ['--fg', '--bg-elevated', 4.5],
   ['--fg-muted', '--bg-elevated', 3.0],
+  ['--fg-subtle', '--bg-elevated', 3.0],
   ['--fg', '--bg-selected', 4.5],
   ['--accent-text', '--accent', 4.5],
 ];

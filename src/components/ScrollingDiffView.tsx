@@ -36,8 +36,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const LINE_BG: Record<DiffLine['type'], string> = {
-  add: 'rgba(47, 209, 152, 0.10)',
-  remove: 'rgba(255, 95, 115, 0.10)',
+  add: theme.diffAddBg,
+  remove: theme.diffRemoveBg,
   context: 'transparent',
 };
 
@@ -95,8 +95,8 @@ function isLineHighlighted(
 // Search highlight helpers
 // ---------------------------------------------------------------------------
 
-const SEARCH_HIGHLIGHT_BG = 'rgba(255, 200, 50, 0.35)';
-const CURRENT_MATCH_BG = 'rgba(100, 160, 255, 0.35)';
+const SEARCH_HIGHLIGHT_BG = `color-mix(in srgb, ${theme.searchMatch} 35%, transparent)`;
+const CURRENT_MATCH_BG = `color-mix(in srgb, ${theme.searchMatchActive} 35%, transparent)`;
 
 function highlightSearchMatches(text: string, query: string | undefined): JSX.Element {
   if (!query || query.length === 0) return <>{text}</>;
@@ -522,7 +522,7 @@ function FileSection(props: {
             color: getStatusColor(props.file.status),
             background:
               props.file.status === 'M'
-                ? 'rgba(255,255,255,0.06)'
+                ? 'color-mix(in srgb, var(--fg) 6%, transparent)'
                 : `color-mix(in srgb, ${getStatusColor(props.file.status)} 15%, transparent)`,
           }}
         >
