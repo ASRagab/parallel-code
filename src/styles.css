@@ -72,7 +72,7 @@ body.font-smoothing {
 /* Visible keyboard focus indicators for interactive controls. The selector
    includes native elements and ARIA widgets so keyboard focus remains visible
    across the app, including content mounted through Solid <Portal>. */
-:is(
+:where(
   button,
   input,
   select,
