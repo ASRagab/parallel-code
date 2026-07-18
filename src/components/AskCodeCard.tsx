@@ -149,6 +149,7 @@ export function AskCodeCard(props: AskCodeCardProps) {
       >
         <Show when={loading() && !response()}>
           <span
+            class="askcode-loading-pulse"
             style={{
               color: theme.fgSubtle,
               animation: 'askcode-pulse 1.5s ease-in-out infinite',
@@ -160,6 +161,7 @@ export function AskCodeCard(props: AskCodeCardProps) {
         <Show when={response()}>{response()}</Show>
         <Show when={loading() && response()}>
           <span
+            class="askcode-loading-pulse"
             style={{
               color: theme.accent,
               'font-size': sf(11),

@@ -983,6 +983,16 @@ textarea::placeholder {
   .projects-collapser {
     transition: none;
   }
+
+  .task-appearing,
+  .task-item-appearing,
+  .task-removing,
+  .task-item-removing,
+  .status-dot-pulse,
+  .askcode-loading-pulse,
+  .keybinding-recording-pulse {
+    animation: none !important;
+  }
 }
 
 .tiling-layout-shell {

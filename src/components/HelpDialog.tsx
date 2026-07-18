@@ -364,6 +364,7 @@ export function HelpDialog(props: HelpDialogProps) {
                           </button>
                         </Show>
                         <kbd
+                          class="keybinding-recording-pulse"
                           role="button"
                           tabIndex={0}
                           aria-label={
