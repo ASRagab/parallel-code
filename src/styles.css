@@ -69,31 +69,28 @@ body.font-smoothing {
   text-rendering: geometricPrecision;
 }
 
-/* Visible keyboard focus indicators inside dialogs.
-   Scoped to .dialog-panel (a class hook) so it works through Solid <Portal>
-   mounting, where descendant selectors rooted at the app shell would not
-   match. The selector list mirrors the spec's interactive-role enumeration
-   so icon buttons, toggles, and ARIA widgets all pick up the indicator. */
-.dialog-panel
-  :is(
-    button,
-    input,
-    select,
-    textarea,
-    a[href],
-    [tabindex]:not([tabindex='-1']),
-    [role='button'],
-    [role='switch'],
-    [role='checkbox'],
-    [role='link'],
-    [role='menuitem'],
-    [role='menuitemradio'],
-    [role='menuitemcheckbox'],
-    [role='tab'],
-    [role='option'],
-    [role='combobox'],
-    [role='radio']
-  ):focus-visible {
+/* Visible keyboard focus indicators for interactive controls. The selector
+   includes native elements and ARIA widgets so keyboard focus remains visible
+   across the app, including content mounted through Solid <Portal>. */
+:is(
+  button,
+  input,
+  select,
+  textarea,
+  a[href],
+  [tabindex]:not([tabindex='-1']),
+  [role='button'],
+  [role='switch'],
+  [role='checkbox'],
+  [role='link'],
+  [role='menuitem'],
+  [role='menuitemradio'],
+  [role='menuitemcheckbox'],
+  [role='tab'],
+  [role='option'],
+  [role='combobox'],
+  [role='radio']
+):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1508,10 +1505,6 @@ textarea::placeholder {
     border-color 0.15s ease,
     color 0.15s ease,
     background 0.15s ease;
-}
-
-.new-task-placeholder:focus-visible {
-  outline: none;
 }
 
 .new-task-placeholder:hover {
