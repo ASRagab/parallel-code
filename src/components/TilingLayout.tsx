@@ -32,6 +32,11 @@ import { createCtrlShiftWheelResizeHandler } from '../lib/wheelZoom';
 
 const VIEWPORT_EPSILON_PX = 4;
 
+function shouldAnimateTaskAppearance(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
+  return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 /** Tiling-layout top-level child. Distinct from `PanelChild` because this
  *  layout owns its own horizontal drag model — fixed placeholders, per-panel
  *  min/max widths, pixel-precise persisted sizes — that doesn't map onto the
@@ -244,6 +249,7 @@ export function TilingLayout() {
           content: () => {
             const task = store.tasks[panelId];
             const terminal = store.terminals[panelId];
+            const appearanceClass = shouldAnimateTaskAppearance() ? 'task-appearing' : undefined;
             // eslint-disable-next-line solid/components-return-once
             if (!task && !terminal) return <div />;
             return (
@@ -252,7 +258,7 @@ export function TilingLayout() {
                 class={
                   task?.closingStatus === 'removing' || terminal?.closingStatus === 'removing'
                     ? 'task-removing'
-                    : 'task-appearing'
+                    : appearanceClass
                 }
                 style={{
                   height: '100%',
@@ -264,6 +270,10 @@ export function TilingLayout() {
                   'box-sizing': 'border-box',
                 }}
                 onAnimationEnd={(e) => {
+                  if (e.animationName === 'taskAppear')
+                    e.currentTarget.classList.remove('task-appearing');
+                }}
+                onAnimationCancel={(e) => {
                   if (e.animationName === 'taskAppear')
                     e.currentTarget.classList.remove('task-appearing');
                 }}

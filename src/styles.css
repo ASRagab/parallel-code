@@ -979,22 +979,6 @@ textarea::placeholder {
   overflow: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .projects-collapser {
-    transition: none;
-  }
-
-  .task-appearing,
-  .task-item-appearing,
-  .task-removing,
-  .task-item-removing,
-  .status-dot-pulse,
-  .askcode-loading-pulse,
-  .keybinding-recording-pulse {
-    animation: none !important;
-  }
-}
-
 .tiling-layout-shell {
   position: relative;
   flex: 1;
@@ -2200,5 +2184,32 @@ body.dragging-task * {
   }
   50% {
     opacity: 0.3;
+  }
+}
+
+/* Keep reduced-motion overrides last so class-based rules win by source order. */
+@media (prefers-reduced-motion: reduce) {
+  .projects-collapser {
+    transition: none;
+  }
+
+  .task-appearing,
+  .task-item-appearing,
+  .task-removing,
+  .task-item-removing,
+  .status-dot-pulse {
+    animation: none;
+  }
+
+  /* Preserve a static busy-state distinction after removing the pulse. */
+  .status-dot-pulse {
+    outline: 1px solid var(--fg-muted);
+    outline-offset: 1px;
+  }
+
+  /* These animations are declared inline and require an important override. */
+  .askcode-loading-pulse,
+  .keybinding-key {
+    animation: none !important;
   }
 }

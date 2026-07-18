@@ -3,39 +3,69 @@ import { resolve } from 'path';
 import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(resolve(__dirname, '../styles.css'), 'utf8');
+const helpDialog = readFileSync(resolve(__dirname, '../components/HelpDialog.tsx'), 'utf8');
+const tilingLayout = readFileSync(resolve(__dirname, '../components/TilingLayout.tsx'), 'utf8');
 
-function reducedMotionBlock(): string {
+function reducedMotionBlock(): { block: string; end: number } {
   const marker = '@media (prefers-reduced-motion: reduce)';
   const start = css.indexOf(marker);
   expect(start).toBeGreaterThanOrEqual(0);
+  expect(css.lastIndexOf(marker)).toBe(start);
 
   const openingBrace = css.indexOf('{', start);
   let depth = 0;
   for (let index = openingBrace; index < css.length; index += 1) {
     if (css[index] === '{') depth += 1;
     if (css[index] === '}') depth -= 1;
-    if (depth === 0) return css.slice(start, index + 1);
+    if (depth === 0) return { block: css.slice(start, index + 1), end: index };
   }
 
   throw new Error('Unclosed reduced-motion media query');
 }
 
-describe('reduced-motion styles', () => {
-  it('disables nonessential task and pulse animations', () => {
-    const block = reducedMotionBlock();
-    const animatedSelectors = [
-      '.task-appearing',
-      '.task-item-appearing',
-      '.task-removing',
-      '.task-item-removing',
-      '.status-dot-pulse',
-      '.askcode-loading-pulse',
-      '.keybinding-recording-pulse',
-    ];
+function expectRule(block: string, selectors: string[], declaration: RegExp): void {
+  const selectorPattern = selectors
+    .map((selector) => selector.replaceAll('.', '\\.'))
+    .join('\\s*,\\s*');
+  const rule = new RegExp(
+    `${selectorPattern}\\s*\\{[^}]*${declaration.source}[^}]*\\}`,
+    declaration.flags,
+  );
+  expect(block).toMatch(rule);
+}
 
-    for (const selector of animatedSelectors) {
-      expect(block).toContain(selector);
-    }
-    expect(block).toMatch(/animation:\s*none\s*!important/);
+describe('reduced-motion styles', () => {
+  it('pairs each main-app selector group with its reduced-motion override', () => {
+    const { block, end } = reducedMotionBlock();
+
+    expectRule(block, ['.projects-collapser'], /transition:\s*none\s*;/);
+    expectRule(
+      block,
+      [
+        '.task-appearing',
+        '.task-item-appearing',
+        '.task-removing',
+        '.task-item-removing',
+        '.status-dot-pulse',
+      ],
+      /animation:\s*none\s*;/,
+    );
+    expectRule(block, ['.status-dot-pulse'], /outline:\s*1px solid var\(--fg-muted\)\s*;/);
+    expectRule(
+      block,
+      ['.askcode-loading-pulse', '.keybinding-key'],
+      /animation:\s*none\s*!important\s*;/,
+    );
+    expect(block).not.toContain('.inline-spinner');
+    expect(block).not.toContain('keybinding-recording-pulse');
+    expect(css.slice(end + 1).trim()).toBe('');
+  });
+
+  it('avoids stale entry and keybinding animation classes', () => {
+    expect(tilingLayout).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches");
+    expect(tilingLayout).toContain('const appearanceClass = shouldAnimateTaskAppearance()');
+    expect(tilingLayout).toContain('onAnimationCancel');
+    expect(helpDialog).toContain('class="keybinding-key"');
+    expect(helpDialog).not.toContain('keybinding-recording-pulse');
   });
 });
