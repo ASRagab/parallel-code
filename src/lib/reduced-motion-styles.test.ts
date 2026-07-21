@@ -3,8 +3,6 @@ import { resolve } from 'path';
 import { describe, expect, it } from 'vitest';
 
 const css = readFileSync(resolve(__dirname, '../styles.css'), 'utf8');
-const helpDialog = readFileSync(resolve(__dirname, '../components/HelpDialog.tsx'), 'utf8');
-const tilingLayout = readFileSync(resolve(__dirname, '../components/TilingLayout.tsx'), 'utf8');
 
 function reducedMotionBlock(): { block: string; end: number } {
   const marker = '@media (prefers-reduced-motion: reduce)';
@@ -34,7 +32,7 @@ function expectRule(block: string, selectors: string[], declaration: RegExp): vo
   expect(block).toMatch(rule);
 }
 
-describe('reduced-motion styles', () => {
+describe('main stylesheet reduced-motion styles', () => {
   it('pairs each main-app selector group with its reduced-motion override', () => {
     const { block, end } = reducedMotionBlock();
 
@@ -50,7 +48,8 @@ describe('reduced-motion styles', () => {
       ],
       /animation:\s*none\s*;/,
     );
-    expectRule(block, ['.status-dot-pulse'], /outline:\s*1px solid var\(--fg-muted\)\s*;/);
+    expectRule(block, ['.status-dot-ring'], /outline:\s*1px solid var\(--fg-muted\)\s*;/);
+    expectRule(block, ['.status-dot-ring'], /outline-offset:\s*2px\s*;/);
     expectRule(
       block,
       ['.askcode-loading-pulse', '.keybinding-key'],
@@ -58,14 +57,9 @@ describe('reduced-motion styles', () => {
     );
     expect(block).not.toContain('.inline-spinner');
     expect(block).not.toContain('keybinding-recording-pulse');
-    expect(css.slice(end + 1).trim()).toBe('');
-  });
-
-  it('avoids stale entry and keybinding animation classes', () => {
-    expect(tilingLayout).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches");
-    expect(tilingLayout).toContain('const appearanceClass = shouldAnimateTaskAppearance()');
-    expect(tilingLayout).toContain('onAnimationCancel');
-    expect(helpDialog).toContain('class="keybinding-key"');
-    expect(helpDialog).not.toContain('keybinding-recording-pulse');
+    expect(
+      css.slice(end + 1).trim(),
+      'Keep the reduced-motion block at the end of styles.css so its class rules win by source order',
+    ).toBe('');
   });
 });

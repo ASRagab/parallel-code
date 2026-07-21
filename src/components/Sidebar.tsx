@@ -48,6 +48,7 @@ import { abbreviateHomePath } from '../lib/path';
 import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import type { ImportableWorktree } from '../ipc/types';
+import { shouldAnimateTaskAppearance } from '../lib/reducedMotion';
 
 const DRAG_THRESHOLD = 5;
 const SIDEBAR_DEFAULT_WIDTH = 240;
@@ -171,9 +172,17 @@ export function TaskRowShell(props: {
   style?: JSX.CSSProperties;
   children: JSX.Element;
 }) {
+  const className = () =>
+    shouldAnimateTaskAppearance()
+      ? props.class
+      : props.class
+          .split(/\s+/)
+          .filter((className) => className !== 'task-item-appearing')
+          .join(' ');
+
   return (
     <div
-      class={props.class}
+      class={className()}
       role={props.role}
       tabIndex={props.tabIndex}
       data-task-index={props.taskIndex}

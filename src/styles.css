@@ -1438,6 +1438,7 @@ textarea::placeholder {
 }
 
 .inline-spinner {
+  /* Rotation is the loading cue, so functional spinners remain animated under reduced motion. */
   display: inline-block;
   box-sizing: border-box;
   width: 12px;
@@ -2202,9 +2203,9 @@ body.dragging-task * {
   }
 
   /* Preserve a static busy-state distinction after removing the pulse. */
-  .status-dot-pulse {
+  .status-dot-ring {
     outline: 1px solid var(--fg-muted);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
 
   /* These animations are declared inline and require an important override. */

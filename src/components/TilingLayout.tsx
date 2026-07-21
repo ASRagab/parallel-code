@@ -29,13 +29,9 @@ import { markDirty } from '../lib/terminalFitManager';
 import { theme } from '../lib/theme';
 import { mod } from '../lib/platform';
 import { createCtrlShiftWheelResizeHandler } from '../lib/wheelZoom';
+import { shouldAnimateTaskAppearance } from '../lib/reducedMotion';
 
 const VIEWPORT_EPSILON_PX = 4;
-
-function shouldAnimateTaskAppearance(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-  return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 /** Tiling-layout top-level child. Distinct from `PanelChild` because this
  *  layout owns its own horizontal drag model — fixed placeholders, per-panel
