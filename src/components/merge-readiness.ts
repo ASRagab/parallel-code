@@ -42,40 +42,39 @@ function mergeSafetyCheck(input: MergeReadinessInput): MergeReadinessCheck {
 
   const merge = input.mergeStatus;
   const worktree = input.worktreeStatus;
-  if (!merge || !worktree) {
-    return {
-      label: 'Merge safety',
-      status: 'warning',
-      detail: 'Merge safety could not be checked.',
-    };
-  }
-
-  if (worktree.current_branch === null) {
+  if (worktree?.current_branch === null) {
     return {
       label: 'Merge safety',
       status: 'blocked',
       detail: 'Worktree has a detached HEAD.',
     };
   }
-  if (worktree.current_branch !== input.expectedBranch) {
+  if (worktree && worktree.current_branch !== input.expectedBranch) {
     return {
       label: 'Merge safety',
       status: 'blocked',
       detail: `Worktree is on '${worktree.current_branch}', expected '${input.expectedBranch}'.`,
     };
   }
-  if (merge.conflicting_files.length > 0) {
+  if (merge && merge.conflicting_files.length > 0) {
     return {
       label: 'Merge safety',
       status: 'blocked',
       detail: `${countLabel(merge.conflicting_files.length, 'conflicting file')} must be resolved.`,
     };
   }
-  if (!worktree.has_committed_changes) {
+  if (worktree && !worktree.has_committed_changes) {
     return {
       label: 'Merge safety',
       status: 'blocked',
       detail: 'No committed changes are available to merge.',
+    };
+  }
+  if (!merge || !worktree) {
+    return {
+      label: 'Merge safety',
+      status: 'warning',
+      detail: 'Merge safety could not be checked.',
     };
   }
   if (merge.main_ahead_count > 0) {
@@ -123,10 +122,13 @@ function prCheck(prChecks?: PrReadinessState): MergeReadinessCheck {
     return { label: 'PR checks', status: 'neutral', detail: 'No PR checks available.' };
   }
   if (prChecks.overall === 'pending') {
+    const failing = prChecks.failing
+      ? `, ${countLabel(prChecks.failing, 'failing', 'failing')}`
+      : '';
     return {
       label: 'PR checks',
       status: 'warning',
-      detail: `${countLabel(prChecks.pending, 'pending', 'pending')}, ${countLabel(prChecks.passing, 'passing', 'passing')}.`,
+      detail: `${countLabel(prChecks.pending, 'pending', 'pending')}, ${countLabel(prChecks.passing, 'passing', 'passing')}${failing}.`,
     };
   }
   if (prChecks.overall === 'failure') {

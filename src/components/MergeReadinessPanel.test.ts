@@ -88,6 +88,30 @@ describe('buildMergeReadiness', () => {
     expect(readiness.checks[0]).toEqual(expect.objectContaining({ status: 'blocked', detail }));
   });
 
+  it.each([
+    {
+      name: 'a detached HEAD when merge status is unavailable',
+      overrides: {
+        mergeStatus: undefined,
+        worktreeStatus: { ...cleanWorktreeStatus, current_branch: null },
+      },
+      detail: 'Worktree has a detached HEAD.',
+    },
+    {
+      name: 'conflicts when worktree status is unavailable',
+      overrides: {
+        mergeStatus: { ...cleanMergeStatus, conflicting_files: ['src/App.tsx'] },
+        worktreeStatus: undefined,
+      },
+      detail: '1 conflicting file must be resolved.',
+    },
+  ])('preserves the known blocker for $name', ({ overrides, detail }) => {
+    const readiness = buildMergeReadiness(input(overrides));
+
+    expect(readiness.overall).toBe('blocked');
+    expect(readiness.checks[0]).toEqual(expect.objectContaining({ status: 'blocked', detail }));
+  });
+
   it('reports attention for uncommitted changes and missing verification', () => {
     const readiness = buildMergeReadiness(
       input({
@@ -133,6 +157,22 @@ describe('buildMergeReadiness', () => {
       expect.objectContaining({ status: 'warning', detail: '1 pending, 2 passing.' }),
     );
   });
+
+  it('includes failures while PR checks are still pending', () => {
+    const readiness = buildMergeReadiness(
+      input({
+        prChecks: { overall: 'pending', passing: 2, pending: 1, failing: 1 },
+      }),
+    );
+
+    expect(readiness.overall).toBe('attention');
+    expect(readiness.checks[2]).toEqual(
+      expect.objectContaining({
+        status: 'warning',
+        detail: '1 pending, 2 passing, 1 failing.',
+      }),
+    );
+  });
 });
 
 describe('MergeReadinessPanel', () => {
@@ -147,5 +187,17 @@ describe('MergeReadinessPanel', () => {
     expect(html).toContain('2 checks passed.');
     expect(html).toContain('PR checks');
     expect(html).toContain('No PR checks available.');
+    expect(html).toContain(
+      'title="Ready means every available check passed. Needs attention means a warning; Not ready means a merge-safety blocker; Checking means merge data is loading. This summary is advisory."',
+    );
+    expect(html).toContain(
+      'title="Checks the task branch for conflicts with its base branch, branch mismatch, committed changes, and local uncommitted changes."',
+    );
+    expect(html).toContain(
+      'title="Uses structured verification reported by land_self, such as tests or typechecking. Without a report this needs attention; opening the dialog never runs commands."',
+    );
+    expect(html).toContain(
+      'title="Uses checks reported for a detected GitHub pull request. Pull requests are optional, and unavailable check data is neutral."',
+    );
   });
 });
