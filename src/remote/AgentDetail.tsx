@@ -240,7 +240,24 @@ export function AgentDetail(props: AgentDetailProps) {
       // scrollback buffer, so we must avoid duplicate content.
       term?.clear();
       const bytes = base64ToUint8Array(data);
-      term?.write(bytes, () => term?.scrollToBottom());
+      term?.write(bytes, () => {
+        const t = term;
+        if (!t) return;
+        t.scrollToBottom();
+        // Force a repaint of the just-written scrollback. On a freshly-opened
+        // task the replayed buffer can stay blank until the next live output:
+        // xterm requests a paint while parsing write(), but its renderer drops
+        // that request while the terminal's layout/visibility is still settling
+        // (RenderService pauses paints until the container is on-screen). An
+        // explicit refresh after the write repaints the current viewport.
+        // Guarded because the terminal may be mid-dispose; mirrors the desktop
+        // redrawTerminal path (terminalFitManager.ts).
+        try {
+          t.refresh(0, t.rows - 1);
+        } catch {
+          /* terminal mid-dispose — a cosmetic repaint must never throw */
+        }
+      });
     });
 
     const cleanupOutput = onOutput(props.agentId, (data) => {
