@@ -345,6 +345,28 @@ describe('AI terminal layout persistence', () => {
     // Unknown/absent values fall back to the default (split → undefined).
     expect(store.tasks['task-2'].aiTerminalLayout).toBeUndefined();
   });
+
+  it('restores a tabbed layout for a collapsed task', async () => {
+    const def = agentDef();
+    mockInvoke.mockResolvedValueOnce(
+      JSON.stringify({
+        projects: [{ id: 'project-1', name: 'Repo', path: '/repo', color: 'hsl(0, 70%, 75%)' }],
+        lastProjectId: 'project-1',
+        lastAgentId: null,
+        taskOrder: [],
+        collapsedTaskOrder: ['task-1'],
+        tasks: {
+          'task-1': { ...persistedTask(def), collapsed: true, aiTerminalLayout: 'tabs' },
+        },
+        activeTaskId: null,
+        sidebarVisible: true,
+      }),
+    );
+
+    await loadState();
+
+    expect(store.tasks['task-1'].aiTerminalLayout).toBe('tabs');
+  });
 });
 
 // Minimal valid payload — no theme fields — used as a base for theme migration tests.

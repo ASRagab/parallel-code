@@ -18,7 +18,8 @@ import {
   showNotification,
   toggleAITerminalLayout,
 } from '../store/store';
-import { markDirty } from '../lib/terminalFitManager';
+import { markDirty, redrawTerminal } from '../lib/terminalFitManager';
+import { isMac } from '../lib/platform';
 import { warn as logWarn } from '../lib/log';
 import { InfoBar } from './InfoBar';
 import { TerminalView } from './TerminalView';
@@ -121,12 +122,17 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
 
   // In tabs mode only the selected pane is shown; the others stay mounted but
   // hidden (visibility:hidden) so their pty sessions and scrollback survive the
-  // switch. A hidden pane can miss ResizeObserver ticks, so re-fit the terminal
-  // as it becomes the visible tab (and when the layout flips to tabs).
+  // switch. As a pane becomes the visible tab, re-fit it (its container may have
+  // resized while hidden) and, on macOS, force a repaint: a backgrounded WebGL
+  // pane can return with a corrupt glyph atlas, and TerminalView's issue-#121
+  // redraw keys off focus mode — which never toggles for a within-task tab
+  // switch — so it wouldn't fire here.
   createEffect(() => {
     if (!tabsMode()) return;
     const id = visibleAgentId();
-    if (id) markDirty(id);
+    if (!id) return;
+    markDirty(id);
+    if (isMac) redrawTerminal(id);
   });
 
   const infoBarStatus = () => {
