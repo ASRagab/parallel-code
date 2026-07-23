@@ -16,7 +16,9 @@ import {
   addAgentToTask,
   closeAgentInTask,
   showNotification,
+  toggleAITerminalLayout,
 } from '../store/store';
+import { markDirty } from '../lib/terminalFitManager';
 import { warn as logWarn } from '../lib/log';
 import { InfoBar } from './InfoBar';
 import { TerminalView } from './TerminalView';
@@ -109,6 +111,23 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
     store.agents[props.selectedAgentId] ?? store.agents[firstAgentId()] ?? undefined;
 
   const fileNameFromPath = (filePath: string) => filePath.split('/').pop() ?? filePath;
+
+  const multipleAgents = () => props.task.agentIds.length > 1;
+  const tabsMode = () => multipleAgents() && props.task.aiTerminalLayout === 'tabs';
+  const visibleAgentId = () =>
+    props.task.agentIds.includes(props.selectedAgentId)
+      ? props.selectedAgentId
+      : (props.task.agentIds[0] ?? '');
+
+  // In tabs mode only the selected pane is shown; the others stay mounted but
+  // hidden (visibility:hidden) so their pty sessions and scrollback survive the
+  // switch. A hidden pane can miss ResizeObserver ticks, so re-fit the terminal
+  // as it becomes the visible tab (and when the layout flips to tabs).
+  createEffect(() => {
+    if (!tabsMode()) return;
+    const id = visibleAgentId();
+    if (id) markDirty(id);
+  });
 
   const infoBarStatus = () => {
     if (selectedAgent()?.status === 'exited' && props.task.initialPrompt) {
@@ -317,6 +336,62 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
                   );
                 }}
               </For>
+              <Show when={multipleAgents()}>
+                <button
+                  type="button"
+                  title={
+                    tabsMode() ? 'Show agents side by side' : 'Show one agent at a time (tabs)'
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleAITerminalLayout(props.task.id);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    'align-items': 'center',
+                    'justify-content': 'center',
+                    width: '22px',
+                    height: '20px',
+                    background: theme.bgInput,
+                    border: `1px solid ${theme.border}`,
+                    color: theme.fgMuted,
+                    'border-radius': '5px',
+                    cursor: 'pointer',
+                    padding: '0',
+                  }}
+                >
+                  <Show
+                    when={tabsMode()}
+                    fallback={
+                      /* Currently side-by-side → click switches to tabs (one panel). */
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.3"
+                      >
+                        <rect x="2" y="2.75" width="12" height="10.5" rx="1.25" />
+                        <path d="M2 5.75 H14" />
+                      </svg>
+                    }
+                  >
+                    {/* Currently tabbed → click switches to side-by-side columns. */}
+                    <svg
+                      width="13"
+                      height="13"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.3"
+                    >
+                      <rect x="2" y="2.75" width="5" height="10.5" rx="1.25" />
+                      <rect x="9" y="2.75" width="5" height="10.5" rx="1.25" />
+                    </svg>
+                  </Show>
+                </button>
+              </Show>
               <AddAgentMenu taskId={props.task.id} />
             </div>
           </div>
@@ -325,9 +400,11 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
           style={{
             flex: '1',
             display: 'flex',
-            gap: props.task.agentIds.length > 1 ? '6px' : '0',
+            // Tabs mode stacks panes absolutely; a positioning context is needed.
+            position: tabsMode() ? 'relative' : 'static',
+            gap: multipleAgents() && !tabsMode() ? '6px' : '0',
             overflow: 'hidden',
-            background: props.task.agentIds.length > 1 ? theme.taskContainerBg : 'transparent',
+            background: multipleAgents() ? theme.taskContainerBg : 'transparent',
           }}
         >
           <For each={props.task.agentIds}>
@@ -335,7 +412,9 @@ export function TaskAITerminal(props: TaskAITerminalProps) {
               <AgentTerminalPane
                 task={props.task}
                 agentId={agentId}
-                canClose={props.task.agentIds.length > 1}
+                canClose={multipleAgents()}
+                tabsMode={tabsMode()}
+                visible={!tabsMode() || visibleAgentId() === agentId}
                 onSelect={() => selectAgent(agentId)}
                 onFileLink={handleFileLink}
                 onReady={registerAgentFocus}
@@ -478,6 +557,9 @@ function AgentTerminalPane(props: {
   task: Task;
   agentId: string;
   canClose: boolean;
+  /** When true the pane is one of several stacked tabs (only `visible` shown). */
+  tabsMode: boolean;
+  visible: boolean;
   onSelect: () => void;
   onFileLink: (filePath: string) => void;
   onReady: (agentId: string, focusFn: () => void) => void;
@@ -498,10 +580,19 @@ function AgentTerminalPane(props: {
         isPanelFocused(props.task.id, aiTerminalPanelId(props.agentId)) ? 'true' : 'false'
       }
       style={{
-        flex: '1',
-        'min-width': props.canClose ? '260px' : '0',
+        ...(props.tabsMode
+          ? {
+              position: 'absolute',
+              inset: '0',
+              visibility: props.visible ? 'visible' : 'hidden',
+              'pointer-events': props.visible ? 'auto' : 'none',
+            }
+          : {
+              flex: '1',
+              'min-width': props.canClose ? '260px' : '0',
+              position: 'relative',
+            }),
         overflow: 'hidden',
-        position: 'relative',
         display: 'flex',
         'flex-direction': 'column',
         background: theme.taskPanelBg,

@@ -739,6 +739,14 @@ export function setLastPrompt(taskId: string, text: string): void {
   setStore('tasks', taskId, 'lastPrompt', text);
 }
 
+/** Flip a multi-agent task between side-by-side and tabbed AI terminals. */
+export function toggleAITerminalLayout(taskId: string): void {
+  const task = store.tasks[taskId];
+  if (!task) return;
+  const next = (task.aiTerminalLayout ?? 'split') === 'split' ? 'tabs' : 'split';
+  setStore('tasks', taskId, 'aiTerminalLayout', next);
+}
+
 export function clearInitialPrompt(taskId: string): void {
   setStore('tasks', taskId, 'initialPrompt', undefined);
 }

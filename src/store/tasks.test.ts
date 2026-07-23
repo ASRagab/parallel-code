@@ -151,6 +151,7 @@ import {
   retryTaskMcpStartup,
   clearTaskLandingReview,
   updateTaskBranch,
+  toggleAITerminalLayout,
   createAgentRecord,
   selectActiveNeighborAfterRemoval,
 } from './tasks';
@@ -266,6 +267,23 @@ describe('updateTaskBranch', () => {
     updateTaskBranch('task-1', 'task/same');
 
     expect(mockTasks['task-1'].prUrl).toBe('https://github.com/acme/app/pull/12');
+  });
+});
+
+describe('toggleAITerminalLayout', () => {
+  it('flips an unset (split) layout to tabs and back', () => {
+    mockTasks['task-1'] = { agentIds: ['a', 'b'], shellAgentIds: [] };
+
+    toggleAITerminalLayout('task-1');
+    expect(mockTasks['task-1'].aiTerminalLayout).toBe('tabs');
+
+    toggleAITerminalLayout('task-1');
+    expect(mockTasks['task-1'].aiTerminalLayout).toBe('split');
+  });
+
+  it('is a no-op for an unknown task', () => {
+    toggleAITerminalLayout('missing');
+    expect(mockTasks['missing']).toBeUndefined();
   });
 });
 
