@@ -1110,7 +1110,7 @@ export function NewTaskDialog(props: NewTaskDialogProps) {
                 padding: '10px 14px',
                 color: theme.fg,
                 'font-size': '14px',
-                'font-family': "'JetBrains Mono', monospace",
+                'font-family': 'var(--font-mono)',
                 outline: 'none',
                 resize: 'vertical',
               }}

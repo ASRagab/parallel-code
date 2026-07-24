@@ -2012,7 +2012,7 @@ body.dragging-task * {
 /* ── Plan markdown: dialog (enhanced readability) ── */
 .plan-markdown-dialog {
   max-width: 720px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-ui);
   font-size: 18px;
   line-height: 1.7;
 }
@@ -2068,7 +2068,7 @@ body.dragging-task * {
 
 /* Inline code — monospace stands out from proportional prose */
 .plan-markdown-dialog code {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   background: color-mix(in srgb, var(--fg) 8%, transparent);
   padding: 0.15em 0.4em;
@@ -2078,7 +2078,7 @@ body.dragging-task * {
 
 /* Code blocks — keep monospace, more padding */
 .plan-markdown-dialog pre {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 15px;
   line-height: 1.5;
   margin: 0.8em 0;
