@@ -59,6 +59,7 @@ import {
   getFileDiff,
   getUncommittedChangedFiles,
   checkMergeStatus,
+  getBranchWorktreePath,
   listImportableWorktrees,
   mergeTask,
 } from './git.js';
@@ -665,6 +666,29 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
       const files = await getChangedFiles(uniqueWorktreePath(), 'main');
 
       expect(files[0].status).toBe('A');
+    });
+
+    it('should preserve the original path for renamed files', async () => {
+      const calls: string[][] = [];
+      setupMock(
+        calls,
+        buildWorktreeMockHandler({
+          committedRawNumstat: [
+            ':100644 100644 aaa111 bbb222 R100\tsrc/old-name.ts\tsrc/new-name.ts',
+            '0\t0\tsrc/{old-name.ts => new-name.ts}',
+          ].join('\n'),
+        }),
+      );
+
+      const files = await getChangedFiles(uniqueWorktreePath(), 'main');
+
+      expect(files).toEqual([
+        expect.objectContaining({
+          path: 'src/new-name.ts',
+          previous_path: 'src/old-name.ts',
+          status: 'R',
+        }),
+      ]);
     });
 
     it('should return multiple committed files', async () => {
@@ -1416,6 +1440,42 @@ describe('listImportableWorktrees', () => {
 
     await expect(listImportableWorktrees('/home/me/.codex')).resolves.toEqual([]);
     expect(calls).toEqual([['rev-parse', '--show-toplevel']]);
+  });
+});
+
+describe('getBranchWorktreePath', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns only an existing worktree on the requested branch', async () => {
+    const calls: string[][] = [];
+    setupMock(calls, (args, cb) => {
+      if (args[0] === 'worktree' && args[1] === 'list') {
+        return cb(
+          null,
+          [
+            'worktree /repo',
+            'HEAD aaa111',
+            'branch refs/heads/main',
+            '',
+            'worktree /repo-task',
+            'HEAD bbb222',
+            'branch refs/heads/task/coverage',
+            '',
+          ].join('\n'),
+          '',
+        );
+      }
+      return cb(new Error(`unexpected git call: ${args.join(' ')}`), '', '');
+    });
+
+    await expect(getBranchWorktreePath('/repo', 'main')).resolves.toBe('/repo');
+    await expect(getBranchWorktreePath('/repo', 'missing')).resolves.toBeNull();
+    expect(calls).toEqual([
+      ['worktree', 'list', '--porcelain'],
+      ['worktree', 'list', '--porcelain'],
+    ]);
   });
 });
 

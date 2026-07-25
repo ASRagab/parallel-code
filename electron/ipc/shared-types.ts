@@ -37,6 +37,8 @@ export type GitIgnoredEntry = SymlinkCandidate;
 
 export interface ChangedFile {
   path: string;
+  /** Original path when Git reports a rename or copy. */
+  previous_path?: string;
   lines_added: number;
   lines_removed: number;
   status: string;

@@ -590,18 +590,42 @@ async function detectRepoLockKey(p: string): Promise<string> {
 function normalizeStatusPath(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
-  // Handle rename/copy "old -> new"
-  const destination = trimmed.split(' -> ').pop()?.trim() ?? trimmed;
-  return destination.replace(/^"|"$/g, '').replace(/\\(.)/g, '$1');
+  return trimmed.replace(/^"|"$/g, '').replace(/\\(.)/g, '$1');
+}
+
+function parseNumstatPath(raw: string): { path: string; previousPath?: string } {
+  const trimmed = raw.trim();
+  const arrowIndex = trimmed.indexOf(' => ');
+  if (arrowIndex < 0) return { path: normalizeStatusPath(trimmed) };
+
+  const openBrace = trimmed.lastIndexOf('{', arrowIndex);
+  const closeBrace = trimmed.indexOf('}', arrowIndex);
+  if (openBrace >= 0 && closeBrace > arrowIndex) {
+    const prefix = trimmed.slice(0, openBrace);
+    const suffix = trimmed.slice(closeBrace + 1);
+    const previousPath = `${prefix}${trimmed.slice(openBrace + 1, arrowIndex)}${suffix}`;
+    const destinationPath = `${prefix}${trimmed.slice(arrowIndex + 4, closeBrace)}${suffix}`;
+    return {
+      path: normalizeStatusPath(destinationPath),
+      previousPath: normalizeStatusPath(previousPath),
+    };
+  }
+
+  return {
+    path: normalizeStatusPath(trimmed.slice(arrowIndex + 4)),
+    previousPath: normalizeStatusPath(trimmed.slice(0, arrowIndex)),
+  };
 }
 
 /** Parse combined `git diff --raw --numstat` output into status and numstat maps. */
 function parseDiffRawNumstat(output: string): {
   statusMap: Map<string, string>;
   numstatMap: Map<string, [number, number]>;
+  previousPathMap: Map<string, string>;
 } {
   const statusMap = new Map<string, string>();
   const numstatMap = new Map<string, [number, number]>();
+  const previousPathMap = new Map<string, string>();
 
   for (const line of output.split('\n')) {
     if (line.startsWith(':')) {
@@ -612,6 +636,10 @@ function parseDiffRawNumstat(output: string): {
         const rawPath = parts[parts.length - 1];
         const p = normalizeStatusPath(rawPath);
         if (p) statusMap.set(p, statusLetter);
+        if ((statusLetter === 'R' || statusLetter === 'C') && parts.length >= 3) {
+          const previousPath = normalizeStatusPath(parts[parts.length - 2]);
+          if (p && previousPath) previousPathMap.set(p, previousPath);
+        }
       }
       continue;
     }
@@ -622,18 +650,21 @@ function parseDiffRawNumstat(output: string): {
       const removed = parseInt(parts[1], 10);
       if (!isNaN(added) && !isNaN(removed)) {
         const rawPath = parts[parts.length - 1];
-        const p = normalizeStatusPath(rawPath);
+        const parsedPath = parseNumstatPath(rawPath);
+        const p = parsedPath.path;
         if (p) numstatMap.set(p, [added, removed]);
+        if (p && parsedPath.previousPath) previousPathMap.set(p, parsedPath.previousPath);
       }
     }
   }
 
-  return { statusMap, numstatMap };
+  return { statusMap, numstatMap, previousPathMap };
 }
 
 export function changedFilesFromMaps(opts: {
   statusMap: Map<string, string>;
   numstatMap: Map<string, [number, number]>;
+  previousPathMap?: Map<string, string>;
   committed: boolean | ((filePath: string) => boolean);
   sort?: boolean;
 }): ChangedFile[] {
@@ -646,6 +677,7 @@ export function changedFilesFromMaps(opts: {
     seen.add(p);
     files.push({
       path: p,
+      previous_path: opts.previousPathMap?.get(p),
       lines_added: added,
       lines_removed: removed,
       status: opts.statusMap.get(p) ?? 'M',
@@ -657,6 +689,7 @@ export function changedFilesFromMaps(opts: {
     if (seen.has(p)) continue;
     files.push({
       path: p,
+      previous_path: opts.previousPathMap?.get(p),
       lines_added: 0,
       lines_removed: 0,
       status,
@@ -1196,8 +1229,11 @@ export async function getChangedFiles(
     /* empty */
   }
 
-  const { statusMap: finalStatusMap, numstatMap: finalNumstatMap } =
-    parseDiffRawNumstat(finalDiffStr);
+  const {
+    statusMap: finalStatusMap,
+    numstatMap: finalNumstatMap,
+    previousPathMap: finalPreviousPathMap,
+  } = parseDiffRawNumstat(finalDiffStr);
 
   // git diff --raw --numstat <headHash> — tracked uncommitted changes (HEAD vs working tree).
   // Compares HEAD tree directly to the working tree, so it does not need the index
@@ -1230,6 +1266,7 @@ export async function getChangedFiles(
   const files = changedFilesFromMaps({
     statusMap: finalStatusMap,
     numstatMap: finalNumstatMap,
+    previousPathMap: finalPreviousPathMap,
     committed: isCommitted,
     sort: false,
   });
@@ -1392,8 +1429,14 @@ export async function getUncommittedChangedFiles(worktreePath: string): Promise<
     /* empty */
   }
 
-  const { statusMap, numstatMap } = parseDiffRawNumstat(diffStr);
-  const files = changedFilesFromMaps({ statusMap, numstatMap, committed: false, sort: false });
+  const { statusMap, numstatMap, previousPathMap } = parseDiffRawNumstat(diffStr);
+  const files = changedFilesFromMaps({
+    statusMap,
+    numstatMap,
+    previousPathMap,
+    committed: false,
+    sort: false,
+  });
   const seen = new Set(files.map((file) => file.path));
 
   files.push(...(await getUntrackedChangedFiles(worktreePath, seen)));
@@ -1639,6 +1682,21 @@ export async function listImportableWorktrees(projectRoot: string): Promise<
   return filtered;
 }
 
+/** Resolve an already checked-out local branch without creating or switching worktrees. */
+export async function getBranchWorktreePath(
+  projectRoot: string,
+  branchName: string,
+): Promise<string | null> {
+  const { stdout } = await exec('git', ['worktree', 'list', '--porcelain'], {
+    cwd: projectRoot,
+    maxBuffer: MAX_BUFFER,
+  });
+  const match = parseWorktreeList(stdout).find(
+    (entry) => !entry.detached && entry.branchName === branchName,
+  );
+  return match?.path ?? null;
+}
+
 /** Stage all changes and commit in a worktree. */
 export async function commitAll(worktreePath: string, message: string): Promise<void> {
   await exec('git', ['add', '-A'], { cwd: worktreePath });
@@ -1855,9 +1913,9 @@ export async function getChangedFilesFromBranch(
     return [];
   }
 
-  const { statusMap, numstatMap } = parseDiffRawNumstat(diffStr);
+  const { statusMap, numstatMap, previousPathMap } = parseDiffRawNumstat(diffStr);
 
-  return changedFilesFromMaps({ statusMap, numstatMap, committed: true });
+  return changedFilesFromMaps({ statusMap, numstatMap, previousPathMap, committed: true });
 }
 
 export async function getFileDiffFromBranch(
@@ -2083,9 +2141,9 @@ export async function getCommitChangedFiles(
     }
   }
 
-  const { statusMap, numstatMap } = parseDiffRawNumstat(diffStr);
+  const { statusMap, numstatMap, previousPathMap } = parseDiffRawNumstat(diffStr);
 
-  return changedFilesFromMaps({ statusMap, numstatMap, committed: true });
+  return changedFilesFromMaps({ statusMap, numstatMap, previousPathMap, committed: true });
 }
 
 export async function getCommitDiffs(worktreePath: string, commitHash: string): Promise<string> {

@@ -151,6 +151,8 @@ export function TaskChangedFilesSection(props: TaskChangedFilesSectionProps) {
       <div style={{ flex: '1', overflow: 'hidden' }}>
         <ChangedFilesList
           worktreePath={props.task.worktreePath}
+          projectRoot={getProject(props.task.projectId)?.path}
+          branchName={props.task.branchName}
           baseBranch={props.task.baseBranch}
           isActive={props.isActive}
           panelFocused={isPanelFocused(props.task.id, 'changed-files')}

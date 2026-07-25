@@ -14,6 +14,7 @@ import { ChangedFilesList } from './ChangedFilesList';
 import { MergeReadinessPanel } from './MergeReadinessPanel';
 import { buildMergeReadiness } from './merge-readiness';
 import { theme, bannerStyle } from '../lib/theme';
+import type { CoverageComparison } from '../lib/coverage-comparison';
 import type { Task } from '../store/types';
 import type { ChangedFile, MergeStatus, WorktreeStatus } from '../ipc/types';
 
@@ -34,6 +35,7 @@ export function MergeDialog(props: MergeDialogProps) {
   const [rebasing, setRebasing] = createSignal(false);
   const [rebaseError, setRebaseError] = createSignal('');
   const [rebaseSuccess, setRebaseSuccess] = createSignal(false);
+  const [coverageComparison, setCoverageComparison] = createSignal<CoverageComparison | null>(null);
 
   const resourceSource = () =>
     props.open ? { path: props.task.worktreePath, baseBranch: props.task.baseBranch } : null;
@@ -91,6 +93,7 @@ export function MergeDialog(props: MergeDialogProps) {
       worktreeStatusLoading: worktreeStatus.loading,
       verification: props.task.verification,
       prChecks: getPrChecks(props.task.id),
+      coverage: coverageComparison(),
     });
 
   createEffect(() => {
@@ -103,6 +106,7 @@ export function MergeDialog(props: MergeDialogProps) {
       setRebaseSuccess(false);
       setMerging(false);
       setRebasing(false);
+      setCoverageComparison(null);
       // Drop the previous open's cached data so accessors return undefined
       // during refetch — otherwise unguarded reads (uncommitted-changes
       // warning, branch-mismatch banner) flash the stale snapshot until the
@@ -444,10 +448,13 @@ export function MergeDialog(props: MergeDialogProps) {
           >
             <ChangedFilesList
               worktreePath={props.task.worktreePath}
+              projectRoot={getProject(props.task.projectId)?.path}
+              branchName={props.task.branchName}
               isActive={props.open}
               onFileClick={props.onDiffFileClick}
               baseBranch={props.task.baseBranch}
               coverageReportPath={getProject(props.task.projectId)?.coverageReportPath}
+              onCoverageComparisonChange={setCoverageComparison}
             />
           </div>
           {/* Imported worktrees are user-owned — never offer to delete them or their branch. */}

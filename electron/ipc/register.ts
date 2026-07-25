@@ -54,6 +54,7 @@ import {
   getFileDiffFromBranch,
   getWorktreeStatus,
   listImportableWorktrees,
+  getBranchWorktreePath,
   commitAll,
   discardUncommitted,
   checkMergeStatus,
@@ -602,6 +603,9 @@ export function registerAllHandlers(win: BrowserWindow): void {
   });
   ipcMain.handle(IPC.ListImportableWorktrees, (_e, args) => {
     return listImportableWorktrees(projectRootArg(args));
+  });
+  ipcMain.handle(IPC.GetBranchWorktreePath, (_e, args) => {
+    return getBranchWorktreePath(projectRootArg(args), branchNameArg(args));
   });
   ipcMain.handle(IPC.GetWorktreeStatus, (_e, args) => {
     const worktreePath = worktreePathArg(args);

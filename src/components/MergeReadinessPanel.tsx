@@ -23,6 +23,9 @@ function checkHelp(label: string): string | undefined {
   if (label === 'PR checks') {
     return 'Uses checks reported for a detected GitHub pull request. Pull requests are optional, and unavailable check data is neutral.';
   }
+  if (label === 'Coverage') {
+    return 'Compares existing task and base-branch coverage reports. Opening the dialog never runs tests or modifies either worktree.';
+  }
   return undefined;
 }
 

@@ -1,4 +1,5 @@
 import type { MergeStatus, PrChecksOverall, WorktreeStatus } from '../ipc/types';
+import { formatCoverageDelta, type CoverageComparison } from '../lib/coverage-comparison';
 import type { SubtaskVerification } from '../store/types';
 
 export type MergeReadinessCheckStatus = 'pass' | 'warning' | 'blocked' | 'checking' | 'neutral';
@@ -29,6 +30,7 @@ export interface MergeReadinessInput {
   worktreeStatusLoading: boolean;
   verification?: SubtaskVerification;
   prChecks?: PrReadinessState;
+  coverage?: CoverageComparison | null;
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -148,10 +150,52 @@ function prCheck(prChecks?: PrReadinessState): MergeReadinessCheck {
   };
 }
 
+function coverageCheck(coverage?: CoverageComparison | null): MergeReadinessCheck {
+  const aggregate = coverage?.aggregate;
+  if (!aggregate || aggregate.task.state === 'no-report') {
+    return { label: 'Coverage', status: 'neutral', detail: 'No task coverage report.' };
+  }
+  if (aggregate.task.state === 'no-executable-lines') {
+    return {
+      label: 'Coverage',
+      status: 'neutral',
+      detail: 'The task coverage report has no executable lines.',
+    };
+  }
+
+  const taskPct = aggregate.task.pct;
+  if (aggregate.base.state === 'no-report') {
+    return {
+      label: 'Coverage',
+      status: 'neutral',
+      detail: `Task ${taskPct}%; no base coverage report.`,
+    };
+  }
+  if (aggregate.base.state === 'no-executable-lines' || aggregate.delta === null) {
+    return {
+      label: 'Coverage',
+      status: 'neutral',
+      detail: `Task ${taskPct}%; the base report has no executable lines.`,
+    };
+  }
+
+  const regressedUnchanged = coverage.impactedUnchangedFiles.filter((file) => file.delta < 0);
+  const impactedDetail =
+    regressedUnchanged.length > 0
+      ? ` ${countLabel(regressedUnchanged.length, 'unchanged file')} also regressed.`
+      : '';
+  return {
+    label: 'Coverage',
+    status: aggregate.delta < 0 || regressedUnchanged.length > 0 ? 'warning' : 'pass',
+    detail: `Base ${aggregate.base.pct}% → task ${taskPct}% (${formatCoverageDelta(aggregate.delta)}).${impactedDetail}`,
+  };
+}
+
 export function buildMergeReadiness(input: MergeReadinessInput): MergeReadiness {
   const checks = [
     mergeSafetyCheck(input),
     verificationCheck(input.verification),
+    coverageCheck(input.coverage),
     prCheck(input.prChecks),
   ];
   const overall = checks.some((check) => check.status === 'blocked')
