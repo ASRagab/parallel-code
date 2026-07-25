@@ -1,19 +1,181 @@
 import { For, Show, createSignal } from 'solid-js';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
+import {
+  formatQualityFindingLocation,
+  type QualityFinding,
+  type QualityFindingSeverity,
+} from '../lib/quality-findings';
 import type { ReviewAnnotation } from './review-types';
+import { CloseIcon } from './icons';
 
 interface ReviewSidebarProps {
   annotations: ReviewAnnotation[];
+  findings: QualityFinding[];
+  selectedFindingIds: ReadonlySet<string>;
   canSubmit: boolean;
   onDismiss: (id: string) => void;
   onUpdate: (id: string, comment: string) => void;
   onScrollTo: (annotation: ReviewAnnotation) => void;
   onSubmit: () => void;
+  onFindingSelected: (id: string, selected: boolean) => void;
+  onFindingDismiss: (id: string) => void;
+  onFindingScrollTo: (finding: QualityFinding) => void;
+  onFindingSubmit: (ids?: string[]) => void;
 }
 
 function truncate(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + '...' : text;
+}
+
+function severityColor(severity: QualityFindingSeverity): string {
+  if (severity === 'error') return theme.error;
+  if (severity === 'warning') return theme.warning;
+  return theme.accent;
+}
+
+function QualityFindingSidebarItem(props: {
+  finding: QualityFinding;
+  selected: boolean;
+  canSubmit: boolean;
+  onSelected: (selected: boolean) => void;
+  onDismiss: () => void;
+  onScrollTo: () => void;
+  onSubmit: () => void;
+}) {
+  const color = () => severityColor(props.finding.severity);
+  const isStale = () => props.finding.freshness === 'stale';
+
+  return (
+    <div
+      onClick={() => {
+        if (!isStale()) props.onScrollTo();
+      }}
+      style={{
+        padding: '8px 10px',
+        'margin-bottom': '6px',
+        'border-left': `3px solid ${isStale() ? theme.fgSubtle : color()}`,
+        'border-radius': '0 4px 4px 0',
+        background: 'color-mix(in srgb, var(--fg) 3%, transparent)',
+        cursor: isStale() ? 'default' : 'pointer',
+        opacity: isStale() ? '0.65' : '1',
+      }}
+    >
+      <div style={{ display: 'flex', 'align-items': 'center', gap: '6px' }}>
+        <input
+          type="checkbox"
+          checked={props.selected}
+          disabled={isStale()}
+          aria-label={`Select ${props.finding.ruleId} finding`}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => props.onSelected(event.currentTarget.checked)}
+        />
+        <span
+          style={{
+            color: isStale() ? theme.fgMuted : color(),
+            'font-size': sf(10),
+            'font-weight': '700',
+            'text-transform': 'uppercase',
+          }}
+        >
+          Automated · {props.finding.severity} · {props.finding.category}
+        </span>
+        <span style={{ flex: '1' }} />
+        <Show when={isStale()}>
+          <span
+            style={{
+              color: theme.fgMuted,
+              'font-size': sf(10),
+              'font-weight': '700',
+              'text-transform': 'uppercase',
+            }}
+          >
+            Stale
+          </span>
+        </Show>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onDismiss();
+          }}
+          title="Dismiss finding"
+          aria-label={`Dismiss ${props.finding.ruleId} finding`}
+          style={{
+            display: 'flex',
+            background: 'transparent',
+            border: 'none',
+            color: theme.fgSubtle,
+            cursor: 'pointer',
+            padding: '2px',
+            'border-radius': '2px',
+          }}
+        >
+          <CloseIcon size={12} />
+        </button>
+      </div>
+
+      <div
+        style={{
+          'font-size': sf(11),
+          color: theme.fgSubtle,
+          'font-family': "'JetBrains Mono', monospace",
+          overflow: 'hidden',
+          'text-overflow': 'ellipsis',
+          'white-space': 'nowrap',
+          'margin-top': '3px',
+        }}
+        title={formatQualityFindingLocation(props.finding)}
+      >
+        {formatQualityFindingLocation(props.finding)}
+      </div>
+
+      <div
+        style={{
+          'font-size': sf(11),
+          color: theme.fgMuted,
+          'font-family': "'JetBrains Mono', monospace",
+          'margin-top': '2px',
+        }}
+      >
+        {props.finding.source}/{props.finding.ruleId}
+      </div>
+
+      <div
+        style={{
+          'font-size': sf(12),
+          color: theme.fg,
+          'white-space': 'pre-wrap',
+          'margin-top': '4px',
+        }}
+      >
+        {truncate(props.finding.explanation, 180)}
+      </div>
+
+      <div style={{ display: 'flex', 'justify-content': 'flex-end', 'margin-top': '6px' }}>
+        <button
+          type="button"
+          disabled={!props.canSubmit || isStale()}
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onSubmit();
+          }}
+          style={{
+            background: 'transparent',
+            border: `1px solid ${isStale() ? theme.border : color()}`,
+            color: props.canSubmit && !isStale() ? color() : theme.fgMuted,
+            'font-size': sf(10),
+            'font-weight': '600',
+            padding: '2px 7px',
+            'border-radius': '4px',
+            cursor: props.canSubmit && !isStale() ? 'pointer' : 'default',
+          }}
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function SidebarAnnotationItem(props: {
@@ -178,7 +340,7 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
           color: theme.fg,
         }}
       >
-        Review Comments ({props.annotations.length})
+        Review ({props.annotations.length + props.findings.length})
       </div>
 
       {/* Scrollable list */}
@@ -189,6 +351,45 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
           padding: '8px',
         }}
       >
+        <Show when={props.findings.length > 0}>
+          <div
+            style={{
+              color: theme.fgMuted,
+              'font-size': sf(10),
+              'font-weight': '700',
+              'text-transform': 'uppercase',
+              'margin-bottom': '6px',
+            }}
+          >
+            Automated findings ({props.findings.length})
+          </div>
+          <For each={props.findings}>
+            {(finding) => (
+              <QualityFindingSidebarItem
+                finding={finding}
+                selected={props.selectedFindingIds.has(finding.id)}
+                canSubmit={props.canSubmit}
+                onSelected={(selected) => props.onFindingSelected(finding.id, selected)}
+                onDismiss={() => props.onFindingDismiss(finding.id)}
+                onScrollTo={() => props.onFindingScrollTo(finding)}
+                onSubmit={() => props.onFindingSubmit([finding.id])}
+              />
+            )}
+          </For>
+        </Show>
+        <Show when={props.annotations.length > 0}>
+          <div
+            style={{
+              color: theme.fgMuted,
+              'font-size': sf(10),
+              'font-weight': '700',
+              'text-transform': 'uppercase',
+              margin: props.findings.length > 0 ? '12px 0 6px' : '0 0 6px',
+            }}
+          >
+            Human comments ({props.annotations.length})
+          </div>
+        </Show>
         <For each={props.annotations}>
           {(annotation) => (
             <SidebarAnnotationItem
@@ -208,24 +409,55 @@ export function ReviewSidebar(props: ReviewSidebarProps) {
           'border-top': `1px solid ${theme.border}`,
         }}
       >
-        <button
-          onClick={() => props.onSubmit()}
-          disabled={!props.canSubmit}
-          style={{
-            width: '100%',
-            background: props.canSubmit ? theme.accent : theme.bgHover,
-            color: props.canSubmit ? theme.accentText : theme.fgMuted,
-            border: 'none',
-            'font-weight': '600',
-            'font-size': sf(13),
-            padding: '8px 16px',
-            'border-radius': '4px',
-            cursor: props.canSubmit ? 'pointer' : 'default',
-          }}
-          title={props.canSubmit ? undefined : 'No agent available to receive review'}
-        >
-          Send to Agent ({props.annotations.length})
-        </button>
+        <div style={{ display: 'grid', gap: '6px' }}>
+          <Show when={props.findings.length > 0}>
+            <button
+              onClick={() => props.onFindingSubmit()}
+              disabled={!props.canSubmit || props.selectedFindingIds.size === 0}
+              style={{
+                width: '100%',
+                background:
+                  props.canSubmit && props.selectedFindingIds.size > 0
+                    ? theme.accent
+                    : theme.bgHover,
+                color:
+                  props.canSubmit && props.selectedFindingIds.size > 0
+                    ? theme.accentText
+                    : theme.fgMuted,
+                border: 'none',
+                'font-weight': '600',
+                'font-size': sf(12),
+                padding: '7px 12px',
+                'border-radius': '4px',
+                cursor:
+                  props.canSubmit && props.selectedFindingIds.size > 0 ? 'pointer' : 'default',
+              }}
+              title={props.canSubmit ? undefined : 'No agent available to receive review'}
+            >
+              Send selected findings ({props.selectedFindingIds.size})
+            </button>
+          </Show>
+          <Show when={props.annotations.length > 0}>
+            <button
+              onClick={() => props.onSubmit()}
+              disabled={!props.canSubmit}
+              style={{
+                width: '100%',
+                background: props.canSubmit ? theme.accent : theme.bgHover,
+                color: props.canSubmit ? theme.accentText : theme.fgMuted,
+                border: 'none',
+                'font-weight': '600',
+                'font-size': sf(12),
+                padding: '7px 12px',
+                'border-radius': '4px',
+                cursor: props.canSubmit ? 'pointer' : 'default',
+              }}
+              title={props.canSubmit ? undefined : 'No agent available to receive review'}
+            >
+              Send human comments ({props.annotations.length})
+            </button>
+          </Show>
+        </div>
       </div>
     </div>
   );

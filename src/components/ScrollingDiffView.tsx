@@ -14,8 +14,10 @@ import { getDiffSelection } from '../lib/diff-selection';
 import { getContextGapLineCount, type ContextGapRange } from '../lib/diff-context-gaps';
 import { AskCodeCard } from './AskCodeCard';
 import { ReviewCommentCard } from './ReviewCommentCard';
+import { QualityFindingCard } from './QualityFindingCard';
 import { InlineInput } from './InlineInput';
-import { useReview, type ActiveQuestion } from './ReviewProvider';
+import { useReview, type ActiveQuestion, type ReviewScrollTarget } from './ReviewProvider';
+import type { QualityFinding } from '../lib/quality-findings';
 import type { ReviewAnnotation, DiffInteractionMode } from './review-types';
 
 interface ScrollingDiffViewProps {
@@ -25,7 +27,7 @@ interface ScrollingDiffViewProps {
   /** Base branch for diff comparison (e.g. 'main', 'develop'). Undefined = auto-detect. */
   baseBranch?: string;
   searchQuery?: string;
-  scrollToAnnotation?: ReviewAnnotation | null;
+  scrollToAnnotation?: ReviewScrollTarget | null;
   onScrollRef?: (el: HTMLDivElement) => void;
 }
 
@@ -456,6 +458,10 @@ function FileSection(props: {
   reviewAnnotations: ReviewAnnotation[];
   onDismissAnnotation: (id: string) => void;
   onAnnotationUpdate: (id: string, comment: string) => void;
+  qualityFindings: QualityFinding[];
+  canSubmitFindings: boolean;
+  onDismissFinding: (id: string) => void;
+  onSubmitFinding: (id: string) => void;
   highlightedRange?: HighlightRange | null;
   pendingInput?: { filePath: string; afterLine: number } | null;
   onSubmit: (text: string, mode: 'review' | 'ask') => void;
@@ -710,6 +716,25 @@ function FileSection(props: {
                             />
                           )}
                         </For>
+                        <For
+                          each={itemsForHunk(
+                            props.qualityFindings,
+                            props.file.path,
+                            (finding) => finding.location.filePath,
+                            (finding) => finding.location.endLine ?? finding.location.startLine,
+                            hunk.newStart,
+                            nextStart,
+                          )}
+                        >
+                          {(finding) => (
+                            <QualityFindingCard
+                              finding={finding}
+                              canSubmit={props.canSubmitFindings}
+                              onDismiss={() => props.onDismissFinding(finding.id)}
+                              onSubmit={() => props.onSubmitFinding(finding.id)}
+                            />
+                          )}
+                        </For>
                       </>
                     );
                   })()}
@@ -755,11 +780,19 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
 
   const highlightedRange = (): HighlightRange | null => {
     const selection = review.pendingSelection();
-    return selection
+    if (selection) {
+      return {
+        filePath: selection.source,
+        startLine: selection.startLine,
+        endLine: selection.endLine,
+      };
+    }
+    const target = props.scrollToAnnotation;
+    return target
       ? {
-          filePath: selection.source,
-          startLine: selection.startLine,
-          endLine: selection.endLine,
+          filePath: target.filePath,
+          startLine: target.startLine,
+          endLine: target.endLine ?? target.startLine,
         }
       : null;
   };
@@ -898,6 +931,12 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
             reviewAnnotations={review.annotations()}
             onDismissAnnotation={review.dismissAnnotation}
             onAnnotationUpdate={review.updateAnnotation}
+            qualityFindings={review
+              .openFindings()
+              .filter((finding) => finding.freshness === 'current')}
+            canSubmitFindings={review.canSubmit()}
+            onDismissFinding={review.dismissFinding}
+            onSubmitFinding={(id) => void review.submitFindings([id])}
             highlightedRange={highlightedRange()}
             pendingInput={(() => {
               const pi = review.pendingSelection();

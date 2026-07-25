@@ -7,9 +7,12 @@ import { sf } from '../lib/fontScale';
 /** Toggle button that shows annotation count and opens/closes the review sidebar. */
 export function ReviewCommentsButton() {
   const review = useReview();
+  const reviewCount = () => review.annotations().length + review.openFindings().length;
+  const hasReviewState = () =>
+    reviewCount() > 0 || review.findingsLoading() || Boolean(review.findingsError());
 
   return (
-    <Show when={review.annotations().length > 0}>
+    <Show when={hasReviewState()}>
       <button
         onClick={() => review.setSidebarOpen(!review.sidebarOpen())}
         style={{
@@ -22,18 +25,21 @@ export function ReviewCommentsButton() {
           cursor: 'pointer',
         }}
       >
-        Comments ({review.annotations().length})
+        Review ({reviewCount()})
       </button>
     </Show>
   );
 }
 
-/** Sidebar column with error banner and annotation list. Renders nothing when closed or empty. */
+/** Sidebar column with human comments and provider findings. */
 export function ReviewSidebarPanel() {
   const review = useReview();
+  const reviewCount = () => review.annotations().length + review.openFindings().length;
+  const hasReviewState = () =>
+    reviewCount() > 0 || review.findingsLoading() || Boolean(review.findingsError());
 
   return (
-    <Show when={review.sidebarOpen() && review.annotations().length > 0}>
+    <Show when={review.sidebarOpen() && hasReviewState()}>
       <div style={{ display: 'flex', 'flex-direction': 'column' }}>
         <Show when={review.submitError()}>
           <div
@@ -48,13 +54,50 @@ export function ReviewSidebarPanel() {
             {review.submitError()}
           </div>
         </Show>
+        <Show when={review.findingsLoading()}>
+          <div
+            style={{
+              padding: '6px 12px',
+              color: theme.fgMuted,
+              'font-size': sf(12),
+              'border-bottom': `1px solid ${theme.border}`,
+            }}
+          >
+            Loading quality findings...
+          </div>
+        </Show>
+        <Show when={review.findingsError()}>
+          <div
+            style={{
+              padding: '6px 12px',
+              color: theme.warning,
+              'font-size': sf(12),
+              'border-bottom': `1px solid ${theme.border}`,
+            }}
+          >
+            Quality findings unavailable: {review.findingsError()}
+          </div>
+        </Show>
         <ReviewSidebar
           annotations={review.annotations()}
+          findings={review.openFindings()}
+          selectedFindingIds={review.selectedFindingIds()}
           canSubmit={review.canSubmit()}
           onDismiss={review.dismissAnnotation}
           onUpdate={review.updateAnnotation}
           onScrollTo={review.setScrollTarget}
           onSubmit={review.submitReview}
+          onFindingSelected={review.setFindingSelected}
+          onFindingDismiss={review.dismissFinding}
+          onFindingScrollTo={(finding) =>
+            review.setScrollTarget({
+              id: finding.id,
+              filePath: finding.location.filePath,
+              startLine: finding.location.startLine,
+              endLine: finding.location.endLine,
+            })
+          }
+          onFindingSubmit={(ids) => void review.submitFindings(ids)}
         />
       </div>
     </Show>

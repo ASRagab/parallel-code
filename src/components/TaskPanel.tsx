@@ -651,7 +651,7 @@ export function TaskPanel(props: TaskPanelProps) {
           baseBranch={props.task.baseBranch}
           onClose={() => setDiffScrollTarget(null)}
           taskId={props.task.id}
-          agentId={props.task.agentIds[0]}
+          agentId={selectedAgentId()}
           commitList={commitList()}
           selectedCommit={selectedCommit()}
           onCommitNavigate={setSelectedCommit}

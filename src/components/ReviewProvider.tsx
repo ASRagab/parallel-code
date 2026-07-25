@@ -1,6 +1,13 @@
-import { createContext, createSignal, createEffect, useContext } from 'solid-js';
+import { createContext, createSignal, createEffect, createMemo, useContext } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { sendPrompt } from '../store/tasks';
+import {
+  compileQualityFindingPrompt,
+  dismissQualityFinding,
+  selectSubmittableFindings,
+  type QualityFinding,
+  type QualityFindingProvider,
+} from '../lib/quality-findings';
 import type { ReviewAnnotation, DiffInteractionMode } from './review-types';
 
 /** Generic selection info used to create annotations or questions. */
@@ -22,6 +29,13 @@ export interface ActiveQuestion {
   selectedText: string;
 }
 
+export interface ReviewScrollTarget {
+  id?: string;
+  filePath: string;
+  startLine: number;
+  endLine?: number;
+}
+
 export interface ReviewContextValue {
   annotations: () => ReviewAnnotation[];
   addAnnotation: (annotation: ReviewAnnotation) => void;
@@ -32,8 +46,18 @@ export interface ReviewContextValue {
   sidebarOpen: () => boolean;
   setSidebarOpen: (open: boolean) => void;
 
-  scrollTarget: () => ReviewAnnotation | null;
-  setScrollTarget: (target: ReviewAnnotation | null) => void;
+  findings: () => QualityFinding[];
+  openFindings: () => QualityFinding[];
+  selectedFindingIds: () => ReadonlySet<string>;
+  setFindingSelected: (id: string, selected: boolean) => void;
+  dismissFinding: (id: string) => void;
+  replaceFindings: (fn: (prev: QualityFinding[]) => QualityFinding[]) => void;
+  submitFindings: (ids?: string[]) => Promise<void>;
+  findingsLoading: () => boolean;
+  findingsError: () => string;
+
+  scrollTarget: () => ReviewScrollTarget | null;
+  setScrollTarget: (target: ReviewScrollTarget | null) => void;
 
   submitReview: () => Promise<void>;
   canSubmit: () => boolean;
@@ -53,6 +77,7 @@ export interface ReviewContextValue {
 interface ReviewProviderProps {
   taskId?: string;
   agentId?: string;
+  findingProvider?: QualityFindingProvider;
   compilePrompt: (annotations: ReviewAnnotation[]) => string;
   onSubmitted?: () => void;
   children: JSX.Element;
@@ -62,17 +87,63 @@ const ReviewContext = createContext<ReviewContextValue>();
 
 export function ReviewProvider(props: ReviewProviderProps) {
   const [annotations, setAnnotations] = createSignal<ReviewAnnotation[]>([]);
+  const [findings, setFindings] = createSignal<QualityFinding[]>([]);
+  const [selectedFindingIds, setSelectedFindingIds] = createSignal<ReadonlySet<string>>(new Set());
+  const [findingsLoading, setFindingsLoading] = createSignal(false);
+  const [findingsError, setFindingsError] = createSignal('');
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
-  const [scrollTarget, setScrollTarget] = createSignal<ReviewAnnotation | null>(null, {
+  const [scrollTarget, setScrollTarget] = createSignal<ReviewScrollTarget | null>(null, {
     equals: false,
   });
   const [pendingSelection, setPendingSelection] = createSignal<ContentSelection | null>(null);
   const [activeQuestions, setActiveQuestions] = createSignal<ActiveQuestion[]>([]);
   const [submitError, setSubmitError] = createSignal('');
+  const openFindings = createMemo(() => findings().filter((finding) => finding.state === 'open'));
+  let findingLoadGeneration = 0;
 
-  // Auto-open sidebar when annotations are added
   createEffect(() => {
-    if (annotations().length > 0) setSidebarOpen(true);
+    const provider = props.findingProvider;
+    const generation = ++findingLoadGeneration;
+    setFindingsError('');
+    setSelectedFindingIds(new Set<string>());
+    if (!provider) {
+      setFindings([]);
+      setFindingsLoading(false);
+      return;
+    }
+
+    setFindingsLoading(true);
+    void provider
+      .loadFindings()
+      .then((loaded) => {
+        if (generation === findingLoadGeneration) setFindings(loaded);
+      })
+      .catch((err: unknown) => {
+        if (generation !== findingLoadGeneration) return;
+        setFindings([]);
+        setFindingsError(err instanceof Error ? err.message : 'Failed to load quality findings');
+        setSidebarOpen(true);
+      })
+      .finally(() => {
+        if (generation === findingLoadGeneration) setFindingsLoading(false);
+      });
+  });
+
+  // Auto-open sidebar when human comments or provider findings are added.
+  createEffect(() => {
+    if (annotations().length > 0 || openFindings().length > 0) setSidebarOpen(true);
+  });
+
+  createEffect(() => {
+    const validIds = new Set(
+      openFindings()
+        .filter((finding) => finding.freshness === 'current')
+        .map((finding) => finding.id),
+    );
+    setSelectedFindingIds((prev) => {
+      const next = new Set([...prev].filter((id) => validIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
   });
 
   function addAnnotation(annotation: ReviewAnnotation) {
@@ -89,6 +160,24 @@ export function ReviewProvider(props: ReviewProviderProps) {
 
   function replaceAnnotations(fn: (prev: ReviewAnnotation[]) => ReviewAnnotation[]) {
     setAnnotations(fn);
+  }
+
+  function setFindingSelected(id: string, selected: boolean) {
+    setSelectedFindingIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function dismissFinding(id: string) {
+    setFindings((prev) => dismissQualityFinding(prev, id));
+    setFindingSelected(id, false);
+  }
+
+  function replaceFindings(fn: (prev: QualityFinding[]) => QualityFinding[]) {
+    setFindings(fn);
   }
 
   function handleSelection(selection: ContentSelection) {
@@ -159,12 +248,38 @@ export function ReviewProvider(props: ReviewProviderProps) {
     }
   }
 
+  async function submitFindings(ids?: string[]): Promise<void> {
+    const taskId = props.taskId;
+    const agentId = props.agentId;
+    if (!taskId || !agentId) return;
+
+    const selected = selectSubmittableFindings(findings(), ids ?? selectedFindingIds());
+    if (selected.length === 0) return;
+
+    setSubmitError('');
+    try {
+      await sendPrompt(taskId, agentId, compileQualityFindingPrompt(selected));
+      setSelectedFindingIds(new Set<string>());
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to send quality findings');
+    }
+  }
+
   const value: ReviewContextValue = {
     annotations,
     addAnnotation,
     dismissAnnotation,
     updateAnnotation,
     replaceAnnotations,
+    findings,
+    openFindings,
+    selectedFindingIds,
+    setFindingSelected,
+    dismissFinding,
+    replaceFindings,
+    submitFindings,
+    findingsLoading,
+    findingsError,
     sidebarOpen,
     setSidebarOpen,
     scrollTarget,

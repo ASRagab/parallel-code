@@ -8,6 +8,7 @@ import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { parseUnifiedDiff } from '../lib/unified-diff-parser';
 import { evictStaleAnnotations } from '../lib/review-eviction';
+import { reconcileQualityFindings, type QualityFindingProvider } from '../lib/quality-findings';
 import { windowChromeTopInset } from '../lib/platform';
 import { ScrollingDiffView } from './ScrollingDiffView';
 import {
@@ -50,6 +51,8 @@ interface DiffViewerDialogProps {
   onCommitNavigate?: (selection: CommitSelection) => void;
   /** Git isolation mode — CommitNavBar is only shown for worktree-isolated tasks */
   gitIsolation?: GitIsolationMode;
+  /** Optional structured-finding source. Providers capture their own repository context. */
+  findingProvider?: QualityFindingProvider;
 }
 
 /** Compile review annotations into a prompt string for the agent. */
@@ -92,6 +95,7 @@ export function DiffViewerDialog(props: DiffViewerDialogProps) {
         <ReviewProvider
           taskId={props.taskId}
           agentId={props.agentId}
+          findingProvider={props.findingProvider}
           compilePrompt={compileDiffReview}
           onSubmitted={props.onClose}
         >
@@ -110,6 +114,7 @@ export function DiffViewerDialog(props: DiffViewerDialogProps) {
             selectedCommit={props.selectedCommit}
             onCommitNavigate={props.onCommitNavigate}
             gitIsolation={props.gitIsolation}
+            findingProvider={props.findingProvider}
           />
         </ReviewProvider>
       </Show>
@@ -123,6 +128,7 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
   const headerPaddingTop = `${windowChromeTopInset + 12}px`;
 
   const [parsedFiles, setParsedFiles] = createSignal<FileDiff[]>([]);
+  const [diffLoaded, setDiffLoaded] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
   const [searchQuery, setSearchQuery] = createSignal('');
@@ -156,6 +162,13 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
   });
 
   createEffect(() => {
+    if (!diffLoaded()) return;
+    const current = review.findings();
+    const reconciled = reconcileQualityFindings(current, parsedFiles());
+    if (reconciled !== current) review.replaceFindings(() => reconciled);
+  });
+
+  createEffect(() => {
     const scrollTarget = props.scrollToFile;
     // Access selectedCommit before the early return so the effect tracks it
     // even when the dialog is closed — ensures we re-run on reopen.
@@ -169,6 +182,7 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
     const thisGen = ++fetchGeneration;
 
     setSearchQuery('');
+    setDiffLoaded(false);
     setLoading(true);
     setError('');
     setParsedFiles([]);
@@ -209,6 +223,7 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
         const newFiles = parseUnifiedDiff(rawDiff);
         setParsedFiles(newFiles);
         review.replaceAnnotations((prev) => evictStaleAnnotations(prev, newFiles));
+        setDiffLoaded(true);
       })
       .catch((err) => {
         if (thisGen !== fetchGeneration) return;

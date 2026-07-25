@@ -125,7 +125,7 @@ function PlanViewerContent(props: PlanViewerContentProps) {
   // Scroll to annotation when scrollTarget changes
   createEffect(() => {
     const target = review.scrollTarget();
-    if (!target) return;
+    if (!target?.id) return;
     const y = cardOffsets()[target.id];
     if (y !== undefined && scrollRef) {
       scrollRef.scrollTo({ top: Math.max(0, y - 100), behavior: 'smooth' });
