@@ -30,6 +30,15 @@ describe('autosave snapshot includes new-task-default fields', () => {
     setStore('defaultPropagateSkipPermissions', false);
   });
 
+  it('terminalScreenReaderMode changes the snapshot', () => {
+    setStore('terminalScreenReaderMode', false);
+    const before = persistedSnapshot();
+    setStore('terminalScreenReaderMode', true);
+    const after = persistedSnapshot();
+    expect(before).not.toBe(after);
+    setStore('terminalScreenReaderMode', false);
+  });
+
   it('showSteps is not tracked separately (migrated to defaultStepsEnabled)', () => {
     expect('showSteps' in store).toBe(false);
   });

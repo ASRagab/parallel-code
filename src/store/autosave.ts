@@ -21,6 +21,7 @@ export function persistedSnapshot(): string {
     mergedLinesAdded: store.mergedLinesAdded,
     mergedLinesRemoved: store.mergedLinesRemoved,
     terminalFont: store.terminalFont,
+    terminalScreenReaderMode: store.terminalScreenReaderMode,
     themePreset: store.themePreset,
     windowState: store.windowState,
     autoTrustFolders: store.autoTrustFolders,
