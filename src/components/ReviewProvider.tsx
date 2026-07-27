@@ -86,6 +86,31 @@ interface ReviewProviderProps {
 
 const ReviewContext = createContext<ReviewContextValue>();
 
+export function createReviewSubmissionGuard() {
+  const [submitting, setSubmitting] = createSignal(false);
+
+  async function run(action: () => Promise<void>): Promise<boolean> {
+    if (submitting()) return false;
+    setSubmitting(true);
+    try {
+      await action();
+      return true;
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return { submitting, run };
+}
+
+export function canSubmitReview(
+  taskId: string | undefined,
+  agentId: string | undefined,
+  submitting: boolean,
+): boolean {
+  return Boolean(taskId && agentId && !submitting);
+}
+
 export function ReviewProvider(props: ReviewProviderProps) {
   const [annotations, setAnnotations] = createSignal<ReviewAnnotation[]>([]);
   const [findings, setFindings] = createSignal<QualityFinding[]>([]);
@@ -99,6 +124,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
   const [pendingSelection, setPendingSelection] = createSignal<ContentSelection | null>(null);
   const [activeQuestions, setActiveQuestions] = createSignal<ActiveQuestion[]>([]);
   const [submitError, setSubmitError] = createSignal('');
+  const submission = createReviewSubmissionGuard();
   const openFindings = createMemo(() => findings().filter((finding) => finding.state === 'open'));
   let findingLoadGeneration = 0;
 
@@ -229,24 +255,28 @@ export function ReviewProvider(props: ReviewProviderProps) {
   }
 
   function canSubmit(): boolean {
-    return !!props.taskId && !!props.agentId;
+    return canSubmitReview(props.taskId, props.agentId, submission.submitting());
   }
 
   async function submitReview(): Promise<void> {
     const taskId = props.taskId;
     const agentId = props.agentId;
     if (!taskId || !agentId) return;
-
-    setSubmitError('');
     const prompt = props.compilePrompt(annotations());
-    try {
-      await sendPrompt(taskId, agentId, prompt);
-      setAnnotations([]);
-      setSidebarOpen(false);
-      props.onSubmitted?.();
-    } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to send review');
-    }
+    const onSubmitted = props.onSubmitted;
+
+    await submission.run(async () => {
+      setSubmitError('');
+      try {
+        await sendPrompt(taskId, agentId, prompt);
+        setAnnotations([]);
+        setSidebarOpen(false);
+        onSubmitted?.();
+      } catch (err: unknown) {
+        setSubmitError(err instanceof Error ? err.message : 'Failed to send review');
+        setSidebarOpen(true);
+      }
+    });
   }
 
   async function submitFindings(ids?: string[]): Promise<void> {
@@ -257,15 +287,16 @@ export function ReviewProvider(props: ReviewProviderProps) {
     const selected = selectSubmittableFindings(findings(), ids ?? selectedFindingIds());
     if (selected.length === 0) return;
 
-    setSubmitError('');
-    try {
-      await sendPrompt(taskId, agentId, compileQualityFindingPrompt(selected));
-      setSelectedFindingIds((previous) =>
-        selectedFindingIdsAfterSubmission(previous, selected, ids === undefined),
-      );
-    } catch (err: unknown) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to send quality findings');
-    }
+    await submission.run(async () => {
+      setSubmitError('');
+      try {
+        await sendPrompt(taskId, agentId, compileQualityFindingPrompt(selected));
+        setSelectedFindingIds((previous) => selectedFindingIdsAfterSubmission(previous, selected));
+      } catch (err: unknown) {
+        setSubmitError(err instanceof Error ? err.message : 'Failed to send quality findings');
+        setSidebarOpen(true);
+      }
+    });
   }
 
   const value: ReviewContextValue = {

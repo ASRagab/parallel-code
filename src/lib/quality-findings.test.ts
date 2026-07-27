@@ -186,22 +186,19 @@ describe('finding review actions', () => {
   });
 
   it('preserves unrelated selections after a single-card submission', () => {
-    const remaining = selectedFindingIdsAfterSubmission(
-      new Set(['finding-b', 'finding-c']),
-      [finding()],
-      false,
-    );
+    const remaining = selectedFindingIdsAfterSubmission(new Set(['finding-b', 'finding-c']), [
+      finding(),
+    ]);
 
     expect([...remaining]).toEqual(['finding-b', 'finding-c']);
   });
 
-  it('clears selections after a bulk submission', () => {
+  it('removes only snapshotted bulk IDs from the latest selection', () => {
     const remaining = selectedFindingIdsAfterSubmission(
-      new Set(['finding-1', 'finding-b']),
-      [finding()],
-      true,
+      new Set(['finding-1', 'finding-b', 'finding-c']),
+      [finding(), finding({ id: 'finding-b', fingerprint: 'finding-b' })],
     );
 
-    expect(remaining.size).toBe(0);
+    expect([...remaining]).toEqual(['finding-c']);
   });
 });

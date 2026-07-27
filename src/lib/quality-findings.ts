@@ -110,9 +110,7 @@ export function selectSubmittableFindings(
 export function selectedFindingIdsAfterSubmission(
   selectedIds: ReadonlySet<string>,
   submittedFindings: QualityFinding[],
-  bulkSubmission: boolean,
 ): ReadonlySet<string> {
-  if (bulkSubmission) return new Set<string>();
   const submittedIds = new Set(submittedFindings.map((finding) => finding.id));
   const remaining = new Set([...selectedIds].filter((id) => !submittedIds.has(id)));
   return remaining.size === selectedIds.size ? selectedIds : remaining;

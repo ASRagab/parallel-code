@@ -4,12 +4,26 @@ import { ReviewSidebar } from './ReviewSidebar';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 
+export function hasReviewSidebarState(
+  reviewCount: number,
+  findingsLoading: boolean,
+  findingsError: string,
+  submitError: string,
+): boolean {
+  return reviewCount > 0 || findingsLoading || Boolean(findingsError) || Boolean(submitError);
+}
+
 /** Toggle button that shows annotation count and opens/closes the review sidebar. */
 export function ReviewCommentsButton() {
   const review = useReview();
   const reviewCount = () => review.annotations().length + review.openFindings().length;
   const hasReviewState = () =>
-    reviewCount() > 0 || review.findingsLoading() || Boolean(review.findingsError());
+    hasReviewSidebarState(
+      reviewCount(),
+      review.findingsLoading(),
+      review.findingsError(),
+      review.submitError(),
+    );
 
   return (
     <Show when={hasReviewState()}>
@@ -36,7 +50,12 @@ export function ReviewSidebarPanel() {
   const review = useReview();
   const reviewCount = () => review.annotations().length + review.openFindings().length;
   const hasReviewState = () =>
-    reviewCount() > 0 || review.findingsLoading() || Boolean(review.findingsError());
+    hasReviewSidebarState(
+      reviewCount(),
+      review.findingsLoading(),
+      review.findingsError(),
+      review.submitError(),
+    );
 
   return (
     <Show when={review.sidebarOpen() && hasReviewState()}>

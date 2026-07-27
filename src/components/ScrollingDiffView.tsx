@@ -93,6 +93,16 @@ function isLineHighlighted(
   );
 }
 
+export function expandCollapsedFileForNavigation(
+  collapsedFiles: ReadonlySet<string>,
+  filePath: string,
+): ReadonlySet<string> {
+  if (!collapsedFiles.has(filePath)) return collapsedFiles;
+  const expanded = new Set(collapsedFiles);
+  expanded.delete(filePath);
+  return expanded;
+}
+
 // ---------------------------------------------------------------------------
 // Search highlight helpers
 // ---------------------------------------------------------------------------
@@ -451,6 +461,8 @@ function FileSection(props: {
   worktreePath: string;
   baseBranch?: string;
   ref: (el: HTMLDivElement) => void;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
   dimmed: boolean;
   searchQuery?: string;
   activeQuestions: ActiveQuestion[];
@@ -467,7 +479,6 @@ function FileSection(props: {
   onSubmit: (text: string, mode: 'review' | 'ask') => void;
   onDismiss: () => void;
 }) {
-  const [collapsed, setCollapsed] = createSignal(false);
   const lang = () => detectLang(props.file.path);
   const added = () =>
     props.file.hunks.reduce((s, h) => s + h.lines.filter((l) => l.type === 'add').length, 0);
@@ -489,7 +500,7 @@ function FileSection(props: {
     >
       {/* Sticky file header */}
       <div
-        onClick={() => setCollapsed(!collapsed())}
+        onClick={() => props.onCollapsedChange(!props.collapsed)}
         style={{
           position: 'sticky',
           top: '0',
@@ -511,7 +522,7 @@ function FileSection(props: {
             'font-size': sf(12),
             'user-select': 'none',
             transition: 'transform 0.15s',
-            transform: collapsed() ? 'rotate(-90deg)' : 'rotate(0deg)',
+            transform: props.collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
             display: 'inline-block',
           }}
         >
@@ -596,7 +607,7 @@ function FileSection(props: {
       </div>
 
       {/* File body */}
-      <Show when={!collapsed()}>
+      <Show when={!props.collapsed}>
         <Show when={props.file.binary}>
           <div
             style={{
@@ -774,6 +785,7 @@ function FileSection(props: {
 export function ScrollingDiffView(props: ScrollingDiffViewProps) {
   const review = useReview();
   const sectionRefs = new Map<string, HTMLDivElement>();
+  const [collapsedFiles, setCollapsedFiles] = createSignal<ReadonlySet<string>>(new Set());
   const [dimOthers, setDimOthers] = createSignal(false);
   let dimTimer: ReturnType<typeof setTimeout> | undefined;
   let containerRef: HTMLDivElement | undefined;
@@ -838,14 +850,22 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
   createEffect(() => {
     const target = props.scrollToAnnotation;
     if (!target) return;
-    const el = containerRef?.querySelector(
-      `[data-file-path="${CSS.escape(target.filePath)}"][data-new-line="${target.startLine}"]`,
-    );
-    if (el && containerRef) {
-      const containerTop = containerRef.getBoundingClientRect().top;
-      const elTop = el.getBoundingClientRect().top;
-      containerRef.scrollTop = elTop - containerTop + containerRef.scrollTop - 80;
-    }
+    const currentCollapsed = untrack(collapsedFiles);
+    const expanded = expandCollapsedFileForNavigation(currentCollapsed, target.filePath);
+    if (expanded !== currentCollapsed) setCollapsedFiles(expanded);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = containerRef?.querySelector(
+          `[data-file-path="${CSS.escape(target.filePath)}"][data-new-line="${target.startLine}"]`,
+        );
+        if (el && containerRef) {
+          const containerTop = containerRef.getBoundingClientRect().top;
+          const elTop = el.getBoundingClientRect().top;
+          containerRef.scrollTop = elTop - containerTop + containerRef.scrollTop - 80;
+        }
+      });
+    });
   });
 
   onMount(() => {
@@ -924,6 +944,15 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
             worktreePath={props.worktreePath}
             baseBranch={props.baseBranch}
             ref={(el) => sectionRefs.set(file.path, el)}
+            collapsed={collapsedFiles().has(file.path)}
+            onCollapsedChange={(collapsed) =>
+              setCollapsedFiles((previous) => {
+                const next = new Set(previous);
+                if (collapsed) next.add(file.path);
+                else next.delete(file.path);
+                return next;
+              })
+            }
             dimmed={dimOthers() && file.path !== props.scrollToPath}
             searchQuery={props.searchQuery}
             activeQuestions={review.activeQuestions()}
