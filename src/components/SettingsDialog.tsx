@@ -15,6 +15,7 @@ import { themeToCss, detectThemeTone } from '../lib/custom-theme';
 import {
   store,
   setTerminalFont,
+  setTerminalScreenReaderMode,
   setAutoTrustFolders,
   setShowPlans,
   setShowPromptInput,
@@ -469,6 +470,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
               checked={store.fontSmoothing}
               onChange={setFontSmoothing}
               description="Enable antialiasing and geometric text rendering"
+              align="flex-start"
+            />
+            <SettingsCheckboxRow
+              label="Terminal screen reader mode"
+              checked={store.terminalScreenReaderMode}
+              onChange={setTerminalScreenReaderMode}
+              description="Expose terminal output to assistive technologies. May reduce rendering performance."
               align="flex-start"
             />
           </SettingsSection>

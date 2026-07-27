@@ -9,6 +9,7 @@ type MockStore = {
   panelUserSize: Record<string, number>;
   projectsCollapsed: boolean;
   sidebarFocusedProjectId: string | null;
+  terminalScreenReaderMode: boolean;
 };
 
 let mockStore: MockStore;
@@ -63,6 +64,7 @@ import {
   setPanelUserSize,
   deletePanelUserSize,
   setProjectsCollapsed,
+  setTerminalScreenReaderMode,
 } from './ui';
 
 beforeEach(() => {
@@ -78,6 +80,7 @@ beforeEach(() => {
     panelUserSize: {},
     projectsCollapsed: false,
     sidebarFocusedProjectId: null,
+    terminalScreenReaderMode: false,
   });
 
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
@@ -193,5 +196,13 @@ describe('setProjectsCollapsed', () => {
 
     expect(mockStore.projectsCollapsed).toBe(true);
     expect(mockStore.sidebarFocusedProjectId).toBeNull();
+  });
+});
+
+describe('setTerminalScreenReaderMode', () => {
+  it('updates the global terminal accessibility option', () => {
+    setTerminalScreenReaderMode(true);
+
+    expect(mockStore.terminalScreenReaderMode).toBe(true);
   });
 });

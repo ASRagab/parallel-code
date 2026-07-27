@@ -183,6 +183,7 @@ export async function saveState(): Promise<void> {
     mergedLinesAdded: store.mergedLinesAdded,
     mergedLinesRemoved: store.mergedLinesRemoved,
     terminalFont: store.terminalFont,
+    terminalScreenReaderMode: store.terminalScreenReaderMode || undefined,
     themePreset: store.themePreset,
     showPromptInput: store.showPromptInput,
     fontSmoothing: store.fontSmoothing,
@@ -354,6 +355,7 @@ interface LegacyPersistedState {
   mergedLinesAdded?: unknown;
   mergedLinesRemoved?: unknown;
   terminalFont?: unknown;
+  terminalScreenReaderMode?: unknown;
   themePreset?: unknown;
   showPromptInput?: unknown;
   fontSmoothing?: unknown;
@@ -502,6 +504,8 @@ export async function loadState(): Promise<void> {
         typeof raw.terminalFont === 'string' && raw.terminalFont.trim()
           ? raw.terminalFont
           : DEFAULT_TERMINAL_FONT;
+      s.terminalScreenReaderMode =
+        typeof raw.terminalScreenReaderMode === 'boolean' ? raw.terminalScreenReaderMode : false;
       s.themePreset = isLookPreset(raw.themePreset) ? raw.themePreset : 'minimal';
       s.showPromptInput = typeof raw.showPromptInput === 'boolean' ? raw.showPromptInput : true;
       s.fontSmoothing = typeof raw.fontSmoothing === 'boolean' ? raw.fontSmoothing : true;

@@ -418,6 +418,7 @@ export function TerminalView(props: TerminalViewProps) {
       cursorBlink: true,
       fontSize: initialFontSize,
       fontFamily: getTerminalFontFamily(store.terminalFont),
+      screenReaderMode: store.terminalScreenReaderMode,
       theme: activeTerminalTheme(),
       allowProposedApi: true,
       scrollback: TERMINAL_SCROLLBACK_LINES,
@@ -1108,6 +1109,12 @@ export function TerminalView(props: TerminalViewProps) {
     if (!term || !fitAddon) return;
     term.options.fontFamily = getTerminalFontFamily(font);
     markDirty(props.agentId);
+  });
+
+  createEffect(() => {
+    const screenReaderMode = store.terminalScreenReaderMode;
+    if (!term) return;
+    term.options.screenReaderMode = screenReaderMode;
   });
 
   createEffect(() => {

@@ -80,6 +80,7 @@ beforeEach(() => {
   setStore('customAgents', []);
   setStore('coordinatorControlHintDismissed', false);
   setStore('autoStartRemoteAccess', false);
+  setStore('terminalScreenReaderMode', false);
 });
 
 describe('resolveIncomingPanelUserSize', () => {
@@ -487,6 +488,53 @@ describe('loadState theme persistence', () => {
     await loadState();
     expect(store.appearanceMode).toBe('dark');
     expect(store.darkThemePreset).toBe('islands-dark');
+  });
+});
+
+describe('terminal screen reader mode persistence', () => {
+  it('defaults to false when absent from saved state', async () => {
+    mockInvoke.mockResolvedValueOnce(basePayload());
+
+    await loadState();
+
+    expect(store.terminalScreenReaderMode).toBe(false);
+  });
+
+  it('restores an enabled screen reader mode', async () => {
+    mockInvoke.mockResolvedValueOnce(basePayload({ terminalScreenReaderMode: true }));
+
+    await loadState();
+
+    expect(store.terminalScreenReaderMode).toBe(true);
+  });
+
+  it.each(['true', 1, null])('rejects a non-boolean persisted value (%s)', async (value) => {
+    setStore('terminalScreenReaderMode', true);
+    mockInvoke.mockResolvedValueOnce(basePayload({ terminalScreenReaderMode: value }));
+
+    await loadState();
+
+    expect(store.terminalScreenReaderMode).toBe(false);
+  });
+
+  it('omits the disabled default when saving', async () => {
+    setStore('terminalScreenReaderMode', false);
+    mockInvoke.mockResolvedValueOnce(undefined);
+
+    await saveState();
+
+    const saved = JSON.parse(mockInvoke.mock.calls[0][1].json);
+    expect(saved.terminalScreenReaderMode).toBeUndefined();
+  });
+
+  it('persists the enabled setting', async () => {
+    setStore('terminalScreenReaderMode', true);
+    mockInvoke.mockResolvedValueOnce(undefined);
+
+    await saveState();
+
+    const saved = JSON.parse(mockInvoke.mock.calls[0][1].json);
+    expect(saved.terminalScreenReaderMode).toBe(true);
   });
 });
 

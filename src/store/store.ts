@@ -120,6 +120,7 @@ export {
   toggleTaskFocusMode,
   setTaskSplitMode,
   setTerminalFont,
+  setTerminalScreenReaderMode,
   applyAppearanceMode,
   markCustomThemesReady,
   setAppearanceMode,
