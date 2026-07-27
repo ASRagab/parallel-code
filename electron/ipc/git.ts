@@ -650,7 +650,10 @@ function parseDiffRawNumstat(output: string): {
       const removed = parseInt(parts[1], 10);
       if (!isNaN(added) && !isNaN(removed)) {
         const rawPath = parts[parts.length - 1];
-        const parsedPath = parseNumstatPath(rawPath);
+        const normalizedPath = normalizeStatusPath(rawPath);
+        const parsedPath = statusMap.has(normalizedPath)
+          ? { path: normalizedPath }
+          : parseNumstatPath(rawPath);
         const p = parsedPath.path;
         if (p) numstatMap.set(p, [added, removed]);
         if (p && parsedPath.previousPath) previousPathMap.set(p, parsedPath.previousPath);

@@ -61,6 +61,18 @@ export function isCoverageEligible(file: ChangedFile): boolean {
   return file.status !== 'D' && isCoverageCandidate(file);
 }
 
+export function shouldShowCoverageFooter(
+  selectedCommit: CommitSelection | undefined,
+  coverageCandidateCount: number,
+  hasCoverageArtifact: boolean,
+  hasBaseCoverageArtifact: boolean,
+): boolean {
+  return (
+    !isCommitHashSelection(selectedCommit) &&
+    (coverageCandidateCount > 0 || hasCoverageArtifact || hasBaseCoverageArtifact)
+  );
+}
+
 export function coverageFooterLabel(
   hasCoverageArtifact: boolean,
   touchedCoveragePct: number | null,
@@ -309,7 +321,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   );
   const eligibleFiles = createMemo(() => files().filter((file) => isCoverageEligible(file)));
   const coverageComparison = createMemo(() =>
-    buildCoverageComparison(coverage(), baseCoverage(), coverageCandidateFiles()),
+    buildCoverageComparison(coverage(), baseCoverage(), files()),
   );
   const coveredEligibleFiles = createMemo(() =>
     eligibleFiles().filter((file) => Boolean(coverageFiles()[file.path])),
@@ -359,7 +371,11 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     if (comparison.impactedUnchangedFiles.length > 0) {
       const impacted = comparison.impactedUnchangedFiles
         .slice(0, 3)
-        .map((file) => `${file.path} ${formatCoverageDelta(file.delta)}`)
+        .map((file) =>
+          file.delta === null
+            ? `${file.path} ${coverageValueLabel(file.base)} → ${coverageValueLabel(file.task)}`
+            : `${file.path} ${formatCoverageDelta(file.delta)}`,
+        )
         .join(', ');
       lines.push(
         `${comparison.impactedUnchangedFiles.length} materially impacted unchanged file${comparison.impactedUnchangedFiles.length === 1 ? '' : 's'}: ${impacted}.`,
@@ -835,9 +851,12 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
             }}
           >
             <Show
-              when={
-                !isCommitHashSelection(props.selectedCommit) && coverageCandidateFiles().length > 0
-              }
+              when={shouldShowCoverageFooter(
+                props.selectedCommit,
+                coverageCandidateFiles().length,
+                hasCoverageArtifact(),
+                hasBaseCoverageArtifact(),
+              )}
             >
               <div
                 style={{

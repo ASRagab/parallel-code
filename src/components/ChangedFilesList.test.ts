@@ -6,6 +6,7 @@ import {
   filesFooterLabel,
   filesFooterTitle,
   isCoverageEligible,
+  shouldShowCoverageFooter,
 } from './ChangedFilesList';
 
 function changedFile(overrides: Partial<ChangedFile>): ChangedFile {
@@ -66,6 +67,16 @@ describe('coverageFooterLabel', () => {
 
   it('shows the radar percentage when changed files are covered', () => {
     expect(coverageFooterLabel(true, 82, true)).toBe('◔ 82%');
+  });
+});
+
+describe('shouldShowCoverageFooter', () => {
+  it('shows comparison results for test-only changes when reports are loaded', () => {
+    expect(shouldShowCoverageFooter(undefined, 0, true, true)).toBe(true);
+  });
+
+  it('hides coverage details for a single-commit selection', () => {
+    expect(shouldShowCoverageFooter('abc123', 1, true, true)).toBe(false);
   });
 });
 

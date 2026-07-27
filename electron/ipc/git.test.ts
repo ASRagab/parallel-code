@@ -691,6 +691,27 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
       ]);
     });
 
+    it('should preserve a literal arrow in an ordinary modified filename', async () => {
+      const calls: string[][] = [];
+      setupMock(
+        calls,
+        buildWorktreeMockHandler({
+          committedRawNumstat: rawNumstatEntry('ordinary => modified.txt', 3, 1),
+        }),
+      );
+
+      const files = await getChangedFiles(uniqueWorktreePath(), 'main');
+
+      expect(files).toEqual([
+        expect.objectContaining({
+          path: 'ordinary => modified.txt',
+          lines_added: 3,
+          lines_removed: 1,
+          status: 'M',
+        }),
+      ]);
+    });
+
     it('should return multiple committed files', async () => {
       const calls: string[][] = [];
       setupMock(

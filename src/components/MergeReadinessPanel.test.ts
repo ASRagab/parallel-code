@@ -185,7 +185,14 @@ describe('buildMergeReadiness', () => {
             delta: -4,
           },
           files: {},
-          impactedUnchangedFiles: [{ path: 'src/shared.ts', taskPct: 70, basePct: 80, delta: -10 }],
+          impactedUnchangedFiles: [
+            {
+              path: 'src/shared.ts',
+              task: { state: 'available', pct: 70 },
+              base: { state: 'available', pct: 80 },
+              delta: -10,
+            },
+          ],
         },
       }),
     );
@@ -210,7 +217,14 @@ describe('buildMergeReadiness', () => {
             delta: 2,
           },
           files: {},
-          impactedUnchangedFiles: [{ path: 'src/shared.ts', taskPct: 70, basePct: 80, delta: -10 }],
+          impactedUnchangedFiles: [
+            {
+              path: 'src/shared.ts',
+              task: { state: 'available', pct: 70 },
+              base: { state: 'available', pct: 80 },
+              delta: -10,
+            },
+          ],
         },
       }),
     );

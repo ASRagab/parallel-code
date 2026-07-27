@@ -24,9 +24,9 @@ export interface CoverageFileComparison {
 
 export interface ImpactedCoverageFile {
   path: string;
-  taskPct: number;
-  basePct: number;
-  delta: number;
+  task: CoverageValue;
+  base: CoverageValue;
+  delta: number | null;
 }
 
 export interface CoverageComparison {
@@ -113,23 +113,31 @@ export function buildCoverageComparison(
 
   const impactedUnchangedFiles: ImpactedCoverageFile[] = [];
   if (taskSummary && baseSummary) {
-    for (const [filePath, taskFile] of Object.entries(taskSummary.files)) {
+    const reportPaths = new Set([
+      ...Object.keys(taskSummary.files),
+      ...Object.keys(baseSummary.files),
+    ]);
+    for (const filePath of reportPaths) {
       if (changedPaths.has(filePath)) continue;
-      const baseFile = baseSummary.files[filePath];
-      if (!baseFile || taskFile.lines.total === 0 || baseFile.lines.total === 0) continue;
-      const delta = roundPercentage(taskFile.lines.pct - baseFile.lines.pct);
-      if (Math.abs(delta) < MATERIAL_COVERAGE_DELTA) continue;
+      const task = fileValue(taskSummary, filePath);
+      const base = fileValue(baseSummary, filePath);
+      const delta = coverageDelta(task, base);
+      if (task.state === base.state && delta === null) continue;
+      if (delta !== null && Math.abs(delta) < MATERIAL_COVERAGE_DELTA) continue;
       impactedUnchangedFiles.push({
         path: filePath,
-        taskPct: taskFile.lines.pct,
-        basePct: baseFile.lines.pct,
+        task,
+        base,
         delta,
       });
     }
   }
 
   impactedUnchangedFiles.sort(
-    (a, b) => Math.abs(b.delta) - Math.abs(a.delta) || a.path.localeCompare(b.path),
+    (a, b) =>
+      Number(b.delta === null) - Number(a.delta === null) ||
+      Math.abs(b.delta ?? 0) - Math.abs(a.delta ?? 0) ||
+      a.path.localeCompare(b.path),
   );
 
   return {

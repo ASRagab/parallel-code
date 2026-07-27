@@ -179,7 +179,11 @@ function coverageCheck(coverage?: CoverageComparison | null): MergeReadinessChec
     };
   }
 
-  const regressedUnchanged = coverage.impactedUnchangedFiles.filter((file) => file.delta < 0);
+  const regressedUnchanged = coverage.impactedUnchangedFiles.filter(
+    (file) =>
+      file.base.state === 'available' &&
+      (file.task.state !== 'available' || (file.delta !== null && file.delta < 0)),
+  );
   const impactedDetail =
     regressedUnchanged.length > 0
       ? ` ${countLabel(regressedUnchanged.length, 'unchanged file')} also regressed.`

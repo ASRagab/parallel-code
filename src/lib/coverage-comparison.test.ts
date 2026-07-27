@@ -143,11 +143,53 @@ describe('buildCoverageComparison', () => {
     expect(result.impactedUnchangedFiles).toEqual([
       {
         path: 'src/regressed.ts',
-        taskPct: 82,
-        basePct: 90,
+        task: { state: 'available', pct: 82 },
+        base: { state: 'available', pct: 90 },
         delta: -8,
       },
     ]);
+  });
+
+  it('retains base-only unchanged files as unavailable task coverage', () => {
+    const base = report(80, [file('src/base-only.ts', 40)]);
+    const task = report(85, []);
+
+    const result = buildCoverageComparison(task, base, []);
+
+    expect(result.impactedUnchangedFiles).toEqual([
+      {
+        path: 'src/base-only.ts',
+        task: { state: 'file-not-present', pct: null },
+        base: { state: 'available', pct: 40 },
+        delta: null,
+      },
+    ]);
+  });
+
+  it('retains available-to-no-lines transitions for unchanged files', () => {
+    const base = report(80, [file('src/no-lines-now.ts', 75)]);
+    const task = report(85, [file('src/no-lines-now.ts', 100, 0)]);
+
+    const result = buildCoverageComparison(task, base, []);
+
+    expect(result.impactedUnchangedFiles).toEqual([
+      {
+        path: 'src/no-lines-now.ts',
+        task: { state: 'no-executable-lines', pct: null },
+        base: { state: 'available', pct: 75 },
+        delta: null,
+      },
+    ]);
+  });
+
+  it('does not classify non-source Git-changed paths as unchanged coverage impacts', () => {
+    const base = report(80, [file('src/example.test.ts', 90)]);
+    const task = report(80, [file('src/example.test.ts', 60)]);
+
+    const result = buildCoverageComparison(task, base, [changed('src/example.test.ts')]);
+
+    expect(result.files['src/example.test.ts'].delta).toBe(-30);
+    expect(result.impactedUnchangedFiles).toEqual([]);
   });
 });
 
