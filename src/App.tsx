@@ -815,75 +815,6 @@ function App() {
             <FocusModeTaskIndicators />
           </div>
         </Show>
-        <Show when={!store.keybindingMigrationDismissed}>
-          <div
-            style={{
-              background: theme.bgInput,
-              border: `1px solid ${theme.border}`,
-              'border-bottom': `1px solid ${theme.border}`,
-              padding: '8px 16px',
-              display: 'flex',
-              'align-items': 'center',
-              'justify-content': 'space-between',
-              'font-size': '13px',
-              color: theme.fg,
-              'flex-shrink': '0',
-            }}
-          >
-            <span>
-              Keyboard shortcuts are now configurable.{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  toggleHelpDialog(true);
-                  dismissMigrationBanner();
-                }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: '0',
-                  font: 'inherit',
-                  color: theme.accent,
-                  cursor: 'pointer',
-                  'text-decoration': 'underline',
-                }}
-              >
-                Pick a preset for your coding agent
-              </button>{' '}
-              or{' '}
-              <button
-                type="button"
-                onClick={() => dismissMigrationBanner()}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: '0',
-                  font: 'inherit',
-                  color: theme.fgMuted,
-                  cursor: 'pointer',
-                  'text-decoration': 'underline',
-                }}
-              >
-                dismiss
-              </button>
-              .
-            </span>
-            <button
-              onClick={() => dismissMigrationBanner()}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: theme.fgMuted,
-                cursor: 'pointer',
-                'font-size': '16px',
-                padding: '0 4px',
-                'line-height': '1',
-              }}
-            >
-              &times;
-            </button>
-          </div>
-        </Show>
         <main style={{ flex: '1', display: 'flex', overflow: 'hidden' }}>
           <Show when={store.sidebarVisible}>
             <Sidebar />
@@ -929,6 +860,44 @@ function App() {
           open={store.showSettingsDialog}
           onClose={() => toggleSettingsDialog(false)}
         />
+        <Show when={!store.keybindingMigrationDismissed}>
+          <div
+            class="keybinding-migration-notice"
+            role="region"
+            aria-label="Keyboard shortcuts update"
+          >
+            <span>
+              Keyboard shortcuts are now configurable.{' '}
+              <button
+                type="button"
+                class="keybinding-migration-notice-action"
+                onClick={() => {
+                  toggleHelpDialog(true);
+                  dismissMigrationBanner();
+                }}
+              >
+                Pick a preset for your coding agent
+              </button>{' '}
+              or{' '}
+              <button
+                type="button"
+                class="keybinding-migration-notice-action secondary"
+                onClick={() => dismissMigrationBanner()}
+              >
+                dismiss
+              </button>
+              .
+            </span>
+            <button
+              type="button"
+              class="keybinding-migration-notice-close"
+              aria-label="Dismiss keyboard shortcuts update"
+              onClick={() => dismissMigrationBanner()}
+            >
+              &times;
+            </button>
+          </div>
+        </Show>
         <Show when={store.showArena}>
           <ArenaOverlay onClose={closeArena} />
         </Show>
