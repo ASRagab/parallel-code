@@ -191,6 +191,20 @@ describe('buildCoverageComparison', () => {
     expect(result.files['src/example.test.ts'].delta).toBe(-30);
     expect(result.impactedUnchangedFiles).toEqual([]);
   });
+
+  it.each(['toString', 'constructor', '__proto__'])(
+    'treats a missing report entry named %s as absent instead of reading Object.prototype',
+    (path) => {
+      const result = buildCoverageComparison(report(80, []), report(80, []), [changed(path)]);
+
+      expect(Object.getPrototypeOf(result.files)).toBeNull();
+      expect(result.files[path]).toMatchObject({
+        path,
+        task: { state: 'file-not-present', pct: null },
+        base: { state: 'file-not-present', pct: null },
+      });
+    },
+  );
 });
 
 describe('formatCoverageDelta', () => {

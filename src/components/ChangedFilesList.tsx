@@ -7,7 +7,7 @@ import { getStatusColor } from '../lib/status-colors';
 import { openFileInEditor } from '../lib/shell';
 import { buildFileTree, flattenVisibleTree } from '../lib/file-tree';
 import {
-  buildCoverageComparison,
+  buildCoverageComparisonIfReady,
   formatCoverageDelta,
   type CoverageComparison,
   type CoverageFileComparison,
@@ -71,6 +71,16 @@ export function shouldShowCoverageFooter(
     !isCommitHashSelection(selectedCommit) &&
     (coverageCandidateCount > 0 || hasCoverageArtifact || hasBaseCoverageArtifact)
   );
+}
+
+export function buildCoverageComparisonForSelection(
+  selectedCommit: CommitSelection | undefined,
+  taskSummary: CoverageSummary | null,
+  baseSummary: CoverageSummary | null,
+  comparisonFiles: ChangedFile[] | null,
+): CoverageComparison | null {
+  if (isCommitHashSelection(selectedCommit)) return null;
+  return buildCoverageComparisonIfReady(taskSummary, baseSummary, comparisonFiles);
 }
 
 export function coverageFooterLabel(
@@ -304,6 +314,7 @@ function OpenInEditorButton(props: {
 
 export function ChangedFilesList(props: ChangedFilesListProps) {
   const [files, setFiles] = createSignal<ChangedFile[]>([]);
+  const [comparisonFiles, setComparisonFiles] = createSignal<ChangedFile[] | null>(null);
   const [coverage, setCoverage] = createSignal<CoverageSummary | null>(null);
   const [baseCoverage, setBaseCoverage] = createSignal<CoverageSummary | null>(null);
   const [canOpenFilesInEditor, setCanOpenFilesInEditor] = createSignal(false);
@@ -321,7 +332,12 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   );
   const eligibleFiles = createMemo(() => files().filter((file) => isCoverageEligible(file)));
   const coverageComparison = createMemo(() =>
-    buildCoverageComparison(coverage(), baseCoverage(), files()),
+    buildCoverageComparisonForSelection(
+      props.selectedCommit,
+      coverage(),
+      baseCoverage(),
+      comparisonFiles(),
+    ),
   );
   const coveredEligibleFiles = createMemo(() =>
     eligibleFiles().filter((file) => Boolean(coverageFiles()[file.path])),
@@ -349,7 +365,8 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     return Math.round((coveredLines / totalLines) * 100);
   });
   const aggregateCoverageLabel = createMemo(() => {
-    const comparison = coverageComparison().aggregate;
+    const comparison = coverageComparison()?.aggregate;
+    if (!comparison) return null;
     if (!hasBaseCoverageArtifact()) return null;
     const delta = comparison.delta === null ? '' : ` (${formatCoverageDelta(comparison.delta)})`;
     return `base ${coverageValueLabel(comparison.base)} → task ${coverageValueLabel(comparison.task)}${delta}`;
@@ -358,7 +375,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     const comparison = coverageComparison();
     const taskReport = coverage();
     const baseReport = baseCoverage();
-    if (!baseReport) return '';
+    if (!baseReport || !comparison) return '';
     const lines = [
       `Base: ${coverageValueLabel(comparison.aggregate.base)} (${baseReport.reportPath}).`,
       taskReport
@@ -386,9 +403,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
 
   createEffect(() => {
     if (!props.onCoverageComparisonChange) return;
-    props.onCoverageComparisonChange(
-      isCommitHashSelection(props.selectedCommit) ? null : coverageComparison(),
-    );
+    props.onCoverageComparisonChange(coverageComparison());
   });
 
   function toggleDir(path: string) {
@@ -508,6 +523,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     let inFlight = false;
     let usingBranchFallback = false;
     setCanOpenFilesInEditor(false);
+    setComparisonFiles(null);
 
     async function refresh() {
       if (inFlight) return;
@@ -534,6 +550,16 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
         }
 
         if (uncommittedOnly && path) {
+          const comparisonRequest = invoke<ChangedFile[]>(IPC.GetChangedFiles, {
+            worktreePath: path,
+            baseBranch,
+          })
+            .then((result) => {
+              if (!cancelled) setComparisonFiles(result);
+            })
+            .catch(() => {
+              if (!cancelled) setComparisonFiles(null);
+            });
           try {
             const result = await invoke<ChangedFile[]>(IPC.GetUncommittedChangedFiles, {
               worktreePath: path,
@@ -548,6 +574,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
               setCanOpenFilesInEditor(false);
             }
           }
+          await comparisonRequest;
           return;
         }
 
@@ -560,11 +587,15 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
             });
             if (!cancelled) {
               setFiles(result);
+              setComparisonFiles(result);
               setCanOpenFilesInEditor(true);
             }
             return;
           } catch {
-            if (!cancelled) setCanOpenFilesInEditor(false);
+            if (!cancelled) {
+              setComparisonFiles(null);
+              setCanOpenFilesInEditor(false);
+            }
             // Worktree may not exist — try branch fallback below
           }
         }
@@ -579,11 +610,15 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
               baseBranch,
             });
             if (!cancelled) {
-              setFiles(uncommittedOnly ? result.filter((f) => !f.committed) : result);
+              setFiles(result);
+              setComparisonFiles(result);
               setCanOpenFilesInEditor(false);
             }
           } catch {
-            if (!cancelled) setCanOpenFilesInEditor(false);
+            if (!cancelled) {
+              setComparisonFiles(null);
+              setCanOpenFilesInEditor(false);
+            }
             // Branch may no longer exist
           }
         }
@@ -801,7 +836,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                         file={file}
                         selectedCommit={props.selectedCommit}
                         summary={coverageFiles()[row().node.path]}
-                        comparison={coverageComparison().files[row().node.path]}
+                        comparison={coverageComparison()?.files[row().node.path]}
                         hasCoverageArtifact={hasCoverageArtifact()}
                       />
                     )}
@@ -872,9 +907,9 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                       title={aggregateCoverageTitle()}
                       style={{
                         color:
-                          coverageComparison().aggregate.delta === null
+                          coverageComparison()?.aggregate.delta === null
                             ? theme.fgMuted
-                            : deltaColor(coverageComparison().aggregate.delta ?? 0),
+                            : deltaColor(coverageComparison()?.aggregate.delta ?? 0),
                         'font-weight': '600',
                       }}
                     >
@@ -932,12 +967,12 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                     ∅ {missingCoverageCount()}
                   </span>
                 </Show>
-                <Show when={coverageComparison().impactedUnchangedFiles.length > 0}>
+                <Show when={(coverageComparison()?.impactedUnchangedFiles.length ?? 0) > 0}>
                   <span
                     title={aggregateCoverageTitle()}
                     style={{ color: theme.warning, 'font-weight': '600' }}
                   >
-                    ↕ {coverageComparison().impactedUnchangedFiles.length} other
+                    ↕ {coverageComparison()?.impactedUnchangedFiles.length} other
                   </span>
                 </Show>
               </div>

@@ -59,7 +59,8 @@ function fileValue(
   forceMissing = false,
 ): CoverageValue {
   if (!summary) return { state: 'no-report', pct: null };
-  const file = forceMissing ? undefined : summary.files[filePath];
+  const file =
+    forceMissing || !Object.hasOwn(summary.files, filePath) ? undefined : summary.files[filePath];
   if (!file) return { state: 'file-not-present', pct: null };
   if (file.lines.total === 0) return { state: 'no-executable-lines', pct: null };
   return { state: 'available', pct: file.lines.pct };
@@ -90,7 +91,7 @@ export function buildCoverageComparison(
 ): CoverageComparison {
   const taskAggregate = aggregateValue(taskSummary);
   const baseAggregate = aggregateValue(baseSummary);
-  const files: Record<string, CoverageFileComparison> = {};
+  const files = Object.create(null) as Record<string, CoverageFileComparison>;
   const changedPaths = new Set<string>();
 
   for (const file of changedFiles) {
@@ -149,4 +150,14 @@ export function buildCoverageComparison(
     files,
     impactedUnchangedFiles,
   };
+}
+
+export function buildCoverageComparisonIfReady(
+  taskSummary: CoverageSummary | null,
+  baseSummary: CoverageSummary | null,
+  changedFiles: ChangedFile[] | null,
+): CoverageComparison | null {
+  return changedFiles === null
+    ? null
+    : buildCoverageComparison(taskSummary, baseSummary, changedFiles);
 }

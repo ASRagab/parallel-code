@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ChangedFile } from '../ipc/types';
 import {
+  buildCoverageComparisonForSelection,
   coverageFooterLabel,
   coverageFooterTitle,
   filesFooterLabel,
@@ -77,6 +78,35 @@ describe('shouldShowCoverageFooter', () => {
 
   it('hides coverage details for a single-commit selection', () => {
     expect(shouldShowCoverageFooter('abc123', 1, true, true)).toBe(false);
+  });
+});
+
+describe('buildCoverageComparisonForSelection', () => {
+  it.each(['pending', 'failed'])(
+    'suppresses comparison output while the canonical changed-file inventory is %s',
+    () => {
+      expect(buildCoverageComparisonForSelection(undefined, null, null, null)).toBeNull();
+    },
+  );
+
+  it('uses the canonical whole-task inventory for an uncommitted-only display selection', () => {
+    const committed = changedFile({ path: 'src/committed.ts', committed: true });
+    const localOnly = changedFile({ path: 'src/local-only.ts', committed: false });
+
+    const result = buildCoverageComparisonForSelection('uncommitted', null, null, [
+      committed,
+      localOnly,
+    ]);
+
+    expect(Object.keys(result?.files ?? {})).toEqual([committed.path, localOnly.path]);
+  });
+
+  it('suppresses whole-task comparison for a single-commit selection', () => {
+    expect(
+      buildCoverageComparisonForSelection('abc123', null, null, [
+        changedFile({ path: 'src/example.ts' }),
+      ]),
+    ).toBeNull();
   });
 });
 
