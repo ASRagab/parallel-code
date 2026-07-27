@@ -4,6 +4,7 @@ import { sendPrompt } from '../store/tasks';
 import {
   compileQualityFindingPrompt,
   dismissQualityFinding,
+  selectedFindingIdsAfterSubmission,
   selectSubmittableFindings,
   type QualityFinding,
   type QualityFindingProvider,
@@ -259,7 +260,9 @@ export function ReviewProvider(props: ReviewProviderProps) {
     setSubmitError('');
     try {
       await sendPrompt(taskId, agentId, compileQualityFindingPrompt(selected));
-      setSelectedFindingIds(new Set<string>());
+      setSelectedFindingIds((previous) =>
+        selectedFindingIdsAfterSubmission(previous, selected, ids === undefined),
+      );
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to send quality findings');
     }

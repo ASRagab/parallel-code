@@ -3,7 +3,7 @@ import type { FileDiff } from './unified-diff-parser';
 export type QualityFindingCategory = 'reliability' | 'maintainability';
 export type QualityFindingSeverity = 'error' | 'warning' | 'note';
 export type QualityFindingState = 'open' | 'dismissed' | 'resolved';
-export type QualityFindingFreshness = 'current' | 'stale';
+export type QualityFindingFreshness = 'pending' | 'current' | 'stale';
 
 export interface QualityFindingLocation {
   filePath: string;
@@ -52,13 +52,25 @@ function findingMatchesDiff(finding: QualityFinding, files: FileDiff[]): boolean
   const file = files.find((candidate) => candidate.path === finding.location.filePath);
   if (!file || file.status === 'D' || file.binary) return false;
 
-  const startLine = finding.location.startLine;
-  const endLine = finding.location.endLine ?? startLine;
   return file.hunks.some((hunk) =>
-    hunk.lines.some(
-      (line) => line.newLine !== null && line.newLine >= startLine && line.newLine <= endLine,
-    ),
+    hunk.lines.some((line) => line.newLine === finding.location.startLine),
   );
+}
+
+export function reconcileQualityFindingsForDiff(
+  findings: QualityFinding[],
+  files: FileDiff[],
+  diffLoaded: boolean,
+): QualityFinding[] {
+  if (diffLoaded) return reconcileQualityFindings(findings, files);
+
+  let changed = false;
+  const pending = findings.map((finding) => {
+    if (finding.freshness === 'pending') return finding;
+    changed = true;
+    return { ...finding, freshness: 'pending' as const };
+  });
+  return changed ? pending : findings;
 }
 
 /** Mark provider locations stale when they no longer map to the current rendered diff. */
@@ -93,6 +105,17 @@ export function selectSubmittableFindings(
     (finding) =>
       requested.has(finding.id) && finding.state === 'open' && finding.freshness === 'current',
   );
+}
+
+export function selectedFindingIdsAfterSubmission(
+  selectedIds: ReadonlySet<string>,
+  submittedFindings: QualityFinding[],
+  bulkSubmission: boolean,
+): ReadonlySet<string> {
+  if (bulkSubmission) return new Set<string>();
+  const submittedIds = new Set(submittedFindings.map((finding) => finding.id));
+  const remaining = new Set([...selectedIds].filter((id) => !submittedIds.has(id)));
+  return remaining.size === selectedIds.size ? selectedIds : remaining;
 }
 
 export function formatQualityFindingLocation(finding: QualityFinding): string {

@@ -67,4 +67,11 @@ describe('ReviewSidebar', () => {
     expect(html).toContain('Stale');
     expect(html).toContain('disabled');
   });
+
+  it('marks pending findings textually and disables their remediation controls', () => {
+    const html = render([finding({ freshness: 'pending' })]);
+
+    expect(html).toContain('Pending');
+    expect(html).toContain('disabled');
+  });
 });

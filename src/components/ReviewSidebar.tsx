@@ -44,35 +44,40 @@ function QualityFindingSidebarItem(props: {
   onSubmit: () => void;
 }) {
   const color = () => severityColor(props.finding.severity);
-  const isStale = () => props.finding.freshness === 'stale';
+  const isActionable = () => props.finding.freshness === 'current';
+  const freshnessLabel = () => {
+    if (props.finding.freshness === 'pending') return 'Pending';
+    if (props.finding.freshness === 'stale') return 'Stale';
+    return null;
+  };
 
   return (
     <div
       onClick={() => {
-        if (!isStale()) props.onScrollTo();
+        if (isActionable()) props.onScrollTo();
       }}
       style={{
         padding: '8px 10px',
         'margin-bottom': '6px',
-        'border-left': `3px solid ${isStale() ? theme.fgSubtle : color()}`,
+        'border-left': `3px solid ${isActionable() ? color() : theme.fgSubtle}`,
         'border-radius': '0 4px 4px 0',
         background: 'color-mix(in srgb, var(--fg) 3%, transparent)',
-        cursor: isStale() ? 'default' : 'pointer',
-        opacity: isStale() ? '0.65' : '1',
+        cursor: isActionable() ? 'pointer' : 'default',
+        opacity: isActionable() ? '1' : '0.65',
       }}
     >
       <div style={{ display: 'flex', 'align-items': 'center', gap: '6px' }}>
         <input
           type="checkbox"
           checked={props.selected}
-          disabled={isStale()}
+          disabled={!isActionable()}
           aria-label={`Select ${props.finding.ruleId} finding`}
           onClick={(event) => event.stopPropagation()}
           onChange={(event) => props.onSelected(event.currentTarget.checked)}
         />
         <span
           style={{
-            color: isStale() ? theme.fgMuted : color(),
+            color: isActionable() ? color() : theme.fgMuted,
             'font-size': sf(10),
             'font-weight': '700',
             'text-transform': 'uppercase',
@@ -81,17 +86,19 @@ function QualityFindingSidebarItem(props: {
           Automated · {props.finding.severity} · {props.finding.category}
         </span>
         <span style={{ flex: '1' }} />
-        <Show when={isStale()}>
-          <span
-            style={{
-              color: theme.fgMuted,
-              'font-size': sf(10),
-              'font-weight': '700',
-              'text-transform': 'uppercase',
-            }}
-          >
-            Stale
-          </span>
+        <Show when={freshnessLabel()}>
+          {(label) => (
+            <span
+              style={{
+                color: theme.fgMuted,
+                'font-size': sf(10),
+                'font-weight': '700',
+                'text-transform': 'uppercase',
+              }}
+            >
+              {label()}
+            </span>
+          )}
         </Show>
         <button
           type="button"
@@ -155,20 +162,20 @@ function QualityFindingSidebarItem(props: {
       <div style={{ display: 'flex', 'justify-content': 'flex-end', 'margin-top': '6px' }}>
         <button
           type="button"
-          disabled={!props.canSubmit || isStale()}
+          disabled={!props.canSubmit || !isActionable()}
           onClick={(event) => {
             event.stopPropagation();
             props.onSubmit();
           }}
           style={{
             background: 'transparent',
-            border: `1px solid ${isStale() ? theme.border : color()}`,
-            color: props.canSubmit && !isStale() ? color() : theme.fgMuted,
+            border: `1px solid ${isActionable() ? color() : theme.border}`,
+            color: props.canSubmit && isActionable() ? color() : theme.fgMuted,
             'font-size': sf(10),
             'font-weight': '600',
             padding: '2px 7px',
             'border-radius': '4px',
-            cursor: props.canSubmit && !isStale() ? 'pointer' : 'default',
+            cursor: props.canSubmit && isActionable() ? 'pointer' : 'default',
           }}
         >
           Send

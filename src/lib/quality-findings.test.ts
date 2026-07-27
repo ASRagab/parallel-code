@@ -5,6 +5,8 @@ import {
   createFixtureQualityFindingProvider,
   dismissQualityFinding,
   reconcileQualityFindings,
+  reconcileQualityFindingsForDiff,
+  selectedFindingIdsAfterSubmission,
   selectSubmittableFindings,
   type QualityFinding,
 } from './quality-findings';
@@ -82,6 +84,55 @@ describe('reconcileQualityFindings', () => {
     const stale = finding({ freshness: 'stale' });
     expect(reconcileQualityFindings([stale], [diff()])[0].freshness).toBe('current');
   });
+
+  it('keeps provider-first findings pending until the diff loads', () => {
+    const result = reconcileQualityFindingsForDiff([finding()], [], false);
+
+    expect(result[0].freshness).toBe('pending');
+    expect(selectSubmittableFindings(result, ['finding-1'])).toEqual([]);
+  });
+
+  it('returns current findings to pending during commit navigation', () => {
+    const current = reconcileQualityFindingsForDiff([finding()], [diff()], true);
+    const navigating = reconcileQualityFindingsForDiff(current, [], false);
+
+    expect(current[0].freshness).toBe('current');
+    expect(navigating[0].freshness).toBe('pending');
+  });
+
+  it('keeps findings pending after rejected diff loading', () => {
+    const loading = reconcileQualityFindingsForDiff([finding()], [], false);
+    const rejected = reconcileQualityFindingsForDiff(loading, [], false);
+
+    expect(rejected).toBe(loading);
+    expect(rejected[0].freshness).toBe('pending');
+  });
+
+  it('requires the navigable start line for a ranged finding', () => {
+    const ranged = finding({
+      location: { filePath: 'src/app.ts', startLine: 8, endLine: 10 },
+    });
+
+    expect(reconcileQualityFindings([ranged], [diff()])[0].freshness).toBe('stale');
+    expect(
+      reconcileQualityFindings(
+        [ranged],
+        [
+          diff({
+            hunks: [
+              {
+                oldStart: 8,
+                oldCount: 1,
+                newStart: 8,
+                newCount: 1,
+                lines: [{ type: 'add', content: 'runAsync();', oldLine: null, newLine: 8 }],
+              },
+            ],
+          }),
+        ],
+      )[0].freshness,
+    ).toBe('current');
+  });
 });
 
 describe('compileQualityFindingPrompt', () => {
@@ -132,5 +183,25 @@ describe('finding review actions', () => {
     expect(
       selectSubmittableFindings([current, stale, resolved], ['finding-1', 'stale', 'resolved']),
     ).toEqual([current]);
+  });
+
+  it('preserves unrelated selections after a single-card submission', () => {
+    const remaining = selectedFindingIdsAfterSubmission(
+      new Set(['finding-b', 'finding-c']),
+      [finding()],
+      false,
+    );
+
+    expect([...remaining]).toEqual(['finding-b', 'finding-c']);
+  });
+
+  it('clears selections after a bulk submission', () => {
+    const remaining = selectedFindingIdsAfterSubmission(
+      new Set(['finding-1', 'finding-b']),
+      [finding()],
+      true,
+    );
+
+    expect(remaining.size).toBe(0);
   });
 });

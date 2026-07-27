@@ -8,7 +8,10 @@ import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { parseUnifiedDiff } from '../lib/unified-diff-parser';
 import { evictStaleAnnotations } from '../lib/review-eviction';
-import { reconcileQualityFindings, type QualityFindingProvider } from '../lib/quality-findings';
+import {
+  reconcileQualityFindingsForDiff,
+  type QualityFindingProvider,
+} from '../lib/quality-findings';
 import { windowChromeTopInset } from '../lib/platform';
 import { ScrollingDiffView } from './ScrollingDiffView';
 import {
@@ -162,9 +165,8 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
   });
 
   createEffect(() => {
-    if (!diffLoaded()) return;
     const current = review.findings();
-    const reconciled = reconcileQualityFindings(current, parsedFiles());
+    const reconciled = reconcileQualityFindingsForDiff(current, parsedFiles(), diffLoaded());
     if (reconciled !== current) review.replaceFindings(() => reconciled);
   });
 
