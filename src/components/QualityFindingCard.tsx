@@ -1,27 +1,16 @@
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
-import {
-  formatQualityFindingLocation,
-  type QualityFinding,
-  type QualityFindingSeverity,
-} from '../lib/quality-findings';
+import { formatQualityFindingLocation, type QualityFinding } from '../lib/quality-findings';
 import { CloseIcon } from './icons';
+import { qualityFindingSeverityColor } from './quality-finding-colors';
 
 interface QualityFindingCardProps {
   finding: QualityFinding;
-  canSubmit: boolean;
   onDismiss: () => void;
-  onSubmit: () => void;
-}
-
-function severityColor(severity: QualityFindingSeverity): string {
-  if (severity === 'error') return theme.error;
-  if (severity === 'warning') return theme.warning;
-  return theme.accent;
 }
 
 export function QualityFindingCard(props: QualityFindingCardProps) {
-  const color = () => severityColor(props.finding.severity);
+  const color = () => qualityFindingSeverityColor(props.finding.severity);
 
   return (
     <div
@@ -97,27 +86,6 @@ export function QualityFindingCard(props: QualityFindingCardProps) {
         }}
       >
         {props.finding.explanation}
-      </div>
-
-      <div style={{ display: 'flex', 'justify-content': 'flex-end', 'margin-top': '6px' }}>
-        <button
-          type="button"
-          onClick={() => props.onSubmit()}
-          disabled={!props.canSubmit}
-          title={props.canSubmit ? 'Send finding to agent' : 'No agent available'}
-          style={{
-            background: 'transparent',
-            border: `1px solid ${color()}`,
-            color: props.canSubmit ? color() : theme.fgMuted,
-            'font-size': sf(11),
-            'font-weight': '600',
-            padding: '3px 8px',
-            'border-radius': '4px',
-            cursor: props.canSubmit ? 'pointer' : 'default',
-          }}
-        >
-          Send to agent
-        </button>
       </div>
     </div>
   );

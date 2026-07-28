@@ -93,7 +93,7 @@ function isLineHighlighted(
   );
 }
 
-export function expandCollapsedFileForNavigation(
+function expandCollapsedFileForNavigation(
   collapsedFiles: ReadonlySet<string>,
   filePath: string,
 ): ReadonlySet<string> {
@@ -471,9 +471,7 @@ function FileSection(props: {
   onDismissAnnotation: (id: string) => void;
   onAnnotationUpdate: (id: string, comment: string) => void;
   qualityFindings: QualityFinding[];
-  canSubmitFindings: boolean;
   onDismissFinding: (id: string) => void;
-  onSubmitFinding: (id: string) => void;
   highlightedRange?: HighlightRange | null;
   pendingInput?: { filePath: string; afterLine: number } | null;
   onSubmit: (text: string, mode: 'review' | 'ask') => void;
@@ -732,7 +730,7 @@ function FileSection(props: {
                             props.qualityFindings,
                             props.file.path,
                             (finding) => finding.location.filePath,
-                            (finding) => finding.location.endLine ?? finding.location.startLine,
+                            (finding) => finding.location.startLine,
                             hunk.newStart,
                             nextStart,
                           )}
@@ -740,9 +738,7 @@ function FileSection(props: {
                           {(finding) => (
                             <QualityFindingCard
                               finding={finding}
-                              canSubmit={props.canSubmitFindings}
                               onDismiss={() => props.onDismissFinding(finding.id)}
-                              onSubmit={() => props.onSubmitFinding(finding.id)}
                             />
                           )}
                         </For>
@@ -789,6 +785,11 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
   const [dimOthers, setDimOthers] = createSignal(false);
   let dimTimer: ReturnType<typeof setTimeout> | undefined;
   let containerRef: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    setCollapsedFiles(new Set<string>());
+    return props.files;
+  });
 
   const highlightedRange = (): HighlightRange | null => {
     const selection = review.pendingSelection();
@@ -864,6 +865,7 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
           const elTop = el.getBoundingClientRect().top;
           containerRef.scrollTop = elTop - containerTop + containerRef.scrollTop - 80;
         }
+        if (props.scrollToAnnotation === target) review.setScrollTarget(null);
       });
     });
   });
@@ -963,9 +965,7 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
             qualityFindings={review
               .openFindings()
               .filter((finding) => finding.freshness === 'current')}
-            canSubmitFindings={review.canSubmit()}
             onDismissFinding={review.dismissFinding}
-            onSubmitFinding={(id) => void review.submitFindings([id])}
             highlightedRange={highlightedRange()}
             pendingInput={(() => {
               const pi = review.pendingSelection();

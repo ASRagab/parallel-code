@@ -14,8 +14,8 @@ export interface QualityFindingLocation {
 }
 
 export interface QualityFinding {
+  /** Stable provider-defined identifier or fingerprint. */
   id: string;
-  fingerprint: string;
   source: string;
   ruleId: string;
   category: QualityFindingCategory;
@@ -96,6 +96,20 @@ export function dismissQualityFinding(findings: QualityFinding[], id: string): Q
   );
 }
 
+export function resolveQualityFindings(
+  findings: QualityFinding[],
+  submittedFindings: QualityFinding[],
+): QualityFinding[] {
+  const submittedIds = new Set(submittedFindings.map((finding) => finding.id));
+  let changed = false;
+  const resolved = findings.map((finding) => {
+    if (!submittedIds.has(finding.id) || finding.state === 'resolved') return finding;
+    changed = true;
+    return { ...finding, state: 'resolved' as const };
+  });
+  return changed ? resolved : findings;
+}
+
 export function selectSubmittableFindings(
   findings: QualityFinding[],
   ids: Iterable<string>,
@@ -123,7 +137,7 @@ export function formatQualityFindingLocation(finding: QualityFinding): string {
   if (location.endLine && location.endLine !== location.startLine) {
     end = `-${location.endLine}${location.endColumn ? `:${location.endColumn}` : ''}`;
   } else if (location.endColumn && location.endColumn !== location.startColumn) {
-    end = `-${location.endColumn}`;
+    end = `-${location.startLine}:${location.endColumn}`;
   }
   return `${location.filePath}:${location.startLine}${startColumn}${end}`;
 }
@@ -135,7 +149,6 @@ export function compileQualityFindingPrompt(findings: QualityFinding[]): string 
       `## [${finding.severity}] [${finding.category}] ${finding.source}/${finding.ruleId}`,
     );
     lines.push(`Location: ${formatQualityFindingLocation(finding)}`);
-    lines.push(`Fingerprint: ${finding.fingerprint}`);
     lines.push(finding.explanation);
     lines.push('');
   }

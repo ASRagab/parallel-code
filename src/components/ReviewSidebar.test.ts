@@ -6,7 +6,6 @@ import { ReviewSidebar } from './ReviewSidebar';
 function finding(overrides: Partial<QualityFinding> = {}): QualityFinding {
   return {
     id: 'finding-1',
-    fingerprint: 'fixture:no-floating-promises:src/app.ts:10',
     source: 'fixture',
     ruleId: 'no-floating-promises',
     category: 'reliability',
@@ -19,7 +18,13 @@ function finding(overrides: Partial<QualityFinding> = {}): QualityFinding {
   };
 }
 
-function render(findings: QualityFinding[]) {
+function render(
+  findings: QualityFinding[],
+  submission: { canSubmit: boolean; submitting: boolean } = {
+    canSubmit: true,
+    submitting: false,
+  },
+) {
   return renderToString(() =>
     ReviewSidebar({
       annotations: [
@@ -34,7 +39,8 @@ function render(findings: QualityFinding[]) {
       ],
       findings,
       selectedFindingIds: new Set(['finding-1']),
-      canSubmit: true,
+      canSubmit: submission.canSubmit,
+      submitting: submission.submitting,
       onDismiss: vi.fn(),
       onUpdate: vi.fn(),
       onScrollTo: vi.fn(),
@@ -42,7 +48,6 @@ function render(findings: QualityFinding[]) {
       onFindingSelected: vi.fn(),
       onFindingDismiss: vi.fn(),
       onFindingScrollTo: vi.fn(),
-      onFindingSubmit: vi.fn(),
     }),
   );
 }
@@ -57,21 +62,32 @@ describe('ReviewSidebar', () => {
     expect(text).toContain('fixture/no-floating-promises');
     expect(text).toContain('Human comments (1)');
     expect(text).toContain('Please clarify this return value.');
-    expect(text).toContain('Send selected findings (1)');
-    expect(text).toContain('Send human comments (1)');
+    expect(text).toContain('Send to agent (2)');
   });
 
   it('marks stale findings textually and disables their remediation controls', () => {
     const html = render([finding({ freshness: 'stale' })]);
 
     expect(html).toContain('Stale');
-    expect(html).toContain('disabled');
+    expect(html).toMatch(
+      /<input type="checkbox"[^>]*disabled[^>]*aria-label="Select no-floating-promises finding"/,
+    );
   });
 
   it('marks pending findings textually and disables their remediation controls', () => {
     const html = render([finding({ freshness: 'pending' })]);
 
     expect(html).toContain('Pending');
-    expect(html).toContain('disabled');
+    expect(html).toMatch(
+      /<input type="checkbox"[^>]*disabled[^>]*aria-label="Select no-floating-promises finding"/,
+    );
+  });
+
+  it('labels the unified send action as in progress while a submission is active', () => {
+    const html = render([finding()], { canSubmit: false, submitting: true });
+
+    expect(html).toContain('title="Sending review..."');
+    expect(html).toContain('Sending...');
+    expect(html).not.toContain('No agent available');
   });
 });

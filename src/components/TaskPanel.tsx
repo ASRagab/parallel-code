@@ -42,6 +42,7 @@ import type { Task } from '../store/types';
 import type { CommitInfo } from '../ipc/types';
 import { isLandedTaskState } from '../store/landing';
 import { shouldPollTaskCommits } from './task-commit-polling';
+import { devQualityFindingProvider } from './dev-quality-finding-fixture';
 
 interface TaskPanelProps {
   task: Task;
@@ -656,6 +657,7 @@ export function TaskPanel(props: TaskPanelProps) {
           selectedCommit={selectedCommit()}
           onCommitNavigate={setSelectedCommit}
           gitIsolation={props.task.gitIsolation}
+          findingProvider={devQualityFindingProvider}
         />
       </Show>
       <EditProjectDialog project={editingProject()} onClose={() => setEditingProjectId(null)} />

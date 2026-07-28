@@ -6,6 +6,7 @@ import {
   dismissQualityFinding,
   reconcileQualityFindings,
   reconcileQualityFindingsForDiff,
+  resolveQualityFindings,
   selectedFindingIdsAfterSubmission,
   selectSubmittableFindings,
   type QualityFinding,
@@ -14,7 +15,6 @@ import {
 function finding(overrides: Partial<QualityFinding> = {}): QualityFinding {
   return {
     id: 'finding-1',
-    fingerprint: 'fixture:no-floating-promises:src/app.ts:10',
     source: 'fixture',
     ruleId: 'no-floating-promises',
     category: 'reliability',
@@ -141,7 +141,6 @@ describe('compileQualityFindingPrompt', () => {
       finding(),
       finding({
         id: 'finding-2',
-        fingerprint: 'fixture:complexity:src/util.ts:4',
         ruleId: 'complexity',
         category: 'maintainability',
         severity: 'note',
@@ -157,28 +156,53 @@ describe('compileQualityFindingPrompt', () => {
 
     expect(prompt).toContain('[warning] [reliability] fixture/no-floating-promises');
     expect(prompt).toContain('Location: src/app.ts:10:3');
-    expect(prompt).toContain('Fingerprint: fixture:no-floating-promises:src/app.ts:10');
+    expect(prompt).not.toContain('Fingerprint:');
     expect(prompt).toContain('[note] [maintainability] fixture/complexity');
     expect(prompt).toContain('Location: src/util.ts:4:2-8:7');
+  });
+
+  it('renders same-line column ranges without confusing the end column for a line', () => {
+    const prompt = compileQualityFindingPrompt([
+      finding({
+        location: {
+          filePath: 'src/app.ts',
+          startLine: 10,
+          startColumn: 3,
+          endColumn: 7,
+        },
+      }),
+    ]);
+
+    expect(prompt).toContain('Location: src/app.ts:10:3-10:7');
   });
 });
 
 describe('finding review actions', () => {
-  it('dismisses by state without dropping provider identity', () => {
+  it('dismisses by state without dropping the stable provider ID', () => {
     const original = finding();
     const dismissed = dismissQualityFinding([original], original.id);
 
     expect(dismissed[0]).toMatchObject({
       id: original.id,
-      fingerprint: original.fingerprint,
       state: 'dismissed',
     });
   });
 
+  it('marks only successfully submitted findings resolved', () => {
+    const submitted = finding();
+    const untouched = finding({ id: 'finding-b' });
+    const result = resolveQualityFindings([submitted, untouched], [submitted]);
+
+    expect(result.map(({ id, state }) => ({ id, state }))).toEqual([
+      { id: 'finding-1', state: 'resolved' },
+      { id: 'finding-b', state: 'open' },
+    ]);
+  });
+
   it('submits only selected open findings with current locations', () => {
     const current = finding();
-    const stale = finding({ id: 'stale', fingerprint: 'stale', freshness: 'stale' });
-    const resolved = finding({ id: 'resolved', fingerprint: 'resolved', state: 'resolved' });
+    const stale = finding({ id: 'stale', freshness: 'stale' });
+    const resolved = finding({ id: 'resolved', state: 'resolved' });
 
     expect(
       selectSubmittableFindings([current, stale, resolved], ['finding-1', 'stale', 'resolved']),
@@ -196,7 +220,7 @@ describe('finding review actions', () => {
   it('removes only snapshotted bulk IDs from the latest selection', () => {
     const remaining = selectedFindingIdsAfterSubmission(
       new Set(['finding-1', 'finding-b', 'finding-c']),
-      [finding(), finding({ id: 'finding-b', fingerprint: 'finding-b' })],
+      [finding(), finding({ id: 'finding-b' })],
     );
 
     expect([...remaining]).toEqual(['finding-c']);

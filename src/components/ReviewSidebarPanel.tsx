@@ -1,32 +1,42 @@
 import { Show } from 'solid-js';
-import { useReview } from './ReviewProvider';
+import { useReview, type ReviewContextValue } from './ReviewProvider';
 import { ReviewSidebar } from './ReviewSidebar';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
+import { CloseIcon } from './icons';
 
-export function hasReviewSidebarState(
-  reviewCount: number,
-  findingsLoading: boolean,
-  findingsError: string,
-  submitError: string,
-): boolean {
-  return reviewCount > 0 || findingsLoading || Boolean(findingsError) || Boolean(submitError);
+interface ReviewSidebarState {
+  reviewCount: number;
+  findingsLoading: boolean;
+  findingsError: string;
+  submitError: string;
+}
+
+function hasReviewSidebarState(state: ReviewSidebarState): boolean {
+  return (
+    state.reviewCount > 0 ||
+    state.findingsLoading ||
+    Boolean(state.findingsError) ||
+    Boolean(state.submitError)
+  );
+}
+
+function currentReviewSidebarState(review: ReviewContextValue): ReviewSidebarState {
+  return {
+    reviewCount: review.annotations().length + review.openFindings().length,
+    findingsLoading: review.findingsLoading(),
+    findingsError: review.findingsError(),
+    submitError: review.submitError(),
+  };
 }
 
 /** Toggle button that shows annotation count and opens/closes the review sidebar. */
 export function ReviewCommentsButton() {
   const review = useReview();
-  const reviewCount = () => review.annotations().length + review.openFindings().length;
-  const hasReviewState = () =>
-    hasReviewSidebarState(
-      reviewCount(),
-      review.findingsLoading(),
-      review.findingsError(),
-      review.submitError(),
-    );
+  const state = () => currentReviewSidebarState(review);
 
   return (
-    <Show when={hasReviewState()}>
+    <Show when={hasReviewSidebarState(state())}>
       <button
         onClick={() => review.setSidebarOpen(!review.sidebarOpen())}
         style={{
@@ -39,7 +49,7 @@ export function ReviewCommentsButton() {
           cursor: 'pointer',
         }}
       >
-        Review ({reviewCount()})
+        Review ({state().reviewCount})
       </button>
     </Show>
   );
@@ -48,17 +58,10 @@ export function ReviewCommentsButton() {
 /** Sidebar column with human comments and provider findings. */
 export function ReviewSidebarPanel() {
   const review = useReview();
-  const reviewCount = () => review.annotations().length + review.openFindings().length;
-  const hasReviewState = () =>
-    hasReviewSidebarState(
-      reviewCount(),
-      review.findingsLoading(),
-      review.findingsError(),
-      review.submitError(),
-    );
+  const state = () => currentReviewSidebarState(review);
 
   return (
-    <Show when={review.sidebarOpen() && hasReviewState()}>
+    <Show when={review.sidebarOpen() && hasReviewSidebarState(state())}>
       <div style={{ display: 'flex', 'flex-direction': 'column' }}>
         <Show when={review.submitError()}>
           <div
@@ -92,9 +95,31 @@ export function ReviewSidebarPanel() {
               color: theme.warning,
               'font-size': sf(12),
               'border-bottom': `1px solid ${theme.border}`,
+              display: 'flex',
+              'align-items': 'center',
+              gap: '8px',
             }}
           >
-            Quality findings unavailable: {review.findingsError()}
+            <span style={{ flex: '1' }}>
+              Quality findings unavailable: {review.findingsError()}
+            </span>
+            <button
+              type="button"
+              onClick={review.clearFindingsError}
+              title="Dismiss quality findings error"
+              aria-label="Dismiss quality findings error"
+              style={{
+                display: 'flex',
+                background: 'transparent',
+                border: 'none',
+                color: theme.fgMuted,
+                cursor: 'pointer',
+                padding: '2px',
+                'border-radius': '3px',
+              }}
+            >
+              <CloseIcon size={13} />
+            </button>
           </div>
         </Show>
         <ReviewSidebar
@@ -102,6 +127,7 @@ export function ReviewSidebarPanel() {
           findings={review.openFindings()}
           selectedFindingIds={review.selectedFindingIds()}
           canSubmit={review.canSubmit()}
+          submitting={review.submitting()}
           onDismiss={review.dismissAnnotation}
           onUpdate={review.updateAnnotation}
           onScrollTo={review.setScrollTarget}
@@ -116,7 +142,6 @@ export function ReviewSidebarPanel() {
               endLine: finding.location.endLine,
             })
           }
-          onFindingSubmit={(ids) => void review.submitFindings(ids)}
         />
       </div>
     </Show>

@@ -4,6 +4,7 @@ import { sendPrompt } from '../store/tasks';
 import {
   compileQualityFindingPrompt,
   dismissQualityFinding,
+  resolveQualityFindings,
   selectedFindingIdsAfterSubmission,
   selectSubmittableFindings,
   type QualityFinding,
@@ -53,15 +54,16 @@ export interface ReviewContextValue {
   setFindingSelected: (id: string, selected: boolean) => void;
   dismissFinding: (id: string) => void;
   replaceFindings: (fn: (prev: QualityFinding[]) => QualityFinding[]) => void;
-  submitFindings: (ids?: string[]) => Promise<void>;
   findingsLoading: () => boolean;
   findingsError: () => string;
+  clearFindingsError: () => void;
 
   scrollTarget: () => ReviewScrollTarget | null;
   setScrollTarget: (target: ReviewScrollTarget | null) => void;
 
   submitReview: () => Promise<void>;
   canSubmit: () => boolean;
+  submitting: () => boolean;
 
   pendingSelection: () => ContentSelection | null;
   handleSelection: (selection: ContentSelection) => void;
@@ -86,7 +88,7 @@ interface ReviewProviderProps {
 
 const ReviewContext = createContext<ReviewContextValue>();
 
-export function createReviewSubmissionGuard() {
+function createReviewSubmissionGuard() {
   const [submitting, setSubmitting] = createSignal(false);
 
   async function run(action: () => Promise<void>): Promise<boolean> {
@@ -103,7 +105,7 @@ export function createReviewSubmissionGuard() {
   return { submitting, run };
 }
 
-export function canSubmitReview(
+function canSubmitReview(
   taskId: string | undefined,
   agentId: string | undefined,
   submitting: boolean,
@@ -118,9 +120,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
   const [findingsLoading, setFindingsLoading] = createSignal(false);
   const [findingsError, setFindingsError] = createSignal('');
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
-  const [scrollTarget, setScrollTarget] = createSignal<ReviewScrollTarget | null>(null, {
-    equals: false,
-  });
+  const [scrollTarget, setScrollTarget] = createSignal<ReviewScrollTarget | null>(null);
   const [pendingSelection, setPendingSelection] = createSignal<ContentSelection | null>(null);
   const [activeQuestions, setActiveQuestions] = createSignal<ActiveQuestion[]>([]);
   const [submitError, setSubmitError] = createSignal('');
@@ -262,38 +262,34 @@ export function ReviewProvider(props: ReviewProviderProps) {
     const taskId = props.taskId;
     const agentId = props.agentId;
     if (!taskId || !agentId) return;
-    const prompt = props.compilePrompt(annotations());
+    const submittedAnnotations = annotations();
+    const submittedFindings = selectSubmittableFindings(findings(), selectedFindingIds());
+    if (submittedAnnotations.length === 0 && submittedFindings.length === 0) return;
+
+    const prompt = [
+      submittedAnnotations.length > 0 ? props.compilePrompt(submittedAnnotations) : '',
+      submittedFindings.length > 0 ? compileQualityFindingPrompt(submittedFindings) : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    const submittedAnnotationIds = new Set(submittedAnnotations.map((annotation) => annotation.id));
     const onSubmitted = props.onSubmitted;
 
     await submission.run(async () => {
       setSubmitError('');
       try {
         await sendPrompt(taskId, agentId, prompt);
-        setAnnotations([]);
+        setAnnotations((previous) =>
+          previous.filter((annotation) => !submittedAnnotationIds.has(annotation.id)),
+        );
+        setFindings((previous) => resolveQualityFindings(previous, submittedFindings));
+        setSelectedFindingIds((previous) =>
+          selectedFindingIdsAfterSubmission(previous, submittedFindings),
+        );
         setSidebarOpen(false);
         onSubmitted?.();
       } catch (err: unknown) {
         setSubmitError(err instanceof Error ? err.message : 'Failed to send review');
-        setSidebarOpen(true);
-      }
-    });
-  }
-
-  async function submitFindings(ids?: string[]): Promise<void> {
-    const taskId = props.taskId;
-    const agentId = props.agentId;
-    if (!taskId || !agentId) return;
-
-    const selected = selectSubmittableFindings(findings(), ids ?? selectedFindingIds());
-    if (selected.length === 0) return;
-
-    await submission.run(async () => {
-      setSubmitError('');
-      try {
-        await sendPrompt(taskId, agentId, compileQualityFindingPrompt(selected));
-        setSelectedFindingIds((previous) => selectedFindingIdsAfterSubmission(previous, selected));
-      } catch (err: unknown) {
-        setSubmitError(err instanceof Error ? err.message : 'Failed to send quality findings');
         setSidebarOpen(true);
       }
     });
@@ -311,9 +307,9 @@ export function ReviewProvider(props: ReviewProviderProps) {
     setFindingSelected,
     dismissFinding,
     replaceFindings,
-    submitFindings,
     findingsLoading,
     findingsError,
+    clearFindingsError: () => setFindingsError(''),
     sidebarOpen,
     setSidebarOpen,
     scrollTarget,
@@ -325,6 +321,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
     activeQuestions,
     dismissQuestion,
     canSubmit,
+    submitting: submission.submitting,
     submitReview,
     submitError,
   };
