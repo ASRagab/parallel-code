@@ -19,6 +19,7 @@
   "GetGitignoredDirs": "get_gitignored_dirs",
   "ListImportableWorktrees": "list_importable_worktrees",
   "GetBranchWorktreePath": "get_branch_worktree_path",
+  "GetMergeBaseTimestamp": "get_merge_base_timestamp",
   "GetWorktreeStatus": "get_worktree_status",
   "CheckMergeStatus": "check_merge_status",
   "MergeTask": "merge_task",

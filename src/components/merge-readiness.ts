@@ -1,5 +1,9 @@
 import type { MergeStatus, PrChecksOverall, WorktreeStatus } from '../ipc/types';
-import { formatCoverageDelta, type CoverageComparison } from '../lib/coverage-comparison';
+import {
+  formatCoverageDelta,
+  MATERIAL_COVERAGE_DELTA,
+  type CoverageComparison,
+} from '../lib/coverage-comparison';
 import type { SubtaskVerification } from '../store/types';
 
 export type MergeReadinessCheckStatus = 'pass' | 'warning' | 'blocked' | 'checking' | 'neutral';
@@ -178,6 +182,13 @@ function coverageCheck(coverage?: CoverageComparison | null): MergeReadinessChec
       detail: `Task ${taskPct}%; the base report has no executable lines.`,
     };
   }
+  if (coverage.baseline?.stale) {
+    return {
+      label: 'Coverage',
+      status: 'neutral',
+      detail: 'Base coverage report predates the task merge-base; regenerate it before comparing.',
+    };
+  }
 
   const regressedUnchanged = coverage.impactedUnchangedFiles.filter(
     (file) =>
@@ -190,7 +201,10 @@ function coverageCheck(coverage?: CoverageComparison | null): MergeReadinessChec
       : '';
   return {
     label: 'Coverage',
-    status: aggregate.delta < 0 || regressedUnchanged.length > 0 ? 'warning' : 'pass',
+    status:
+      aggregate.delta <= -MATERIAL_COVERAGE_DELTA || regressedUnchanged.length > 0
+        ? 'warning'
+        : 'pass',
     detail: `Base ${aggregate.base.pct}% → task ${taskPct}% (${formatCoverageDelta(aggregate.delta)}).${impactedDetail}`,
   };
 }

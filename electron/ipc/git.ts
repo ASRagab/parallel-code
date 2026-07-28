@@ -593,28 +593,21 @@ function normalizeStatusPath(raw: string): string {
   return trimmed.replace(/^"|"$/g, '').replace(/\\(.)/g, '$1');
 }
 
-function parseNumstatPath(raw: string): { path: string; previousPath?: string } {
+function parseNumstatPath(raw: string): string {
   const trimmed = raw.trim();
   const arrowIndex = trimmed.indexOf(' => ');
-  if (arrowIndex < 0) return { path: normalizeStatusPath(trimmed) };
+  if (arrowIndex < 0) return normalizeStatusPath(trimmed);
 
   const openBrace = trimmed.lastIndexOf('{', arrowIndex);
   const closeBrace = trimmed.indexOf('}', arrowIndex);
   if (openBrace >= 0 && closeBrace > arrowIndex) {
     const prefix = trimmed.slice(0, openBrace);
     const suffix = trimmed.slice(closeBrace + 1);
-    const previousPath = `${prefix}${trimmed.slice(openBrace + 1, arrowIndex)}${suffix}`;
     const destinationPath = `${prefix}${trimmed.slice(arrowIndex + 4, closeBrace)}${suffix}`;
-    return {
-      path: normalizeStatusPath(destinationPath),
-      previousPath: normalizeStatusPath(previousPath),
-    };
+    return normalizeStatusPath(destinationPath);
   }
 
-  return {
-    path: normalizeStatusPath(trimmed.slice(arrowIndex + 4)),
-    previousPath: normalizeStatusPath(trimmed.slice(0, arrowIndex)),
-  };
+  return normalizeStatusPath(trimmed.slice(arrowIndex + 4));
 }
 
 /** Parse combined `git diff --raw --numstat` output into status and numstat maps. */
@@ -651,12 +644,8 @@ function parseDiffRawNumstat(output: string): {
       if (!isNaN(added) && !isNaN(removed)) {
         const rawPath = parts[parts.length - 1];
         const normalizedPath = normalizeStatusPath(rawPath);
-        const parsedPath = statusMap.has(normalizedPath)
-          ? { path: normalizedPath }
-          : parseNumstatPath(rawPath);
-        const p = parsedPath.path;
+        const p = statusMap.has(normalizedPath) ? normalizedPath : parseNumstatPath(rawPath);
         if (p) numstatMap.set(p, [added, removed]);
-        if (p && parsedPath.previousPath) previousPathMap.set(p, parsedPath.previousPath);
       }
     }
   }
@@ -1698,6 +1687,26 @@ export async function getBranchWorktreePath(
     (entry) => !entry.detached && entry.branchName === branchName,
   );
   return match?.path ?? null;
+}
+
+/** Return the task branch's merge-base commit time without mutating a worktree. */
+export async function getMergeBaseTimestamp(
+  worktreePath: string,
+  baseBranch?: string,
+): Promise<string | null> {
+  try {
+    const branch = baseBranch ?? (await detectMainBranch(worktreePath));
+    const head = await pinHead(worktreePath);
+    const picked = await pickMergeBase(worktreePath, branch, head);
+    const mergeBase = picked?.sha ?? head;
+    const { stdout } = await exec('git', ['show', '-s', '--format=%cI', mergeBase], {
+      cwd: worktreePath,
+    });
+    const timestamp = new Date(stdout.trim());
+    return Number.isNaN(timestamp.getTime()) ? null : timestamp.toISOString();
+  } catch {
+    return null;
+  }
 }
 
 /** Stage all changes and commit in a worktree. */

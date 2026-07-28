@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ChangedFile } from '../ipc/types';
 import {
-  buildCoverageComparisonForSelection,
   coverageFooterLabel,
   coverageFooterTitle,
   filesFooterLabel,
   filesFooterTitle,
   isCoverageEligible,
-  shouldShowCoverageFooter,
 } from './ChangedFilesList';
 
 function changedFile(overrides: Partial<ChangedFile>): ChangedFile {
@@ -68,45 +66,6 @@ describe('coverageFooterLabel', () => {
 
   it('shows the radar percentage when changed files are covered', () => {
     expect(coverageFooterLabel(true, 82, true)).toBe('◔ 82%');
-  });
-});
-
-describe('shouldShowCoverageFooter', () => {
-  it('shows comparison results for test-only changes when reports are loaded', () => {
-    expect(shouldShowCoverageFooter(undefined, 0, true, true)).toBe(true);
-  });
-
-  it('hides coverage details for a single-commit selection', () => {
-    expect(shouldShowCoverageFooter('abc123', 1, true, true)).toBe(false);
-  });
-});
-
-describe('buildCoverageComparisonForSelection', () => {
-  it.each(['pending', 'failed'])(
-    'suppresses comparison output while the canonical changed-file inventory is %s',
-    () => {
-      expect(buildCoverageComparisonForSelection(undefined, null, null, null)).toBeNull();
-    },
-  );
-
-  it('uses the canonical whole-task inventory for an uncommitted-only display selection', () => {
-    const committed = changedFile({ path: 'src/committed.ts', committed: true });
-    const localOnly = changedFile({ path: 'src/local-only.ts', committed: false });
-
-    const result = buildCoverageComparisonForSelection('uncommitted', null, null, [
-      committed,
-      localOnly,
-    ]);
-
-    expect(Object.keys(result?.files ?? {})).toEqual([committed.path, localOnly.path]);
-  });
-
-  it('suppresses whole-task comparison for a single-commit selection', () => {
-    expect(
-      buildCoverageComparisonForSelection('abc123', null, null, [
-        changedFile({ path: 'src/example.ts' }),
-      ]),
-    ).toBeNull();
   });
 });
 

@@ -236,6 +236,77 @@ describe('buildMergeReadiness', () => {
       }),
     );
   });
+
+  it('does not warn for aggregate drift below the materiality threshold', () => {
+    const readiness = buildMergeReadiness(
+      input({
+        coverage: {
+          aggregate: {
+            task: { state: 'available', pct: 81.99 },
+            base: { state: 'available', pct: 82 },
+            delta: -0.01,
+          },
+          files: {},
+          impactedUnchangedFiles: [],
+        },
+      }),
+    );
+
+    expect(readiness.overall).toBe('ready');
+    expect(readiness.checks[2]).toEqual(
+      expect.objectContaining({
+        status: 'pass',
+        detail: 'Base 82% → task 81.99% (-0.01pp).',
+      }),
+    );
+  });
+
+  it('warns when aggregate coverage reaches the materiality threshold', () => {
+    const readiness = buildMergeReadiness(
+      input({
+        coverage: {
+          aggregate: {
+            task: { state: 'available', pct: 81 },
+            base: { state: 'available', pct: 82 },
+            delta: -1,
+          },
+          files: {},
+          impactedUnchangedFiles: [],
+        },
+      }),
+    );
+
+    expect(readiness.checks[2]).toEqual(expect.objectContaining({ status: 'warning' }));
+  });
+
+  it('keeps a stale base report neutral even when its delta is negative', () => {
+    const readiness = buildMergeReadiness(
+      input({
+        coverage: {
+          aggregate: {
+            task: { state: 'available', pct: 78 },
+            base: { state: 'available', pct: 82 },
+            delta: -4,
+          },
+          files: {},
+          impactedUnchangedFiles: [],
+          baseline: {
+            mergeBaseAt: '2026-07-26T00:00:00.000Z',
+            stale: true,
+          },
+        },
+      }),
+    );
+
+    expect(readiness.overall).toBe('ready');
+    expect(readiness.checks[2]).toEqual(
+      expect.objectContaining({
+        status: 'neutral',
+        detail:
+          'Base coverage report predates the task merge-base; regenerate it before comparing.',
+      }),
+    );
+  });
 });
 
 describe('MergeReadinessPanel', () => {

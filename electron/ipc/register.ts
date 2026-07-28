@@ -55,6 +55,7 @@ import {
   getWorktreeStatus,
   listImportableWorktrees,
   getBranchWorktreePath,
+  getMergeBaseTimestamp,
   commitAll,
   discardUncommitted,
   checkMergeStatus,
@@ -606,6 +607,9 @@ export function registerAllHandlers(win: BrowserWindow): void {
   });
   ipcMain.handle(IPC.GetBranchWorktreePath, (_e, args) => {
     return getBranchWorktreePath(projectRootArg(args), branchNameArg(args));
+  });
+  ipcMain.handle(IPC.GetMergeBaseTimestamp, (_e, args) => {
+    return getMergeBaseTimestamp(worktreePathArg(args), optionalBaseBranch(args));
   });
   ipcMain.handle(IPC.GetWorktreeStatus, (_e, args) => {
     const worktreePath = worktreePathArg(args);

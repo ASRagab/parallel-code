@@ -23,6 +23,7 @@ const ALLOWED_CHANNELS = new Set([
   'get_gitignored_dirs',
   'list_importable_worktrees',
   'get_branch_worktree_path',
+  'get_merge_base_timestamp',
   'get_worktree_status',
   'check_merge_status',
   'merge_task',

@@ -192,6 +192,34 @@ describe('buildCoverageComparison', () => {
     expect(result.impactedUnchangedFiles).toEqual([]);
   });
 
+  it('marks a base report older than the task merge-base as stale', () => {
+    const result = buildCoverageComparison(
+      report(82, []),
+      report(80, []),
+      [],
+      '2026-07-26T00:00:00.000Z',
+    );
+
+    expect(result.baseline).toEqual({
+      mergeBaseAt: '2026-07-26T00:00:00.000Z',
+      stale: true,
+    });
+  });
+
+  it('accepts a base report generated after the task merge-base', () => {
+    const result = buildCoverageComparison(
+      report(82, []),
+      report(80, []),
+      [],
+      '2026-07-24T00:00:00.000Z',
+    );
+
+    expect(result.baseline).toEqual({
+      mergeBaseAt: '2026-07-24T00:00:00.000Z',
+      stale: false,
+    });
+  });
+
   it.each(['toString', 'constructor', '__proto__'])(
     'treats a missing report entry named %s as absent instead of reading Object.prototype',
     (path) => {

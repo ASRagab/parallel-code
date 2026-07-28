@@ -60,6 +60,7 @@ import {
   getUncommittedChangedFiles,
   checkMergeStatus,
   getBranchWorktreePath,
+  getMergeBaseTimestamp,
   listImportableWorktrees,
   mergeTask,
 } from './git.js';
@@ -443,6 +444,7 @@ function uniqueWorktreePath(): string {
  */
 function buildWorktreeMockHandler(opts: {
   mergeBase?: string;
+  mergeBaseTimestamp?: string;
   finalRawNumstat?: string;
   committedRawNumstat?: string;
   uncommittedRawNumstat?: string;
@@ -589,6 +591,11 @@ function buildWorktreeMockHandler(opts: {
       } else {
         cb(new Error(`path not found: ${key}`), '', '');
       }
+      return;
+    }
+
+    if (cmd === 'show' && args.includes('--format=%cI')) {
+      cb(null, `${opts.mergeBaseTimestamp ?? ''}\n`, '');
       return;
     }
 
@@ -1497,6 +1504,27 @@ describe('getBranchWorktreePath', () => {
       ['worktree', 'list', '--porcelain'],
       ['worktree', 'list', '--porcelain'],
     ]);
+  });
+});
+
+describe('getMergeBaseTimestamp', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns the picked merge-base commit time as ISO UTC', async () => {
+    const calls: string[][] = [];
+    setupMock(
+      calls,
+      buildWorktreeMockHandler({
+        mergeBaseTimestamp: '2026-07-25T12:00:00-04:00',
+      }),
+    );
+
+    await expect(getMergeBaseTimestamp(uniqueWorktreePath(), 'main')).resolves.toBe(
+      '2026-07-25T16:00:00.000Z',
+    );
+    expect(calls).toContainEqual(['show', '-s', '--format=%cI', MERGE_BASE]);
   });
 });
 

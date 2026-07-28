@@ -7,7 +7,7 @@ import { getStatusColor } from '../lib/status-colors';
 import { openFileInEditor } from '../lib/shell';
 import { buildFileTree, flattenVisibleTree } from '../lib/file-tree';
 import {
-  buildCoverageComparisonIfReady,
+  buildCoverageComparison,
   formatCoverageDelta,
   type CoverageComparison,
   type CoverageFileComparison,
@@ -61,26 +61,31 @@ export function isCoverageEligible(file: ChangedFile): boolean {
   return file.status !== 'D' && isCoverageCandidate(file);
 }
 
-export function shouldShowCoverageFooter(
-  selectedCommit: CommitSelection | undefined,
-  coverageCandidateCount: number,
-  hasCoverageArtifact: boolean,
-  hasBaseCoverageArtifact: boolean,
-): boolean {
-  return (
-    !isCommitHashSelection(selectedCommit) &&
-    (coverageCandidateCount > 0 || hasCoverageArtifact || hasBaseCoverageArtifact)
-  );
+function sameChangedFiles(left: ChangedFile[] | null, right: ChangedFile[] | null): boolean {
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every((file, index) => {
+    const other = right[index];
+    return (
+      file.path === other.path &&
+      file.previous_path === other.previous_path &&
+      file.lines_added === other.lines_added &&
+      file.lines_removed === other.lines_removed &&
+      file.status === other.status &&
+      file.committed === other.committed
+    );
+  });
 }
 
-export function buildCoverageComparisonForSelection(
-  selectedCommit: CommitSelection | undefined,
-  taskSummary: CoverageSummary | null,
-  baseSummary: CoverageSummary | null,
-  comparisonFiles: ChangedFile[] | null,
-): CoverageComparison | null {
-  if (isCommitHashSelection(selectedCommit)) return null;
-  return buildCoverageComparisonIfReady(taskSummary, baseSummary, comparisonFiles);
+function sameCoverageSummary(left: CoverageSummary | null, right: CoverageSummary | null): boolean {
+  return (
+    left === right ||
+    (left !== null &&
+      right !== null &&
+      left.format === right.format &&
+      left.reportPath === right.reportPath &&
+      left.generatedAt === right.generatedAt)
+  );
 }
 
 export function coverageFooterLabel(
@@ -317,6 +322,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   const [comparisonFiles, setComparisonFiles] = createSignal<ChangedFile[] | null>(null);
   const [coverage, setCoverage] = createSignal<CoverageSummary | null>(null);
   const [baseCoverage, setBaseCoverage] = createSignal<CoverageSummary | null>(null);
+  const [mergeBaseAt, setMergeBaseAt] = createSignal<string | null>(null);
   const [canOpenFilesInEditor, setCanOpenFilesInEditor] = createSignal(false);
   const [selectedIndex, setSelectedIndex] = createSignal(-1);
   const [collapsed, setCollapsed] = createSignal<Set<string>>(new Set());
@@ -327,18 +333,19 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   const coverageFiles = createMemo(() => coverage()?.files ?? {});
   const hasCoverageArtifact = createMemo(() => coverage() !== null);
   const hasBaseCoverageArtifact = createMemo(() => baseCoverage() !== null);
-  const coverageCandidateFiles = createMemo(() =>
-    files().filter((file) => isCoverageCandidate(file)),
-  );
   const eligibleFiles = createMemo(() => files().filter((file) => isCoverageEligible(file)));
-  const coverageComparison = createMemo(() =>
-    buildCoverageComparisonForSelection(
-      props.selectedCommit,
-      coverage(),
-      baseCoverage(),
-      comparisonFiles(),
-    ),
+  const showCoverageFooter = createMemo(
+    () =>
+      !isCommitHashSelection(props.selectedCommit) &&
+      (files().some((file) => isCoverageCandidate(file)) ||
+        hasCoverageArtifact() ||
+        hasBaseCoverageArtifact()),
   );
+  const coverageComparison = createMemo(() => {
+    const inventory = comparisonFiles();
+    if (!inventory || isCommitHashSelection(props.selectedCommit)) return null;
+    return buildCoverageComparison(coverage(), baseCoverage(), inventory, mergeBaseAt());
+  });
   const coveredEligibleFiles = createMemo(() =>
     eligibleFiles().filter((file) => Boolean(coverageFiles()[file.path])),
   );
@@ -377,13 +384,21 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     const baseReport = baseCoverage();
     if (!baseReport || !comparison) return '';
     const lines = [
-      `Base: ${coverageValueLabel(comparison.aggregate.base)} (${baseReport.reportPath}).`,
+      `Base: ${coverageValueLabel(comparison.aggregate.base)} (${baseReport.reportPath}, updated ${baseReport.generatedAt ?? 'unknown time'}).`,
       taskReport
-        ? `Task: ${coverageValueLabel(comparison.aggregate.task)} (${taskReport.reportPath}).`
+        ? `Task: ${coverageValueLabel(comparison.aggregate.task)} (${taskReport.reportPath}, updated ${taskReport.generatedAt ?? 'unknown time'}).`
         : 'Task: no coverage report.',
     ];
     if (comparison.aggregate.delta !== null) {
       lines.push(`Delta: ${formatCoverageDelta(comparison.aggregate.delta)}.`);
+    }
+    if (comparison.baseline) {
+      lines.push(`Task merge-base: ${comparison.baseline.mergeBaseAt}.`);
+      if (comparison.baseline.stale) {
+        lines.push(
+          'The base report predates the merge-base, so merge readiness ignores the delta.',
+        );
+      }
     }
     if (comparison.impactedUnchangedFiles.length > 0) {
       const impacted = comparison.impactedUnchangedFiles
@@ -512,6 +527,13 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   // (matching git status) is still gated on isActive to avoid running git
   // pipelines for every off-screen task.
   createEffect(() => {
+    void props.worktreePath;
+    void props.baseBranch;
+    void props.selectedCommit;
+    setComparisonFiles(null);
+  });
+
+  createEffect(() => {
     const path = props.worktreePath;
     const projectRoot = props.projectRoot;
     const branchName = props.branchName;
@@ -519,11 +541,11 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     const selection = props.selectedCommit;
     const singleCommitHash = isCommitHashSelection(selection) ? selection : null;
     const uncommittedOnly = isUncommittedSelection(selection);
+    const comparisonEnabled = hasCoverageArtifact() || hasBaseCoverageArtifact();
     let cancelled = false;
     let inFlight = false;
     let usingBranchFallback = false;
     setCanOpenFilesInEditor(false);
-    setComparisonFiles(null);
 
     async function refresh() {
       if (inFlight) return;
@@ -537,7 +559,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
               commitHash: singleCommitHash,
             });
             if (!cancelled) {
-              setFiles(result);
+              setFiles((current) => (sameChangedFiles(current, result) ? current : result));
               setCanOpenFilesInEditor(true);
             }
           } catch {
@@ -550,22 +572,29 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
         }
 
         if (uncommittedOnly && path) {
-          const comparisonRequest = invoke<ChangedFile[]>(IPC.GetChangedFiles, {
-            worktreePath: path,
-            baseBranch,
-          })
-            .then((result) => {
-              if (!cancelled) setComparisonFiles(result);
-            })
-            .catch(() => {
-              if (!cancelled) setComparisonFiles(null);
-            });
+          if (!comparisonEnabled && !cancelled) setComparisonFiles(null);
+          const comparisonRequest = comparisonEnabled
+            ? invoke<ChangedFile[]>(IPC.GetChangedFiles, {
+                worktreePath: path,
+                baseBranch,
+              })
+                .then((result) => {
+                  if (!cancelled) {
+                    setComparisonFiles((current) =>
+                      sameChangedFiles(current, result) ? current : result,
+                    );
+                  }
+                })
+                .catch(() => {
+                  if (!cancelled) setComparisonFiles(null);
+                })
+            : Promise.resolve();
           try {
             const result = await invoke<ChangedFile[]>(IPC.GetUncommittedChangedFiles, {
               worktreePath: path,
             });
             if (!cancelled) {
-              setFiles(result);
+              setFiles((current) => (sameChangedFiles(current, result) ? current : result));
               setCanOpenFilesInEditor(true);
             }
           } catch {
@@ -586,8 +615,10 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
               baseBranch,
             });
             if (!cancelled) {
-              setFiles(result);
-              setComparisonFiles(result);
+              setFiles((current) => (sameChangedFiles(current, result) ? current : result));
+              setComparisonFiles((current) =>
+                sameChangedFiles(current, result) ? current : result,
+              );
               setCanOpenFilesInEditor(true);
             }
             return;
@@ -610,8 +641,15 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
               baseBranch,
             });
             if (!cancelled) {
-              setFiles(result);
-              setComparisonFiles(result);
+              const displayedFiles = uncommittedOnly
+                ? result.filter((file) => !file.committed)
+                : result;
+              setFiles((current) =>
+                sameChangedFiles(current, displayedFiles) ? current : displayedFiles,
+              );
+              setComparisonFiles((current) =>
+                sameChangedFiles(current, result) ? current : result,
+              );
               setCanOpenFilesInEditor(false);
             }
           } catch {
@@ -651,42 +689,67 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
       batch(() => {
         setCoverage(null);
         setBaseCoverage(null);
+        setMergeBaseAt(null);
       });
       return;
     }
     if (!props.isActive) return;
     let cancelled = false;
     let inFlight = false;
-    const baseBranchPromise = baseBranch
-      ? Promise.resolve(baseBranch)
-      : projectRoot
-        ? invoke<string>(IPC.GetMainBranch, { projectRoot })
-        : Promise.resolve(null);
+    let cachedMergeBase:
+      | {
+          taskGeneratedAt: string;
+          value: string | null;
+        }
+      | undefined;
 
     async function refresh() {
       if (inFlight) return;
       inFlight = true;
       try {
-        const resolvedBaseBranch = await baseBranchPromise.catch(() => null);
-        const baseRoot = resolvedBaseBranch
-          ? await resolveBaseCoverageRoot(projectRoot, resolvedBaseBranch, repoRoot)
-          : null;
-        const [taskResult, baseResult] = await Promise.all([
-          invoke<CoverageSummary | null>(IPC.GetCoverageSummary, {
-            repoRoot,
-            reportPath: props.coverageReportPath,
-          }).catch(() => null),
-          baseRoot
-            ? invoke<CoverageSummary | null>(IPC.GetCoverageSummary, {
-                repoRoot: baseRoot,
-                reportPath: props.coverageReportPath,
-              }).catch(() => null)
-            : Promise.resolve(null),
-        ]);
+        const taskResult = await invoke<CoverageSummary | null>(IPC.GetCoverageSummary, {
+          repoRoot,
+          reportPath: props.coverageReportPath,
+        }).catch(() => null);
+        let baseResult: CoverageSummary | null = null;
+        let mergeBaseResult: string | null = null;
+        if (taskResult) {
+          const resolvedBaseBranch = baseBranch
+            ? baseBranch
+            : projectRoot
+              ? await invoke<string>(IPC.GetMainBranch, { projectRoot }).catch(() => null)
+              : null;
+          const baseRoot = resolvedBaseBranch
+            ? await resolveBaseCoverageRoot(projectRoot, resolvedBaseBranch, repoRoot)
+            : null;
+          if (resolvedBaseBranch) {
+            if (!cachedMergeBase || cachedMergeBase.taskGeneratedAt !== taskResult.generatedAt) {
+              cachedMergeBase = {
+                taskGeneratedAt: taskResult.generatedAt,
+                value: await invoke<string | null>(IPC.GetMergeBaseTimestamp, {
+                  worktreePath: repoRoot,
+                  baseBranch: resolvedBaseBranch,
+                }).catch(() => null),
+              };
+            }
+            mergeBaseResult = cachedMergeBase.value;
+          }
+          if (baseRoot) {
+            baseResult = await invoke<CoverageSummary | null>(IPC.GetCoverageSummary, {
+              repoRoot: baseRoot,
+              reportPath: props.coverageReportPath,
+            }).catch(() => null);
+          }
+        }
         if (!cancelled) {
           batch(() => {
-            setCoverage(taskResult);
-            setBaseCoverage(baseResult);
+            setCoverage((current) =>
+              sameCoverageSummary(current, taskResult) ? current : taskResult,
+            );
+            setBaseCoverage((current) =>
+              sameCoverageSummary(current, baseResult) ? current : baseResult,
+            );
+            setMergeBaseAt(mergeBaseResult);
           });
         }
       } finally {
@@ -885,14 +948,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
               'flex-wrap': 'wrap',
             }}
           >
-            <Show
-              when={shouldShowCoverageFooter(
-                props.selectedCommit,
-                coverageCandidateFiles().length,
-                hasCoverageArtifact(),
-                hasBaseCoverageArtifact(),
-              )}
-            >
+            <Show when={showCoverageFooter()}>
               <div
                 style={{
                   display: 'flex',
@@ -917,7 +973,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                     </span>
                   )}
                 </Show>
-                <Show when={!aggregateCoverageLabel() && touchedCoveragePct() !== null}>
+                <Show when={touchedCoveragePct() !== null}>
                   <span
                     title={coverageFooterTitle(
                       coverage(),
@@ -936,7 +992,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                     )}
                   </span>
                 </Show>
-                <Show when={!aggregateCoverageLabel() && touchedCoveragePct() === null}>
+                <Show when={touchedCoveragePct() === null}>
                   <span
                     title={coverageFooterTitle(
                       coverage(),

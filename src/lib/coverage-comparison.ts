@@ -37,6 +37,10 @@ export interface CoverageComparison {
   };
   files: Record<string, CoverageFileComparison>;
   impactedUnchangedFiles: ImpactedCoverageFile[];
+  baseline?: {
+    mergeBaseAt: string;
+    stale: boolean;
+  };
 }
 
 export const MATERIAL_COVERAGE_DELTA = 1;
@@ -88,6 +92,7 @@ export function buildCoverageComparison(
   taskSummary: CoverageSummary | null,
   baseSummary: CoverageSummary | null,
   changedFiles: ChangedFile[],
+  mergeBaseAt?: string | null,
 ): CoverageComparison {
   const taskAggregate = aggregateValue(taskSummary);
   const baseAggregate = aggregateValue(baseSummary);
@@ -141,6 +146,16 @@ export function buildCoverageComparison(
       a.path.localeCompare(b.path),
   );
 
+  const mergeBaseTime = mergeBaseAt ? Date.parse(mergeBaseAt) : Number.NaN;
+  const baseGeneratedTime = baseSummary ? Date.parse(baseSummary.generatedAt) : Number.NaN;
+  const baseline =
+    mergeBaseAt && Number.isFinite(mergeBaseTime) && Number.isFinite(baseGeneratedTime)
+      ? {
+          mergeBaseAt,
+          stale: baseGeneratedTime < mergeBaseTime,
+        }
+      : undefined;
+
   return {
     aggregate: {
       task: taskAggregate,
@@ -149,15 +164,6 @@ export function buildCoverageComparison(
     },
     files,
     impactedUnchangedFiles,
+    baseline,
   };
-}
-
-export function buildCoverageComparisonIfReady(
-  taskSummary: CoverageSummary | null,
-  baseSummary: CoverageSummary | null,
-  changedFiles: ChangedFile[] | null,
-): CoverageComparison | null {
-  return changedFiles === null
-    ? null
-    : buildCoverageComparison(taskSummary, baseSummary, changedFiles);
 }
