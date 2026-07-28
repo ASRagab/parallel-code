@@ -117,4 +117,23 @@ describe('ReviewProvider submission', () => {
     expect(review.sidebarOpen()).toBe(true);
     expect(review.annotations()).toHaveLength(1);
   });
+
+  it('clears a previous submission error when nothing remains to send', async () => {
+    vi.mocked(sendPrompt).mockRejectedValue(new Error('terminal unavailable'));
+    const review = renderReviewProvider();
+    review.addAnnotation({
+      id: 'annotation-1',
+      filePath: 'src/app.ts',
+      startLine: 11,
+      endLine: 11,
+      selectedText: 'runAsync();',
+      comment: 'Handle this promise.',
+    });
+
+    await review.submitReview();
+    review.dismissAnnotation('annotation-1');
+    await review.submitReview();
+
+    expect(review.submitError()).toBe('');
+  });
 });

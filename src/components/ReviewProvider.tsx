@@ -120,7 +120,9 @@ export function ReviewProvider(props: ReviewProviderProps) {
   const [findingsLoading, setFindingsLoading] = createSignal(false);
   const [findingsError, setFindingsError] = createSignal('');
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
-  const [scrollTarget, setScrollTarget] = createSignal<ReviewScrollTarget | null>(null);
+  const [scrollTarget, setScrollTarget] = createSignal<ReviewScrollTarget | null>(null, {
+    equals: false,
+  });
   const [pendingSelection, setPendingSelection] = createSignal<ContentSelection | null>(null);
   const [activeQuestions, setActiveQuestions] = createSignal<ActiveQuestion[]>([]);
   const [submitError, setSubmitError] = createSignal('');
@@ -262,6 +264,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
     const taskId = props.taskId;
     const agentId = props.agentId;
     if (!taskId || !agentId) return;
+    setSubmitError('');
     const submittedAnnotations = annotations();
     const submittedFindings = selectSubmittableFindings(findings(), selectedFindingIds());
     if (submittedAnnotations.length === 0 && submittedFindings.length === 0) return;
@@ -276,7 +279,6 @@ export function ReviewProvider(props: ReviewProviderProps) {
     const onSubmitted = props.onSubmitted;
 
     await submission.run(async () => {
-      setSubmitError('');
       try {
         await sendPrompt(taskId, agentId, prompt);
         setAnnotations((previous) =>
