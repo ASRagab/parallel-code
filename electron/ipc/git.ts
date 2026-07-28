@@ -1698,7 +1698,8 @@ export async function getMergeBaseTimestamp(
     const branch = baseBranch ?? (await detectMainBranch(worktreePath));
     const head = await pinHead(worktreePath);
     const picked = await pickMergeBase(worktreePath, branch, head);
-    const mergeBase = picked?.sha ?? head;
+    if (!picked) return null;
+    const mergeBase = picked.sha;
     const { stdout } = await exec('git', ['show', '-s', '--format=%cI', mergeBase], {
       cwd: worktreePath,
     });

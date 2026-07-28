@@ -1526,6 +1526,22 @@ describe('getMergeBaseTimestamp', () => {
     );
     expect(calls).toContainEqual(['show', '-s', '--format=%cI', MERGE_BASE]);
   });
+
+  it('returns null when no merge-base can be determined', async () => {
+    const calls: string[][] = [];
+    setupMock(calls, (args, cb) => {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        return cb(null, `${HEAD_HASH}\n`, '');
+      }
+      if (args[0] === 'rev-parse' && args[1] === '--verify') {
+        return cb(new Error('missing ref'), '', '');
+      }
+      return cb(new Error(`unexpected git call: ${args.join(' ')}`), '', '');
+    });
+
+    await expect(getMergeBaseTimestamp(uniqueWorktreePath(), 'main')).resolves.toBeNull();
+    expect(calls.some((args) => args[0] === 'show')).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
