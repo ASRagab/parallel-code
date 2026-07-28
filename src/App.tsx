@@ -815,6 +815,44 @@ function App() {
             <FocusModeTaskIndicators />
           </div>
         </Show>
+        <Show when={!store.keybindingMigrationDismissed}>
+          <div
+            class="keybinding-migration-notice"
+            role="region"
+            aria-label="Keyboard shortcuts update"
+          >
+            <span>
+              Keyboard shortcuts are now configurable.{' '}
+              <button
+                type="button"
+                class="keybinding-migration-notice-action"
+                onClick={() => {
+                  toggleHelpDialog(true);
+                  dismissMigrationBanner();
+                }}
+              >
+                Pick a preset for your coding agent
+              </button>{' '}
+              or{' '}
+              <button
+                type="button"
+                class="keybinding-migration-notice-action secondary"
+                onClick={() => dismissMigrationBanner()}
+              >
+                dismiss
+              </button>
+              .
+            </span>
+            <button
+              type="button"
+              class="keybinding-migration-notice-close"
+              aria-label="Dismiss keyboard shortcuts update"
+              onClick={() => dismissMigrationBanner()}
+            >
+              &times;
+            </button>
+          </div>
+        </Show>
         <main style={{ flex: '1', display: 'flex', overflow: 'hidden' }}>
           <Show when={store.sidebarVisible}>
             <Sidebar />
@@ -860,44 +898,6 @@ function App() {
           open={store.showSettingsDialog}
           onClose={() => toggleSettingsDialog(false)}
         />
-        <Show when={!store.keybindingMigrationDismissed}>
-          <div
-            class="keybinding-migration-notice"
-            role="region"
-            aria-label="Keyboard shortcuts update"
-          >
-            <span>
-              Keyboard shortcuts are now configurable.{' '}
-              <button
-                type="button"
-                class="keybinding-migration-notice-action"
-                onClick={() => {
-                  toggleHelpDialog(true);
-                  dismissMigrationBanner();
-                }}
-              >
-                Pick a preset for your coding agent
-              </button>{' '}
-              or{' '}
-              <button
-                type="button"
-                class="keybinding-migration-notice-action secondary"
-                onClick={() => dismissMigrationBanner()}
-              >
-                dismiss
-              </button>
-              .
-            </span>
-            <button
-              type="button"
-              class="keybinding-migration-notice-close"
-              aria-label="Dismiss keyboard shortcuts update"
-              onClick={() => dismissMigrationBanner()}
-            >
-              &times;
-            </button>
-          </div>
-        </Show>
         <Show when={store.showArena}>
           <ArenaOverlay onClose={closeArena} />
         </Show>

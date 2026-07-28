@@ -12,9 +12,10 @@ describe('keybinding migration notice', () => {
     expect(rule).not.toBeNull();
     expect(rule?.[1]).toMatch(/position:\s*fixed\s*;/);
     expect(rule?.[1]).toMatch(/width:\s*min\(560px,\s*calc\(100vw - 32px\)\)\s*;/);
-    expect(app.indexOf('<Show when={!store.keybindingMigrationDismissed}>')).toBeGreaterThan(
-      app.indexOf('</main>'),
-    );
+    expect(app).toContain('class="keybinding-migration-notice"');
+    const notice = app.indexOf('<Show when={!store.keybindingMigrationDismissed}>');
+    expect(notice).toBeGreaterThan(-1);
+    expect(notice).toBeLessThan(app.indexOf('<main '));
   });
 
   it('keeps the notice and dismiss control accessible', () => {
