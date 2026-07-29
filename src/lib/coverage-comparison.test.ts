@@ -220,6 +220,15 @@ describe('buildCoverageComparison', () => {
     });
   });
 
+  it('marks a present base report with an unknown merge-base as unanchored', () => {
+    const result = buildCoverageComparison(report(82, []), report(80, []), []);
+
+    expect(result.baseline).toEqual({
+      stale: false,
+      unanchored: true,
+    });
+  });
+
   it.each(['toString', 'constructor', '__proto__'])(
     'treats a missing report entry named %s as absent instead of reading Object.prototype',
     (path) => {

@@ -38,8 +38,9 @@ export interface CoverageComparison {
   files: Record<string, CoverageFileComparison>;
   impactedUnchangedFiles: ImpactedCoverageFile[];
   baseline?: {
-    mergeBaseAt: string;
+    mergeBaseAt?: string;
     stale: boolean;
+    unanchored?: boolean;
   };
 }
 
@@ -148,13 +149,17 @@ export function buildCoverageComparison(
 
   const mergeBaseTime = mergeBaseAt ? Date.parse(mergeBaseAt) : Number.NaN;
   const baseGeneratedTime = baseSummary ? Date.parse(baseSummary.generatedAt) : Number.NaN;
-  const baseline =
-    mergeBaseAt && Number.isFinite(mergeBaseTime) && Number.isFinite(baseGeneratedTime)
+  const baseline = !baseSummary
+    ? undefined
+    : mergeBaseAt && Number.isFinite(mergeBaseTime) && Number.isFinite(baseGeneratedTime)
       ? {
           mergeBaseAt,
           stale: baseGeneratedTime < mergeBaseTime,
         }
-      : undefined;
+      : {
+          stale: false,
+          unanchored: true,
+        };
 
   return {
     aggregate: {

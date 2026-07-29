@@ -189,6 +189,14 @@ function coverageCheck(coverage?: CoverageComparison | null): MergeReadinessChec
       detail: 'Base coverage report predates the task merge-base; regenerate it before comparing.',
     };
   }
+  if (coverage.baseline?.unanchored) {
+    return {
+      label: 'Coverage',
+      status: 'neutral',
+      detail:
+        'Base coverage report cannot be anchored to the task merge-base; comparison is informational only.',
+    };
+  }
 
   const regressedUnchanged = coverage.impactedUnchangedFiles.filter(
     (file) =>

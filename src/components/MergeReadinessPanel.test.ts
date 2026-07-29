@@ -307,6 +307,35 @@ describe('buildMergeReadiness', () => {
       }),
     );
   });
+
+  it('keeps an unanchored base report neutral even when its delta is positive', () => {
+    const readiness = buildMergeReadiness(
+      input({
+        coverage: {
+          aggregate: {
+            task: { state: 'available', pct: 84 },
+            base: { state: 'available', pct: 82 },
+            delta: 2,
+          },
+          files: {},
+          impactedUnchangedFiles: [],
+          baseline: {
+            stale: false,
+            unanchored: true,
+          },
+        },
+      }),
+    );
+
+    expect(readiness.overall).toBe('ready');
+    expect(readiness.checks[2]).toEqual(
+      expect.objectContaining({
+        status: 'neutral',
+        detail:
+          'Base coverage report cannot be anchored to the task merge-base; comparison is informational only.',
+      }),
+    );
+  });
 });
 
 describe('MergeReadinessPanel', () => {

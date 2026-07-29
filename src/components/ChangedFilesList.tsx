@@ -151,10 +151,16 @@ function deltaColor(delta: number): string {
 
 function comparisonBadge(
   comparison: CoverageFileComparison,
-  baselineStale: boolean,
+  baseline: CoverageComparison['baseline'],
 ): { label: string; color: string; title: string } | null {
   const taskLabel = coverageValueLabel(comparison.task);
   const baseLabel = coverageValueLabel(comparison.base);
+  const baselineInformational = baseline?.stale || baseline?.unanchored;
+  const baselineDetail = baseline?.stale
+    ? ' The base report predates the task merge-base, so this delta is informational only.'
+    : baseline?.unanchored
+      ? ' The base report cannot be anchored to the task merge-base, so this delta is informational only.'
+      : '';
   const renameDetail =
     comparison.kind === 'renamed' ? ` (${comparison.basePath} → ${comparison.path})` : '';
 
@@ -188,8 +194,8 @@ function comparisonBadge(
   if (comparison.delta !== null) {
     return {
       label: `${taskLabel} ${formatCoverageDelta(comparison.delta)}`,
-      color: baselineStale ? theme.fgMuted : deltaColor(comparison.delta),
-      title: `Task: ${taskLabel}; base: ${baseLabel}; delta: ${formatCoverageDelta(comparison.delta)}${renameDetail}.${baselineStale ? ' The base report predates the task merge-base, so this delta is informational only.' : ''}`,
+      color: baselineInformational ? theme.fgMuted : deltaColor(comparison.delta),
+      title: `Task: ${taskLabel}; base: ${baseLabel}; delta: ${formatCoverageDelta(comparison.delta)}${renameDetail}.${baselineDetail}`,
     };
   }
 
@@ -207,16 +213,14 @@ function FileCoverageBadge(props: {
   selectedCommit?: CommitSelection;
   summary?: CoverageFileSummary;
   comparison?: CoverageFileComparison;
-  baselineStale: boolean;
+  baseline?: CoverageComparison['baseline'];
   hasCoverageArtifact: boolean;
 }) {
   const isCandidate = () =>
     !isCommitHashSelection(props.selectedCommit) && isCoverageCandidate(props.file);
   const summary = () => (isCandidate() ? props.summary : undefined);
   const badge = () =>
-    isCandidate() && props.comparison
-      ? comparisonBadge(props.comparison, props.baselineStale)
-      : null;
+    isCandidate() && props.comparison ? comparisonBadge(props.comparison, props.baseline) : null;
 
   return (
     <>
@@ -396,7 +400,11 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     if (comparison.aggregate.delta !== null) {
       lines.push(`Delta: ${formatCoverageDelta(comparison.aggregate.delta)}.`);
     }
-    if (comparison.baseline) {
+    if (comparison.baseline?.unanchored) {
+      lines.push(
+        'The base report cannot be anchored to the task merge-base, so merge readiness ignores the delta.',
+      );
+    } else if (comparison.baseline?.mergeBaseAt) {
       lines.push(`Task merge-base: ${comparison.baseline.mergeBaseAt}.`);
       if (comparison.baseline.stale) {
         lines.push(
@@ -904,7 +912,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                         selectedCommit={props.selectedCommit}
                         summary={coverageFiles()[row().node.path]}
                         comparison={coverageComparison()?.files[row().node.path]}
-                        baselineStale={coverageComparison()?.baseline?.stale ?? false}
+                        baseline={coverageComparison()?.baseline}
                         hasCoverageArtifact={hasCoverageArtifact()}
                       />
                     )}
@@ -969,7 +977,8 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                       style={{
                         color:
                           coverageComparison()?.aggregate.delta === null ||
-                          coverageComparison()?.baseline?.stale
+                          coverageComparison()?.baseline?.stale ||
+                          coverageComparison()?.baseline?.unanchored
                             ? theme.fgMuted
                             : deltaColor(coverageComparison()?.aggregate.delta ?? 0),
                         'font-weight': '600',
@@ -1032,7 +1041,14 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                 <Show when={(coverageComparison()?.impactedUnchangedFiles.length ?? 0) > 0}>
                   <span
                     title={aggregateCoverageTitle()}
-                    style={{ color: theme.warning, 'font-weight': '600' }}
+                    style={{
+                      color:
+                        coverageComparison()?.baseline?.stale ||
+                        coverageComparison()?.baseline?.unanchored
+                          ? theme.fgMuted
+                          : theme.warning,
+                      'font-weight': '600',
+                    }}
                   >
                     ↕ {coverageComparison()?.impactedUnchangedFiles.length} other
                   </span>
