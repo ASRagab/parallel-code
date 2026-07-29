@@ -9,6 +9,7 @@ import { buildFileTree, flattenVisibleTree } from '../lib/file-tree';
 import {
   buildCoverageComparison,
   formatCoverageDelta,
+  isBaselineInformational,
   type CoverageComparison,
   type CoverageFileComparison,
   type CoverageValue,
@@ -155,11 +156,12 @@ function comparisonBadge(
 ): { label: string; color: string; title: string } | null {
   const taskLabel = coverageValueLabel(comparison.task);
   const baseLabel = coverageValueLabel(comparison.base);
-  const baselineInformational = baseline?.stale || baseline?.unanchored;
+  const baselineInformational = isBaselineInformational(baseline);
+  const baselineBranch = baseline?.baseBranch ?? 'base branch';
   const baselineDetail = baseline?.stale
-    ? ' The base report predates the task merge-base, so this delta is informational only.'
+    ? ` The base report predates ${baselineBranch} as currently checked out, so this delta is informational only.`
     : baseline?.unanchored
-      ? ' The base report cannot be anchored to the task merge-base, so this delta is informational only.'
+      ? ` The base report cannot be anchored to ${baselineBranch} as currently checked out, so this delta is informational only.`
       : '';
   const renameDetail =
     comparison.kind === 'renamed' ? ` (${comparison.basePath} → ${comparison.path})` : '';
@@ -278,14 +280,17 @@ async function resolveBaseCoverageRoot(
   projectRoot: string | undefined,
   baseBranch: string,
   taskRoot: string,
-): Promise<string | null> {
+): Promise<{ path: string; headCommittedAt: string | null } | null> {
   if (!projectRoot) return null;
-  const baseRoot = await invoke<string | null>(IPC.GetBranchWorktreePath, {
+  const baseWorktree = await invoke<{
+    path: string;
+    headCommittedAt: string | null;
+  } | null>(IPC.GetBranchWorktreePath, {
     projectRoot,
     branchName: baseBranch,
   }).catch(() => null);
-  if (!baseRoot || baseRoot === taskRoot) return null;
-  return baseRoot;
+  if (!baseWorktree || baseWorktree.path === taskRoot) return null;
+  return baseWorktree;
 }
 
 function OpenInEditorButton(props: {
@@ -330,7 +335,8 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   const [comparisonFiles, setComparisonFiles] = createSignal<ChangedFile[] | null>(null);
   const [coverage, setCoverage] = createSignal<CoverageSummary | null>(null);
   const [baseCoverage, setBaseCoverage] = createSignal<CoverageSummary | null>(null);
-  const [mergeBaseAt, setMergeBaseAt] = createSignal<string | null>(null);
+  const [baseHeadAt, setBaseHeadAt] = createSignal<string | null>(null);
+  const [baseBranchName, setBaseBranchName] = createSignal<string | undefined>();
   const [canOpenFilesInEditor, setCanOpenFilesInEditor] = createSignal(false);
   const [selectedIndex, setSelectedIndex] = createSignal(-1);
   const [collapsed, setCollapsed] = createSignal<Set<string>>(new Set());
@@ -352,7 +358,13 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
   const coverageComparison = createMemo(() => {
     const inventory = comparisonFiles();
     if (!inventory || isCommitHashSelection(props.selectedCommit)) return null;
-    return buildCoverageComparison(coverage(), baseCoverage(), inventory, mergeBaseAt());
+    return buildCoverageComparison(
+      coverage(),
+      baseCoverage(),
+      inventory,
+      baseHeadAt(),
+      baseBranchName(),
+    );
   });
   const coveredEligibleFiles = createMemo(() =>
     eligibleFiles().filter((file) => Boolean(coverageFiles()[file.path])),
@@ -402,13 +414,18 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     }
     if (comparison.baseline?.unanchored) {
       lines.push(
-        'The base report cannot be anchored to the task merge-base, so merge readiness ignores the delta.',
+        `The base report cannot be anchored to ${comparison.baseline.baseBranch ?? 'the base branch'} as currently checked out, so merge readiness ignores the delta.`,
       );
-    } else if (comparison.baseline?.mergeBaseAt) {
-      lines.push(`Task merge-base: ${comparison.baseline.mergeBaseAt}.`);
+    } else if (comparison.baseline?.baseHeadAt) {
+      lines.push(
+        `Baseline: ${comparison.baseline.baseBranch ?? 'base branch'} as currently checked out (${comparison.baseline.baseHeadAt}).`,
+      );
+      lines.push(
+        `This comparison may include changes merged into ${comparison.baseline.baseBranch ?? 'the base branch'} after the task branched.`,
+      );
       if (comparison.baseline.stale) {
         lines.push(
-          'The base report predates the merge-base, so merge readiness ignores the delta.',
+          `The base report predates ${comparison.baseline.baseBranch ?? 'the base branch'} as currently checked out, so merge readiness ignores the delta.`,
         );
       }
     }
@@ -701,20 +718,14 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
       batch(() => {
         setCoverage(null);
         setBaseCoverage(null);
-        setMergeBaseAt(null);
+        setBaseHeadAt(null);
+        setBaseBranchName(undefined);
       });
       return;
     }
     if (!props.isActive) return;
     let cancelled = false;
     let inFlight = false;
-    let cachedMergeBase:
-      | {
-          taskGeneratedAt: string;
-          value: string | null;
-        }
-      | undefined;
-
     async function refresh() {
       if (inFlight) return;
       inFlight = true;
@@ -724,31 +735,21 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
           reportPath: props.coverageReportPath,
         }).catch(() => null);
         let baseResult: CoverageSummary | null = null;
-        let mergeBaseResult: string | null = null;
+        let baseHeadResult: string | null = null;
+        let resolvedBaseBranch: string | null = null;
         if (taskResult) {
-          const resolvedBaseBranch = baseBranch
+          resolvedBaseBranch = baseBranch
             ? baseBranch
             : projectRoot
               ? await invoke<string>(IPC.GetMainBranch, { projectRoot }).catch(() => null)
               : null;
-          const baseRoot = resolvedBaseBranch
+          const baseWorktree = resolvedBaseBranch
             ? await resolveBaseCoverageRoot(projectRoot, resolvedBaseBranch, repoRoot)
             : null;
-          if (resolvedBaseBranch) {
-            if (!cachedMergeBase || cachedMergeBase.taskGeneratedAt !== taskResult.generatedAt) {
-              cachedMergeBase = {
-                taskGeneratedAt: taskResult.generatedAt,
-                value: await invoke<string | null>(IPC.GetMergeBaseTimestamp, {
-                  worktreePath: repoRoot,
-                  baseBranch: resolvedBaseBranch,
-                }).catch(() => null),
-              };
-            }
-            mergeBaseResult = cachedMergeBase.value;
-          }
-          if (baseRoot) {
+          if (baseWorktree) {
+            baseHeadResult = baseWorktree.headCommittedAt;
             baseResult = await invoke<CoverageSummary | null>(IPC.GetCoverageSummary, {
-              repoRoot: baseRoot,
+              repoRoot: baseWorktree.path,
               reportPath: props.coverageReportPath,
             }).catch(() => null);
           }
@@ -761,7 +762,8 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
             setBaseCoverage((current) =>
               sameCoverageSummary(current, baseResult) ? current : baseResult,
             );
-            setMergeBaseAt(mergeBaseResult);
+            setBaseHeadAt(baseHeadResult);
+            setBaseBranchName(resolvedBaseBranch ?? undefined);
           });
         }
       } finally {
@@ -977,8 +979,7 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                       style={{
                         color:
                           coverageComparison()?.aggregate.delta === null ||
-                          coverageComparison()?.baseline?.stale ||
-                          coverageComparison()?.baseline?.unanchored
+                          isBaselineInformational(coverageComparison()?.baseline)
                             ? theme.fgMuted
                             : deltaColor(coverageComparison()?.aggregate.delta ?? 0),
                         'font-weight': '600',
@@ -1042,11 +1043,9 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
                   <span
                     title={aggregateCoverageTitle()}
                     style={{
-                      color:
-                        coverageComparison()?.baseline?.stale ||
-                        coverageComparison()?.baseline?.unanchored
-                          ? theme.fgMuted
-                          : theme.warning,
+                      color: isBaselineInformational(coverageComparison()?.baseline)
+                        ? theme.fgMuted
+                        : theme.warning,
                       'font-weight': '600',
                     }}
                   >

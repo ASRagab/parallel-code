@@ -1,6 +1,7 @@
 import type { MergeStatus, PrChecksOverall, WorktreeStatus } from '../ipc/types';
 import {
   formatCoverageDelta,
+  isBaselineInformational,
   MATERIAL_COVERAGE_DELTA,
   type CoverageComparison,
 } from '../lib/coverage-comparison';
@@ -182,19 +183,14 @@ function coverageCheck(coverage?: CoverageComparison | null): MergeReadinessChec
       detail: `Task ${taskPct}%; the base report has no executable lines.`,
     };
   }
-  if (coverage.baseline?.stale) {
+  if (isBaselineInformational(coverage.baseline)) {
+    const baseBranch = coverage.baseline?.baseBranch ?? 'base branch';
     return {
       label: 'Coverage',
       status: 'neutral',
-      detail: 'Base coverage report predates the task merge-base; regenerate it before comparing.',
-    };
-  }
-  if (coverage.baseline?.unanchored) {
-    return {
-      label: 'Coverage',
-      status: 'neutral',
-      detail:
-        'Base coverage report cannot be anchored to the task merge-base; comparison is informational only.',
+      detail: coverage.baseline?.stale
+        ? `Base coverage report predates ${baseBranch} as currently checked out; regenerate it before comparing.`
+        : `Base coverage report cannot be anchored to ${baseBranch} as currently checked out; comparison is informational only.`,
     };
   }
 

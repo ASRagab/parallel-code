@@ -38,13 +38,18 @@ export interface CoverageComparison {
   files: Record<string, CoverageFileComparison>;
   impactedUnchangedFiles: ImpactedCoverageFile[];
   baseline?: {
-    mergeBaseAt?: string;
+    baseBranch?: string;
+    baseHeadAt?: string;
     stale: boolean;
     unanchored?: boolean;
   };
 }
 
 export const MATERIAL_COVERAGE_DELTA = 1;
+
+export function isBaselineInformational(baseline: CoverageComparison['baseline']): boolean {
+  return Boolean(baseline?.stale || baseline?.unanchored);
+}
 
 function roundPercentage(value: number): number {
   return Math.round(value * 100) / 100;
@@ -93,7 +98,8 @@ export function buildCoverageComparison(
   taskSummary: CoverageSummary | null,
   baseSummary: CoverageSummary | null,
   changedFiles: ChangedFile[],
-  mergeBaseAt?: string | null,
+  baseHeadAt?: string | null,
+  baseBranch?: string,
 ): CoverageComparison {
   const taskAggregate = aggregateValue(taskSummary);
   const baseAggregate = aggregateValue(baseSummary);
@@ -147,14 +153,15 @@ export function buildCoverageComparison(
       a.path.localeCompare(b.path),
   );
 
-  const mergeBaseTime = mergeBaseAt ? Date.parse(mergeBaseAt) : Number.NaN;
+  const baseHeadTime = baseHeadAt ? Date.parse(baseHeadAt) : Number.NaN;
   const baseGeneratedTime = baseSummary ? Date.parse(baseSummary.generatedAt) : Number.NaN;
   const baseline = !baseSummary
     ? undefined
-    : mergeBaseAt && Number.isFinite(mergeBaseTime) && Number.isFinite(baseGeneratedTime)
+    : baseHeadAt && Number.isFinite(baseHeadTime) && Number.isFinite(baseGeneratedTime)
       ? {
-          mergeBaseAt,
-          stale: baseGeneratedTime < mergeBaseTime,
+          ...(baseBranch ? { baseBranch } : {}),
+          baseHeadAt,
+          stale: baseGeneratedTime < baseHeadTime,
         }
       : {
           stale: false,

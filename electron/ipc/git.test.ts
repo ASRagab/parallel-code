@@ -60,7 +60,6 @@ import {
   getUncommittedChangedFiles,
   checkMergeStatus,
   getBranchWorktreePath,
-  getMergeBaseTimestamp,
   listImportableWorktrees,
   mergeTask,
 } from './git.js';
@@ -1495,52 +1494,23 @@ describe('getBranchWorktreePath', () => {
           '',
         );
       }
+      if (args[0] === 'show') {
+        return cb(null, '2026-07-25T12:00:00-04:00\n', '');
+      }
       return cb(new Error(`unexpected git call: ${args.join(' ')}`), '', '');
     });
 
-    await expect(getBranchWorktreePath('/repo', 'main')).resolves.toBe('/repo');
+    await expect(getBranchWorktreePath('/repo', 'main')).resolves.toEqual({
+      path: '/repo',
+      head: 'aaa111',
+      headCommittedAt: '2026-07-25T16:00:00.000Z',
+    });
     await expect(getBranchWorktreePath('/repo', 'missing')).resolves.toBeNull();
     expect(calls).toEqual([
       ['worktree', 'list', '--porcelain'],
+      ['show', '-s', '--format=%cI', 'aaa111'],
       ['worktree', 'list', '--porcelain'],
     ]);
-  });
-});
-
-describe('getMergeBaseTimestamp', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('returns the picked merge-base commit time as ISO UTC', async () => {
-    const calls: string[][] = [];
-    setupMock(
-      calls,
-      buildWorktreeMockHandler({
-        mergeBaseTimestamp: '2026-07-25T12:00:00-04:00',
-      }),
-    );
-
-    await expect(getMergeBaseTimestamp(uniqueWorktreePath(), 'main')).resolves.toBe(
-      '2026-07-25T16:00:00.000Z',
-    );
-    expect(calls).toContainEqual(['show', '-s', '--format=%cI', MERGE_BASE]);
-  });
-
-  it('returns null when no merge-base can be determined', async () => {
-    const calls: string[][] = [];
-    setupMock(calls, (args, cb) => {
-      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
-        return cb(null, `${HEAD_HASH}\n`, '');
-      }
-      if (args[0] === 'rev-parse' && args[1] === '--verify') {
-        return cb(new Error('missing ref'), '', '');
-      }
-      return cb(new Error(`unexpected git call: ${args.join(' ')}`), '', '');
-    });
-
-    await expect(getMergeBaseTimestamp(uniqueWorktreePath(), 'main')).resolves.toBeNull();
-    expect(calls.some((args) => args[0] === 'show')).toBe(false);
   });
 });
 

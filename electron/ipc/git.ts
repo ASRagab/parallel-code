@@ -747,6 +747,7 @@ function safeRealpath(p: string): string {
 
 interface ListedWorktree {
   path: string;
+  head: string | null;
   branchName: string | null;
   detached: boolean;
 }
@@ -767,6 +768,7 @@ function parseWorktreeList(output: string): ListedWorktree[] {
       if (current?.path) entries.push(current);
       current = {
         path: line.slice('worktree '.length).trim(),
+        head: null,
         branchName: null,
         detached: false,
       };
@@ -774,6 +776,10 @@ function parseWorktreeList(output: string): ListedWorktree[] {
     }
 
     if (!current) continue;
+    if (line.startsWith('HEAD ')) {
+      current.head = line.slice('HEAD '.length).trim() || null;
+      continue;
+    }
     if (line.startsWith('branch ')) {
       const ref = line.slice('branch '.length).trim();
       const prefix = 'refs/heads/';
@@ -1678,7 +1684,7 @@ export async function listImportableWorktrees(projectRoot: string): Promise<
 export async function getBranchWorktreePath(
   projectRoot: string,
   branchName: string,
-): Promise<string | null> {
+): Promise<{ path: string; head: string; headCommittedAt: string | null } | null> {
   const { stdout } = await exec('git', ['worktree', 'list', '--porcelain'], {
     cwd: projectRoot,
     maxBuffer: MAX_BUFFER,
@@ -1686,27 +1692,19 @@ export async function getBranchWorktreePath(
   const match = parseWorktreeList(stdout).find(
     (entry) => !entry.detached && entry.branchName === branchName,
   );
-  return match?.path ?? null;
-}
-
-/** Return the task branch's merge-base commit time without mutating a worktree. */
-export async function getMergeBaseTimestamp(
-  worktreePath: string,
-  baseBranch?: string,
-): Promise<string | null> {
+  if (!match?.path || !match.head) return null;
   try {
-    const branch = baseBranch ?? (await detectMainBranch(worktreePath));
-    const head = await pinHead(worktreePath);
-    const picked = await pickMergeBase(worktreePath, branch, head);
-    if (!picked) return null;
-    const mergeBase = picked.sha;
-    const { stdout } = await exec('git', ['show', '-s', '--format=%cI', mergeBase], {
-      cwd: worktreePath,
+    const { stdout } = await exec('git', ['show', '-s', '--format=%cI', match.head], {
+      cwd: match.path,
     });
     const timestamp = new Date(stdout.trim());
-    return Number.isNaN(timestamp.getTime()) ? null : timestamp.toISOString();
+    return {
+      path: match.path,
+      head: match.head,
+      headCommittedAt: Number.isNaN(timestamp.getTime()) ? null : timestamp.toISOString(),
+    };
   } catch {
-    return null;
+    return { path: match.path, head: match.head, headCommittedAt: null };
   }
 }
 

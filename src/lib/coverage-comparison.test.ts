@@ -192,35 +192,39 @@ describe('buildCoverageComparison', () => {
     expect(result.impactedUnchangedFiles).toEqual([]);
   });
 
-  it('marks a base report older than the task merge-base as stale', () => {
+  it('marks a base report older than the base branch HEAD as stale', () => {
     const result = buildCoverageComparison(
       report(82, []),
       report(80, []),
       [],
       '2026-07-26T00:00:00.000Z',
+      'main',
     );
 
     expect(result.baseline).toEqual({
-      mergeBaseAt: '2026-07-26T00:00:00.000Z',
+      baseBranch: 'main',
+      baseHeadAt: '2026-07-26T00:00:00.000Z',
       stale: true,
     });
   });
 
-  it('accepts a base report generated after the task merge-base', () => {
+  it('accepts a base report generated after the base branch HEAD', () => {
     const result = buildCoverageComparison(
       report(82, []),
       report(80, []),
       [],
       '2026-07-24T00:00:00.000Z',
+      'main',
     );
 
     expect(result.baseline).toEqual({
-      mergeBaseAt: '2026-07-24T00:00:00.000Z',
+      baseBranch: 'main',
+      baseHeadAt: '2026-07-24T00:00:00.000Z',
       stale: false,
     });
   });
 
-  it('marks a present base report with an unknown merge-base as unanchored', () => {
+  it('marks a present base report with an unknown base branch HEAD as unanchored', () => {
     const result = buildCoverageComparison(report(82, []), report(80, []), []);
 
     expect(result.baseline).toEqual({

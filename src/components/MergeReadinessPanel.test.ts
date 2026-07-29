@@ -291,7 +291,8 @@ describe('buildMergeReadiness', () => {
           files: {},
           impactedUnchangedFiles: [],
           baseline: {
-            mergeBaseAt: '2026-07-26T00:00:00.000Z',
+            baseBranch: 'main',
+            baseHeadAt: '2026-07-26T00:00:00.000Z',
             stale: true,
           },
         },
@@ -303,7 +304,7 @@ describe('buildMergeReadiness', () => {
       expect.objectContaining({
         status: 'neutral',
         detail:
-          'Base coverage report predates the task merge-base; regenerate it before comparing.',
+          'Base coverage report predates main as currently checked out; regenerate it before comparing.',
       }),
     );
   });
@@ -320,6 +321,7 @@ describe('buildMergeReadiness', () => {
           files: {},
           impactedUnchangedFiles: [],
           baseline: {
+            baseBranch: 'main',
             stale: false,
             unanchored: true,
           },
@@ -332,7 +334,7 @@ describe('buildMergeReadiness', () => {
       expect.objectContaining({
         status: 'neutral',
         detail:
-          'Base coverage report cannot be anchored to the task merge-base; comparison is informational only.',
+          'Base coverage report cannot be anchored to main as currently checked out; comparison is informational only.',
       }),
     );
   });
