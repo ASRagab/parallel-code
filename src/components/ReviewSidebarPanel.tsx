@@ -71,9 +71,29 @@ export function ReviewSidebarPanel() {
               'font-size': sf(12),
               'border-bottom': `1px solid ${theme.border}`,
               background: 'rgba(255, 95, 115, 0.08)',
+              display: 'flex',
+              'align-items': 'center',
+              gap: '8px',
             }}
           >
-            {review.submitError()}
+            <span style={{ flex: '1' }}>{review.submitError()}</span>
+            <button
+              type="button"
+              onClick={review.clearSubmitError}
+              title="Dismiss submission error"
+              aria-label="Dismiss submission error"
+              style={{
+                display: 'flex',
+                background: 'transparent',
+                border: 'none',
+                color: theme.fgMuted,
+                cursor: 'pointer',
+                padding: '2px',
+                'border-radius': '3px',
+              }}
+            >
+              <CloseIcon size={13} />
+            </button>
           </div>
         </Show>
         <Show when={review.findingsLoading()}>

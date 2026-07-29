@@ -75,6 +75,7 @@ export interface ReviewContextValue {
   dismissQuestion: (id: string) => void;
 
   submitError: () => string;
+  clearSubmitError: () => void;
 }
 
 interface ReviewProviderProps {
@@ -326,6 +327,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
     submitting: submission.submitting,
     submitReview,
     submitError,
+    clearSubmitError: () => setSubmitError(''),
   };
 
   return <ReviewContext.Provider value={value}>{props.children}</ReviewContext.Provider>;

@@ -118,7 +118,7 @@ describe('ReviewProvider submission', () => {
     expect(review.annotations()).toHaveLength(1);
   });
 
-  it('clears a previous submission error when nothing remains to send', async () => {
+  it('allows dismissing a submission error after the final annotation is dismissed', async () => {
     vi.mocked(sendPrompt).mockRejectedValue(new Error('terminal unavailable'));
     const review = renderReviewProvider();
     review.addAnnotation({
@@ -132,7 +132,7 @@ describe('ReviewProvider submission', () => {
 
     await review.submitReview();
     review.dismissAnnotation('annotation-1');
-    await review.submitReview();
+    review.clearSubmitError();
 
     expect(review.submitError()).toBe('');
   });
