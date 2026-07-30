@@ -164,6 +164,7 @@ export function buildCoverageComparison(
           stale: baseGeneratedTime < baseHeadTime,
         }
       : {
+          ...(baseBranch ? { baseBranch } : {}),
           stale: false,
           unanchored: true,
         };

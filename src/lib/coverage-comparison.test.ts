@@ -225,9 +225,10 @@ describe('buildCoverageComparison', () => {
   });
 
   it('marks a present base report with an unknown base branch HEAD as unanchored', () => {
-    const result = buildCoverageComparison(report(82, []), report(80, []), []);
+    const result = buildCoverageComparison(report(82, []), report(80, []), [], null, 'main');
 
     expect(result.baseline).toEqual({
+      baseBranch: 'main',
       stale: false,
       unanchored: true,
     });

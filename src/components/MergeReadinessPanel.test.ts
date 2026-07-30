@@ -237,6 +237,37 @@ describe('buildMergeReadiness', () => {
     );
   });
 
+  it('does not attribute base-only covered files to the task', () => {
+    const readiness = buildMergeReadiness(
+      input({
+        coverage: {
+          aggregate: {
+            task: { state: 'available', pct: 82 },
+            base: { state: 'available', pct: 82 },
+            delta: 0,
+          },
+          files: {},
+          impactedUnchangedFiles: [
+            {
+              path: 'src/added-on-base.ts',
+              task: { state: 'file-not-present', pct: null },
+              base: { state: 'available', pct: 80 },
+              delta: null,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(readiness.overall).toBe('ready');
+    expect(readiness.checks[2]).toEqual(
+      expect.objectContaining({
+        status: 'pass',
+        detail: 'Base 82% → task 82% (0pp).',
+      }),
+    );
+  });
+
   it('does not warn for aggregate drift below the materiality threshold', () => {
     const readiness = buildMergeReadiness(
       input({
