@@ -1,4 +1,11 @@
-import { createContext, createSignal, createEffect, createMemo, useContext } from 'solid-js';
+import {
+  createContext,
+  createSignal,
+  createEffect,
+  createMemo,
+  untrack,
+  useContext,
+} from 'solid-js';
 import type { JSX } from 'solid-js';
 import { sendPrompt } from '../store/tasks';
 import {
@@ -265,7 +272,6 @@ export function ReviewProvider(props: ReviewProviderProps) {
     const taskId = props.taskId;
     const agentId = props.agentId;
     if (!taskId || !agentId) return;
-    setSubmitError('');
     const submittedAnnotations = annotations();
     const submittedFindings = selectSubmittableFindings(findings(), selectedFindingIds());
     if (submittedAnnotations.length === 0 && submittedFindings.length === 0) return;
@@ -280,17 +286,25 @@ export function ReviewProvider(props: ReviewProviderProps) {
     const onSubmitted = props.onSubmitted;
 
     await submission.run(async () => {
+      setSubmitError('');
       try {
         await sendPrompt(taskId, agentId, prompt);
-        setAnnotations((previous) =>
-          previous.filter((annotation) => !submittedAnnotationIds.has(annotation.id)),
+        const remainingAnnotations = untrack(annotations).filter(
+          (annotation) => !submittedAnnotationIds.has(annotation.id),
         );
-        setFindings((previous) => resolveQualityFindings(previous, submittedFindings));
+        const updatedFindings = resolveQualityFindings(untrack(findings), submittedFindings);
+        setAnnotations(remainingAnnotations);
+        setFindings(updatedFindings);
         setSelectedFindingIds((previous) =>
           selectedFindingIdsAfterSubmission(previous, submittedFindings),
         );
-        setSidebarOpen(false);
-        onSubmitted?.();
+        const hasRemainingActionableReview =
+          remainingAnnotations.length > 0 ||
+          updatedFindings.some(
+            (finding) => finding.state === 'open' && finding.freshness === 'current',
+          );
+        setSidebarOpen(hasRemainingActionableReview);
+        if (!hasRemainingActionableReview) onSubmitted?.();
       } catch (err: unknown) {
         setSubmitError(err instanceof Error ? err.message : 'Failed to send review');
         setSidebarOpen(true);

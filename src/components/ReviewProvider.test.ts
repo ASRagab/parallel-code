@@ -9,7 +9,7 @@ vi.mock('../store/tasks', () => ({
   sendPrompt: vi.fn(),
 }));
 
-function finding(): QualityFinding {
+function finding(overrides: Partial<QualityFinding> = {}): QualityFinding {
   return {
     id: 'finding-1',
     source: 'fixture',
@@ -20,6 +20,7 @@ function finding(): QualityFinding {
     explanation: 'Await this promise.',
     state: 'open',
     freshness: 'current',
+    ...overrides,
   };
 }
 
@@ -116,6 +117,30 @@ describe('ReviewProvider submission', () => {
     expect(review.submitError()).toBe('terminal unavailable');
     expect(review.sidebarOpen()).toBe(true);
     expect(review.annotations()).toHaveLength(1);
+  });
+
+  it('keeps the review open until every actionable finding is submitted', async () => {
+    vi.mocked(sendPrompt).mockResolvedValue();
+    const onSubmitted = vi.fn();
+    const review = renderReviewProvider(onSubmitted);
+    review.replaceFindings(() => [finding(), finding({ id: 'finding-2', ruleId: 'prefer-const' })]);
+    review.setFindingSelected('finding-1', true);
+
+    await review.submitReview();
+
+    expect(review.findings().map(({ id, state }) => ({ id, state }))).toEqual([
+      { id: 'finding-1', state: 'resolved' },
+      { id: 'finding-2', state: 'open' },
+    ]);
+    expect(review.sidebarOpen()).toBe(true);
+    expect(onSubmitted).not.toHaveBeenCalled();
+
+    review.setFindingSelected('finding-2', true);
+    await review.submitReview();
+
+    expect(review.findings().every((item) => item.state === 'resolved')).toBe(true);
+    expect(review.sidebarOpen()).toBe(false);
+    expect(onSubmitted).toHaveBeenCalledOnce();
   });
 
   it('allows dismissing a submission error after the final annotation is dismissed', async () => {

@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createEffect, onMount, onCleanup, untrack } from 'solid-js';
+import { For, Show, createSignal, createEffect, onMount, onCleanup, untrack, on } from 'solid-js';
 import type { JSX } from 'solid-js';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
@@ -19,6 +19,10 @@ import { InlineInput } from './InlineInput';
 import { useReview, type ActiveQuestion, type ReviewScrollTarget } from './ReviewProvider';
 import type { QualityFinding } from '../lib/quality-findings';
 import type { ReviewAnnotation, DiffInteractionMode } from './review-types';
+import {
+  expandCollapsedFileForNavigation,
+  scheduleReviewNavigationHighlightClear,
+} from './review-navigation';
 
 interface ScrollingDiffViewProps {
   files: FileDiff[];
@@ -91,16 +95,6 @@ function isLineHighlighted(
     newLine >= range.startLine &&
     newLine <= range.endLine
   );
-}
-
-function expandCollapsedFileForNavigation(
-  collapsedFiles: ReadonlySet<string>,
-  filePath: string,
-): ReadonlySet<string> {
-  if (!collapsedFiles.has(filePath)) return collapsedFiles;
-  const expanded = new Set(collapsedFiles);
-  expanded.delete(filePath);
-  return expanded;
 }
 
 // ---------------------------------------------------------------------------
@@ -783,13 +777,17 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
   const sectionRefs = new Map<string, HTMLDivElement>();
   const [collapsedFiles, setCollapsedFiles] = createSignal<ReadonlySet<string>>(new Set());
   const [dimOthers, setDimOthers] = createSignal(false);
-  let dimTimer: ReturnType<typeof setTimeout> | undefined;
+  let navigationFrame: number | undefined;
+  let navigationLineFrame: number | undefined;
+  let navigationHighlightTimer: ReturnType<typeof setTimeout> | undefined;
   let containerRef: HTMLDivElement | undefined;
 
-  createEffect(() => {
-    setCollapsedFiles(new Set<string>());
-    return props.files;
-  });
+  createEffect(
+    on(
+      () => props.files,
+      () => setCollapsedFiles(new Set<string>()),
+    ),
+  );
 
   const highlightedRange = (): HighlightRange | null => {
     const selection = review.pendingSelection();
@@ -810,13 +808,21 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
       : null;
   };
 
-  onCleanup(() => clearTimeout(dimTimer));
+  function clearNavigationSchedule() {
+    if (navigationFrame !== undefined) cancelAnimationFrame(navigationFrame);
+    if (navigationLineFrame !== undefined) cancelAnimationFrame(navigationLineFrame);
+    clearTimeout(navigationHighlightTimer);
+    navigationFrame = undefined;
+    navigationLineFrame = undefined;
+    navigationHighlightTimer = undefined;
+  }
+
+  onCleanup(clearNavigationSchedule);
 
   /** Scroll to a file section when scrollToPath changes. */
   createEffect(() => {
     const target = props.scrollToPath;
     if (!target) return;
-    clearTimeout(dimTimer);
     setDimOthers(true);
     // Start fade-in on next frame so the browser registers the dimmed state first
     requestAnimationFrame(() => setDimOthers(false));
@@ -850,13 +856,16 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
   /** Scroll to a specific annotation (e.g. clicked in the sidebar). */
   createEffect(() => {
     const target = props.scrollToAnnotation;
+    clearNavigationSchedule();
     if (!target) return;
     const currentCollapsed = untrack(collapsedFiles);
     const expanded = expandCollapsedFileForNavigation(currentCollapsed, target.filePath);
     if (expanded !== currentCollapsed) setCollapsedFiles(expanded);
 
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
+    navigationFrame = requestAnimationFrame(() => {
+      navigationFrame = undefined;
+      navigationLineFrame = requestAnimationFrame(() => {
+        navigationLineFrame = undefined;
         const el = containerRef?.querySelector(
           `[data-file-path="${CSS.escape(target.filePath)}"][data-new-line="${target.startLine}"]`,
         );
@@ -865,7 +874,11 @@ export function ScrollingDiffView(props: ScrollingDiffViewProps) {
           const elTop = el.getBoundingClientRect().top;
           containerRef.scrollTop = elTop - containerTop + containerRef.scrollTop - 80;
         }
-        if (props.scrollToAnnotation === target) review.setScrollTarget(null);
+        navigationHighlightTimer = scheduleReviewNavigationHighlightClear(
+          target,
+          () => untrack(() => props.scrollToAnnotation),
+          () => review.setScrollTarget(null),
+        );
       });
     });
   });

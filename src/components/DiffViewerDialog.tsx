@@ -75,33 +75,33 @@ export function compileDiffReview(annotations: ReviewAnnotation[]): string {
 export function DiffViewerDialog(props: DiffViewerDialogProps) {
   const titleId = createUniqueId();
   return (
-    <Dialog
-      open={props.scrollToFile !== null}
-      onClose={props.onClose}
-      width="100vw"
-      labelledBy={titleId}
-      panelStyle={{
-        height: '100vh',
-        'max-height': 'none',
-        'max-width': 'none',
-        'border-radius': '0',
-        border: 'none',
-        overflow: 'hidden',
-        padding: '0',
-        gap: '0',
-      }}
+    <ReviewProvider
+      taskId={props.taskId}
+      agentId={props.agentId}
+      findingProvider={props.findingProvider}
+      compilePrompt={compileDiffReview}
+      onSubmitted={props.onClose}
     >
-      <h2 id={titleId} class="dialog-sr-only">
-        Diff viewer for {props.taskName ?? 'task'}: {props.scrollToFile ?? 'all changes'}
-      </h2>
-      <Show when={props.scrollToFile !== null}>
-        <ReviewProvider
-          taskId={props.taskId}
-          agentId={props.agentId}
-          findingProvider={props.findingProvider}
-          compilePrompt={compileDiffReview}
-          onSubmitted={props.onClose}
-        >
+      <Dialog
+        open={props.scrollToFile !== null}
+        onClose={props.onClose}
+        width="100vw"
+        labelledBy={titleId}
+        panelStyle={{
+          height: '100vh',
+          'max-height': 'none',
+          'max-width': 'none',
+          'border-radius': '0',
+          border: 'none',
+          overflow: 'hidden',
+          padding: '0',
+          gap: '0',
+        }}
+      >
+        <h2 id={titleId} class="dialog-sr-only">
+          Diff viewer for {props.taskName ?? 'task'}: {props.scrollToFile ?? 'all changes'}
+        </h2>
+        <Show when={props.scrollToFile !== null}>
           <DiffViewerContent
             scrollToFile={props.scrollToFile}
             taskName={props.taskName}
@@ -117,11 +117,10 @@ export function DiffViewerDialog(props: DiffViewerDialogProps) {
             selectedCommit={props.selectedCommit}
             onCommitNavigate={props.onCommitNavigate}
             gitIsolation={props.gitIsolation}
-            findingProvider={props.findingProvider}
           />
-        </ReviewProvider>
-      </Show>
-    </Dialog>
+        </Show>
+      </Dialog>
+    </ReviewProvider>
   );
 }
 
