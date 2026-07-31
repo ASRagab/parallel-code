@@ -155,7 +155,10 @@ function prCheck(prChecks?: PrReadinessState): MergeReadinessCheck {
   };
 }
 
-function coverageCheck(coverage?: CoverageComparison | null): MergeReadinessCheck {
+function coverageCheck(
+  coverage?: CoverageComparison | null,
+  mergeStatus?: MergeStatus,
+): MergeReadinessCheck {
   const aggregate = coverage?.aggregate;
   if (!aggregate || aggregate.task.state === 'no-report') {
     return { label: 'Coverage', status: 'neutral', detail: 'No task coverage report.' };
@@ -183,14 +186,35 @@ function coverageCheck(coverage?: CoverageComparison | null): MergeReadinessChec
       detail: `Task ${taskPct}%; the base report has no executable lines.`,
     };
   }
+  if (coverage.inventoryState && coverage.inventoryState !== 'available') {
+    return {
+      label: 'Coverage',
+      status: 'neutral',
+      detail:
+        coverage.inventoryState === 'loading'
+          ? `Task ${taskPct}%; changed-file inventory is still loading, so comparison is informational only.`
+          : `Task ${taskPct}%; changed-file inventory is unavailable, so comparison is informational only.`,
+    };
+  }
+  if (mergeStatus && mergeStatus.main_ahead_count > 0) {
+    return {
+      label: 'Coverage',
+      status: 'neutral',
+      detail: `${mergeStatus.base_branch} is ${countLabel(mergeStatus.main_ahead_count, 'commit')} ahead; rebase and regenerate task coverage before comparing.`,
+    };
+  }
   if (isBaselineInformational(coverage.baseline)) {
     const baseBranch = coverage.baseline?.baseBranch ?? 'base branch';
     return {
       label: 'Coverage',
       status: 'neutral',
-      detail: coverage.baseline?.stale
-        ? `Base coverage report predates ${baseBranch} as currently checked out; regenerate it before comparing.`
-        : `Base coverage report cannot be anchored to ${baseBranch} as currently checked out; comparison is informational only.`,
+      detail: coverage.baseline?.taskStale
+        ? 'Task coverage report predates task HEAD; regenerate it before comparing.'
+        : coverage.baseline?.taskUnanchored
+          ? 'Task coverage report cannot be anchored to task HEAD; comparison is informational only.'
+          : coverage.baseline?.stale
+            ? `Base coverage report predates ${baseBranch} as currently checked out; regenerate it before comparing.`
+            : `Base coverage report cannot be anchored to ${baseBranch} as currently checked out; comparison is informational only.`,
     };
   }
 
@@ -219,7 +243,7 @@ export function buildMergeReadiness(input: MergeReadinessInput): MergeReadiness 
   const checks = [
     mergeSafetyCheck(input),
     verificationCheck(input.verification),
-    coverageCheck(input.coverage),
+    coverageCheck(input.coverage, input.mergeStatus),
     prCheck(input.prChecks),
   ];
   const overall = checks.some((check) => check.status === 'blocked')

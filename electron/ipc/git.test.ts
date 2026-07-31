@@ -542,7 +542,7 @@ function buildWorktreeMockHandler(opts: {
     ) {
       const fallback = [opts.committedRawNumstat, opts.uncommittedRawNumstat]
         .filter((part) => part && part.length > 0)
-        .join('\n');
+        .join('');
       cb(null, opts.finalRawNumstat ?? fallback, '');
       return;
     }
@@ -611,13 +611,19 @@ function buildWorktreeMockHandler(opts: {
 
 /**
  * Build a raw+numstat combined output string for a single modified file.
- * Format matches `git diff --raw --numstat` output.
+ * Format matches `git diff --raw --numstat -z` output.
  */
 function rawNumstatEntry(filePath: string, added: number, removed: number, status = 'M'): string {
-  return [
-    `:100644 100644 aaa111 bbb222 ${status}\t${filePath}`,
-    `${added}\t${removed}\t${filePath}`,
-  ].join('\n');
+  return `:100644 100644 aaa111 bbb222 ${status}\0${filePath}\0${added}\t${removed}\t${filePath}\0`;
+}
+
+function rawNumstatRenameEntry(
+  previousPath: string,
+  path: string,
+  added: number,
+  removed: number,
+): string {
+  return `:100644 100644 aaa111 bbb222 R100\0${previousPath}\0${path}\0${added}\t${removed}\t\0${previousPath}\0${path}\0`;
 }
 
 // ---------------------------------------------------------------------------
@@ -679,10 +685,7 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
       setupMock(
         calls,
         buildWorktreeMockHandler({
-          committedRawNumstat: [
-            ':100644 100644 aaa111 bbb222 R100\tsrc/old-name.ts\tsrc/new-name.ts',
-            '0\t0\tsrc/{old-name.ts => new-name.ts}',
-          ].join('\n'),
+          committedRawNumstat: rawNumstatRenameEntry('src/old-name.ts', 'src/new-name.ts', 0, 0),
         }),
       );
 
@@ -695,6 +698,34 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
           status: 'R',
         }),
       ]);
+    });
+
+    it.each([
+      ['dir/old => literal.ts', 'dir/new.ts'],
+      ['dir/{old}.ts', 'dir/{new}.ts'],
+    ])('should preserve exact Git paths when renaming %s', async (previousPath, path) => {
+      const calls: string[][] = [];
+      setupMock(
+        calls,
+        buildWorktreeMockHandler({
+          committedRawNumstat: rawNumstatRenameEntry(previousPath, path, 4, 2),
+        }),
+      );
+
+      const files = await getChangedFiles(uniqueWorktreePath(), 'main');
+
+      expect(files).toEqual([
+        expect.objectContaining({
+          path,
+          previous_path: previousPath,
+          lines_added: 4,
+          lines_removed: 2,
+          status: 'R',
+        }),
+      ]);
+      expect(
+        calls.some((args) => args[0] === 'diff' && args.includes('--raw') && args.includes('-z')),
+      ).toBe(true);
     });
 
     it('should preserve a literal arrow in an ordinary modified filename', async () => {
@@ -726,7 +757,7 @@ describe('getChangedFiles (worktree-based, merge-base diff)', () => {
           committedRawNumstat: [
             rawNumstatEntry('file-a.ts', 5, 2),
             rawNumstatEntry('file-b.ts', 3, 1),
-          ].join('\n'),
+          ].join(''),
         }),
       );
 

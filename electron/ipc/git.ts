@@ -593,24 +593,7 @@ function normalizeStatusPath(raw: string): string {
   return trimmed.replace(/^"|"$/g, '').replace(/\\(.)/g, '$1');
 }
 
-function parseNumstatPath(raw: string): string {
-  const trimmed = raw.trim();
-  const arrowIndex = trimmed.indexOf(' => ');
-  if (arrowIndex < 0) return normalizeStatusPath(trimmed);
-
-  const openBrace = trimmed.lastIndexOf('{', arrowIndex);
-  const closeBrace = trimmed.indexOf('}', arrowIndex);
-  if (openBrace >= 0 && closeBrace > arrowIndex) {
-    const prefix = trimmed.slice(0, openBrace);
-    const suffix = trimmed.slice(closeBrace + 1);
-    const destinationPath = `${prefix}${trimmed.slice(arrowIndex + 4, closeBrace)}${suffix}`;
-    return normalizeStatusPath(destinationPath);
-  }
-
-  return normalizeStatusPath(trimmed.slice(arrowIndex + 4));
-}
-
-/** Parse combined `git diff --raw --numstat` output into status and numstat maps. */
+/** Parse combined `git diff --raw --numstat -z` output into status and numstat maps. */
 function parseDiffRawNumstat(output: string): {
   statusMap: Map<string, string>;
   numstatMap: Map<string, [number, number]>;
@@ -620,34 +603,43 @@ function parseDiffRawNumstat(output: string): {
   const numstatMap = new Map<string, [number, number]>();
   const previousPathMap = new Map<string, string>();
 
-  for (const line of output.split('\n')) {
-    if (line.startsWith(':')) {
-      // --raw format: ":old_mode new_mode old_hash new_hash status\tpath"
-      const parts = line.split('\t');
-      if (parts.length >= 2) {
-        const statusLetter = parts[0].split(/\s+/).pop()?.charAt(0) ?? 'M';
-        const rawPath = parts[parts.length - 1];
-        const p = normalizeStatusPath(rawPath);
-        if (p) statusMap.set(p, statusLetter);
-        if ((statusLetter === 'R' || statusLetter === 'C') && parts.length >= 3) {
-          const previousPath = normalizeStatusPath(parts[parts.length - 2]);
-          if (p && previousPath) previousPathMap.set(p, previousPath);
+  const fields = output.split('\0');
+  for (let index = 0; index < fields.length; index++) {
+    const field = fields[index];
+    if (!field) continue;
+
+    if (field.startsWith(':')) {
+      const statusLetter = field.split(/\s+/).pop()?.charAt(0) ?? 'M';
+      const firstPath = fields[++index] ?? '';
+      if (statusLetter === 'R' || statusLetter === 'C') {
+        const destinationPath = fields[++index] ?? '';
+        if (destinationPath) {
+          statusMap.set(destinationPath, statusLetter);
+          if (firstPath) previousPathMap.set(destinationPath, firstPath);
         }
+      } else if (firstPath) {
+        statusMap.set(firstPath, statusLetter);
       }
       continue;
     }
-    // --numstat format: "added\tremoved\tpath"
-    const parts = line.split('\t');
-    if (parts.length >= 3) {
-      const added = parseInt(parts[0], 10);
-      const removed = parseInt(parts[1], 10);
-      if (!isNaN(added) && !isNaN(removed)) {
-        const rawPath = parts[parts.length - 1];
-        const normalizedPath = normalizeStatusPath(rawPath);
-        const p = statusMap.has(normalizedPath) ? normalizedPath : parseNumstatPath(rawPath);
-        if (p) numstatMap.set(p, [added, removed]);
+
+    const firstTab = field.indexOf('\t');
+    const secondTab = firstTab < 0 ? -1 : field.indexOf('\t', firstTab + 1);
+    if (secondTab < 0) continue;
+
+    const added = Number.parseInt(field.slice(0, firstTab), 10);
+    const removed = Number.parseInt(field.slice(firstTab + 1, secondTab), 10);
+    if (!Number.isFinite(added) || !Number.isFinite(removed)) continue;
+
+    let destinationPath = field.slice(secondTab + 1);
+    if (!destinationPath) {
+      const previousPath = fields[++index] ?? '';
+      destinationPath = fields[++index] ?? '';
+      if (destinationPath && previousPath && !previousPathMap.has(destinationPath)) {
+        previousPathMap.set(destinationPath, previousPath);
       }
     }
+    if (destinationPath) numstatMap.set(destinationPath, [added, removed]);
   }
 
   return { statusMap, numstatMap, previousPathMap };
@@ -1218,7 +1210,7 @@ export async function getChangedFiles(
 
   let finalDiffStr = '';
   try {
-    const { stdout } = await exec('git', ['diff', '--raw', '--numstat', diffBase.sha], {
+    const { stdout } = await exec('git', ['diff', '--raw', '--numstat', '-z', diffBase.sha], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
     });
@@ -1239,7 +1231,7 @@ export async function getChangedFiles(
   // git ls-files --others --exclude-standard — untracked files (no index lock needed).
   // Both commands run in parallel since they are independent.
   const [uncommittedResult, untrackedResult] = await Promise.all([
-    exec('git', ['diff', '--raw', '--numstat', headHash], {
+    exec('git', ['diff', '--raw', '--numstat', '-z', headHash], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
     }).catch(() => ({ stdout: '' })),
@@ -1418,7 +1410,7 @@ export async function getUncommittedChangedFiles(worktreePath: string): Promise<
   const headHash = await pinHead(worktreePath);
   let diffStr = '';
   try {
-    const { stdout } = await exec('git', ['diff', '--raw', '--numstat', headHash], {
+    const { stdout } = await exec('git', ['diff', '--raw', '--numstat', '-z', headHash], {
       cwd: worktreePath,
       maxBuffer: MAX_BUFFER,
     });
@@ -1915,7 +1907,7 @@ export async function getChangedFilesFromBranch(
 
   let diffStr = '';
   try {
-    const { stdout } = await exec('git', ['diff', '--raw', '--numstat', diffRange], {
+    const { stdout } = await exec('git', ['diff', '--raw', '--numstat', '-z', diffRange], {
       cwd: projectRoot,
       maxBuffer: MAX_BUFFER,
     });
@@ -2133,7 +2125,7 @@ export async function getCommitChangedFiles(
   try {
     const { stdout } = await exec(
       'git',
-      ['diff', '--raw', '--numstat', `${commitHash}^..${commitHash}`],
+      ['diff', '--raw', '--numstat', '-z', `${commitHash}^..${commitHash}`],
       { cwd: worktreePath, maxBuffer: MAX_BUFFER },
     );
     diffStr = stdout;
@@ -2142,7 +2134,7 @@ export async function getCommitChangedFiles(
     try {
       const { stdout } = await exec(
         'git',
-        ['diff', '--raw', '--numstat', `${EMPTY_TREE}..${commitHash}`],
+        ['diff', '--raw', '--numstat', '-z', `${EMPTY_TREE}..${commitHash}`],
         { cwd: worktreePath, maxBuffer: MAX_BUFFER },
       );
       diffStr = stdout;

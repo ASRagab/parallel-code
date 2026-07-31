@@ -1,8 +1,10 @@
+import { renderToString } from 'solid-js/web';
 import { describe, expect, it } from 'vitest';
-import type { ChangedFile } from '../ipc/types';
+import type { ChangedFile, CoverageFileSummary } from '../ipc/types';
 import {
   coverageFooterLabel,
   coverageFooterTitle,
+  FileCoverageBadge,
   filesFooterLabel,
   filesFooterTitle,
   isCoverageEligible,
@@ -78,5 +80,30 @@ describe('filesFooterLabel', () => {
   it('merges total and uncommitted counts into one compact token', () => {
     expect(filesFooterLabel(7, 2)).toBe('▤ 7·2u');
     expect(filesFooterTitle(7, 2)).toBe('7 changed files, 2 uncommitted.');
+  });
+});
+
+describe('FileCoverageBadge', () => {
+  it('keeps task-only coverage visible while comparison inventory is unavailable', () => {
+    const summary: CoverageFileSummary = {
+      path: 'src/example.ts',
+      lines: { total: 100, covered: 82, skipped: 0, pct: 82 },
+      statements: { total: 100, covered: 81, skipped: 0, pct: 81 },
+      functions: { total: 10, covered: 8, skipped: 0, pct: 80 },
+      branches: { total: 20, covered: 15, skipped: 0, pct: 75 },
+    };
+
+    const html = renderToString(() =>
+      FileCoverageBadge({
+        file: changedFile({ path: summary.path }),
+        summary,
+        comparison: undefined,
+        hasCoverageArtifact: true,
+      }),
+    );
+
+    expect(html).toContain('82%');
+    expect(html).toContain('Lines 82%');
+    expect(html).not.toContain('No recent coverage data');
   });
 });

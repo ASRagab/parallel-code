@@ -31,11 +31,15 @@ function file(path: string, pct: number, total = 100): CoverageFileSummary {
   };
 }
 
-function report(totalPct: number, files: CoverageFileSummary[]): CoverageSummary {
+function report(
+  totalPct: number,
+  files: CoverageFileSummary[],
+  generatedAt = '2026-07-25T00:00:00.000Z',
+): CoverageSummary {
   const total = metric(totalPct);
   return {
     format: 'istanbul-summary',
-    generatedAt: '2026-07-25T00:00:00.000Z',
+    generatedAt,
     reportPath: '/repo/coverage/coverage-summary.json',
     totals: {
       lines: total,
@@ -231,6 +235,38 @@ describe('buildCoverageComparison', () => {
       baseBranch: 'main',
       stale: false,
       unanchored: true,
+    });
+  });
+
+  it('marks a task report older than task HEAD as stale', () => {
+    const result = buildCoverageComparison(
+      report(82, [], '2026-07-25T00:00:00.000Z'),
+      report(80, []),
+      [],
+      '2026-07-24T00:00:00.000Z',
+      'main',
+      '2026-07-26T00:00:00.000Z',
+    );
+
+    expect(result.baseline).toMatchObject({
+      taskHeadAt: '2026-07-26T00:00:00.000Z',
+      taskStale: true,
+    });
+  });
+
+  it('marks a task report with an unknown task HEAD as unanchored', () => {
+    const result = buildCoverageComparison(
+      report(82, []),
+      report(80, []),
+      [],
+      '2026-07-24T00:00:00.000Z',
+      'main',
+      null,
+    );
+
+    expect(result.baseline).toMatchObject({
+      taskStale: false,
+      taskUnanchored: true,
     });
   });
 

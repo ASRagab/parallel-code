@@ -37,18 +37,24 @@ export interface CoverageComparison {
   };
   files: Record<string, CoverageFileComparison>;
   impactedUnchangedFiles: ImpactedCoverageFile[];
+  inventoryState?: 'available' | 'loading' | 'failed';
   baseline?: {
     baseBranch?: string;
     baseHeadAt?: string;
+    taskHeadAt?: string;
     stale: boolean;
     unanchored?: boolean;
+    taskStale?: boolean;
+    taskUnanchored?: boolean;
   };
 }
 
 export const MATERIAL_COVERAGE_DELTA = 1;
 
 export function isBaselineInformational(baseline: CoverageComparison['baseline']): boolean {
-  return Boolean(baseline?.stale || baseline?.unanchored);
+  return Boolean(
+    baseline?.stale || baseline?.unanchored || baseline?.taskStale || baseline?.taskUnanchored,
+  );
 }
 
 function roundPercentage(value: number): number {
@@ -100,6 +106,7 @@ export function buildCoverageComparison(
   changedFiles: ChangedFile[],
   baseHeadAt?: string | null,
   baseBranch?: string,
+  taskHeadAt?: string | null,
 ): CoverageComparison {
   const taskAggregate = aggregateValue(taskSummary);
   const baseAggregate = aggregateValue(baseSummary);
@@ -155,6 +162,20 @@ export function buildCoverageComparison(
 
   const baseHeadTime = baseHeadAt ? Date.parse(baseHeadAt) : Number.NaN;
   const baseGeneratedTime = baseSummary ? Date.parse(baseSummary.generatedAt) : Number.NaN;
+  const taskHeadTime = taskHeadAt ? Date.parse(taskHeadAt) : Number.NaN;
+  const taskGeneratedTime = taskSummary ? Date.parse(taskSummary.generatedAt) : Number.NaN;
+  const taskAnchor =
+    taskHeadAt === undefined
+      ? {}
+      : taskHeadAt && Number.isFinite(taskHeadTime) && Number.isFinite(taskGeneratedTime)
+        ? {
+            taskHeadAt,
+            taskStale: taskGeneratedTime < taskHeadTime,
+          }
+        : {
+            taskStale: false,
+            taskUnanchored: true,
+          };
   const baseline = !baseSummary
     ? undefined
     : baseHeadAt && Number.isFinite(baseHeadTime) && Number.isFinite(baseGeneratedTime)
@@ -162,11 +183,13 @@ export function buildCoverageComparison(
           ...(baseBranch ? { baseBranch } : {}),
           baseHeadAt,
           stale: baseGeneratedTime < baseHeadTime,
+          ...taskAnchor,
         }
       : {
           ...(baseBranch ? { baseBranch } : {}),
           stale: false,
           unanchored: true,
+          ...taskAnchor,
         };
 
   return {
