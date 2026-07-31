@@ -53,10 +53,11 @@ describe('createFixtureQualityFindingProvider', () => {
   it('supplies independent copies of fixture findings', async () => {
     const original = finding();
     const provider = createFixtureQualityFindingProvider([original]);
+    const context = { reviewIdentity: 'task-1', diffIdentity: 'diff-1', files: [diff()] };
 
-    const first = await provider.loadFindings();
+    const first = await provider.loadFindings(context);
     first[0].location.startLine = 99;
-    const second = await provider.loadFindings();
+    const second = await provider.loadFindings(context);
 
     expect(second).toEqual([original]);
   });
@@ -106,6 +107,35 @@ describe('reconcileQualityFindings', () => {
 
     expect(rejected).toBe(loading);
     expect(rejected[0].freshness).toBe('pending');
+  });
+
+  it('does not reuse a finding from another immutable diff at the same path and line', () => {
+    const changedContent = diff({
+      hunks: [
+        {
+          oldStart: 9,
+          oldCount: 2,
+          newStart: 9,
+          newCount: 3,
+          lines: [
+            { type: 'context', content: 'before', oldLine: 9, newLine: 9 },
+            { type: 'add', content: 'differentCall();', oldLine: null, newLine: 10 },
+            { type: 'context', content: 'after', oldLine: 10, newLine: 11 },
+          ],
+        },
+      ],
+    });
+
+    const reconciled = reconcileQualityFindingsForDiff(
+      [finding()],
+      [changedContent],
+      true,
+      'diff-before',
+      'diff-after',
+    );
+
+    expect(reconciled[0].freshness).toBe('pending');
+    expect(selectSubmittableFindings(reconciled, ['finding-1'])).toEqual([]);
   });
 
   it('requires the navigable start line for a ranged finding', () => {

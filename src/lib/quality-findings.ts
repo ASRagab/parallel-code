@@ -26,8 +26,17 @@ export interface QualityFinding {
   freshness: QualityFindingFreshness;
 }
 
+export interface QualityFindingLoadContext {
+  /** Stable identity for the task/worktree being reviewed. */
+  reviewIdentity: string;
+  /** Immutable identity derived from the exact rendered diff. */
+  diffIdentity: string;
+  /** Parsed files for providers that need to scope or validate fixture data. */
+  files: readonly FileDiff[];
+}
+
 export interface QualityFindingProvider {
-  loadFindings(): Promise<QualityFinding[]>;
+  loadFindings(context: QualityFindingLoadContext): Promise<QualityFinding[]>;
 }
 
 function cloneFinding(finding: QualityFinding): QualityFinding {
@@ -42,7 +51,7 @@ export function createFixtureQualityFindingProvider(
   findings: QualityFinding[],
 ): QualityFindingProvider {
   return {
-    async loadFindings() {
+    async loadFindings(_context) {
       return findings.map(cloneFinding);
     },
   };
@@ -61,8 +70,14 @@ export function reconcileQualityFindingsForDiff(
   findings: QualityFinding[],
   files: FileDiff[],
   diffLoaded: boolean,
+  findingsDiffIdentity?: string,
+  currentDiffIdentity?: string,
 ): QualityFinding[] {
-  if (diffLoaded) return reconcileQualityFindings(findings, files);
+  const identityMatches =
+    findingsDiffIdentity === undefined && currentDiffIdentity === undefined
+      ? true
+      : findingsDiffIdentity === currentDiffIdentity;
+  if (diffLoaded && identityMatches) return reconcileQualityFindings(findings, files);
 
   let changed = false;
   const pending = findings.map((finding) => {

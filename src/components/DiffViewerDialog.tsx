@@ -4,14 +4,15 @@ import { errMessage } from '../lib/log';
 import { invoke } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { createDialogScroll } from '../lib/dialog-scroll';
+import {
+  createDiffIdentity,
+  createRequestGenerationGuard,
+  createReviewIdentity,
+} from '../lib/diff-review-lifecycle';
 import { theme } from '../lib/theme';
 import { sf } from '../lib/fontScale';
 import { parseUnifiedDiff } from '../lib/unified-diff-parser';
-import { evictStaleAnnotations } from '../lib/review-eviction';
-import {
-  reconcileQualityFindingsForDiff,
-  type QualityFindingProvider,
-} from '../lib/quality-findings';
+import { type QualityFindingProvider } from '../lib/quality-findings';
 import { windowChromeTopInset } from '../lib/platform';
 import { ScrollingDiffView } from './ScrollingDiffView';
 import {
@@ -74,11 +75,20 @@ export function compileDiffReview(annotations: ReviewAnnotation[]): string {
 
 export function DiffViewerDialog(props: DiffViewerDialogProps) {
   const titleId = createUniqueId();
+  const reviewIdentity = () =>
+    createReviewIdentity({
+      taskId: props.taskId,
+      worktreePath: props.worktreePath,
+      projectRoot: props.projectRoot,
+      branchName: props.branchName,
+    });
   return (
     <ReviewProvider
       taskId={props.taskId}
       agentId={props.agentId}
       findingProvider={props.findingProvider}
+      reviewIdentity={reviewIdentity()}
+      open={props.scrollToFile !== null}
       compilePrompt={compileDiffReview}
       onSubmitted={props.onClose}
     >
@@ -130,13 +140,12 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
   const headerPaddingTop = `${windowChromeTopInset + 12}px`;
 
   const [parsedFiles, setParsedFiles] = createSignal<FileDiff[]>([]);
-  const [diffLoaded, setDiffLoaded] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal('');
   const [searchQuery, setSearchQuery] = createSignal('');
   const [activeFilePath, setActiveFilePath] = createSignal<string | null>(null);
 
-  let fetchGeneration = 0;
+  const fetchGeneration = createRequestGenerationGuard();
   let searchInputRef: HTMLInputElement | undefined;
   let diffScrollRef: HTMLDivElement | undefined;
   let containerRef: HTMLDivElement | undefined;
@@ -164,12 +173,6 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
   });
 
   createEffect(() => {
-    const current = review.findings();
-    const reconciled = reconcileQualityFindingsForDiff(current, parsedFiles(), diffLoaded());
-    if (reconciled !== current) review.replaceFindings(() => reconciled);
-  });
-
-  createEffect(() => {
     const scrollTarget = props.scrollToFile;
     // Access selectedCommit before the early return so the effect tracks it
     // even when the dialog is closed — ensures we re-run on reopen.
@@ -180,10 +183,21 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
     const projectRoot = props.projectRoot;
     const branchName = props.branchName;
     const baseBranch = props.baseBranch;
-    const thisGen = ++fetchGeneration;
+    const reviewIdentity = createReviewIdentity({
+      taskId: props.taskId,
+      worktreePath,
+      projectRoot,
+      branchName,
+    });
+    const thisGen = fetchGeneration.begin();
 
+    onCleanup(() => {
+      fetchGeneration.invalidate();
+      review.suspendDiffLoad();
+    });
+
+    review.beginDiffLoad();
     setSearchQuery('');
-    setDiffLoaded(false);
     setLoading(true);
     setError('');
     setParsedFiles([]);
@@ -219,19 +233,20 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
     }
 
     diffPromise
-      .then((rawDiff) => {
-        if (thisGen !== fetchGeneration) return;
+      .then(async (rawDiff) => {
+        if (!fetchGeneration.isCurrent(thisGen)) return;
         const newFiles = parseUnifiedDiff(rawDiff);
+        const diffIdentity = await createDiffIdentity(reviewIdentity, rawDiff);
+        if (!fetchGeneration.isCurrent(thisGen)) return;
         setParsedFiles(newFiles);
-        review.replaceAnnotations((prev) => evictStaleAnnotations(prev, newFiles));
-        setDiffLoaded(true);
+        review.completeDiffLoad(diffIdentity, newFiles);
       })
       .catch((err) => {
-        if (thisGen !== fetchGeneration) return;
+        if (!fetchGeneration.isCurrent(thisGen)) return;
         setError(errMessage(err));
       })
       .finally(() => {
-        if (thisGen === fetchGeneration) setLoading(false);
+        if (fetchGeneration.isCurrent(thisGen)) setLoading(false);
       });
   });
 

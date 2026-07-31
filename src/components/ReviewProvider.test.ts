@@ -36,6 +36,7 @@ function renderReviewProvider(onSubmitted = vi.fn()): ReviewContextValue {
     createComponent(ReviewProvider, {
       taskId: 'task-1',
       agentId: 'agent-1',
+      reviewIdentity: 'task-1:/worktree',
       compilePrompt: (annotations) => `Human comments: ${annotations.length}`,
       onSubmitted,
       get children() {

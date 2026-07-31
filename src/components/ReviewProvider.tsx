@@ -3,6 +3,7 @@ import {
   createSignal,
   createEffect,
   createMemo,
+  onCleanup,
   untrack,
   useContext,
 } from 'solid-js';
@@ -11,12 +12,15 @@ import { sendPrompt } from '../store/tasks';
 import {
   compileQualityFindingPrompt,
   dismissQualityFinding,
+  reconcileQualityFindingsForDiff,
   resolveQualityFindings,
   selectedFindingIdsAfterSubmission,
   selectSubmittableFindings,
   type QualityFinding,
   type QualityFindingProvider,
 } from '../lib/quality-findings';
+import { transitionReviewAnnotations, type ReviewDiffIdentity } from '../lib/diff-review-lifecycle';
+import type { FileDiff } from '../lib/unified-diff-parser';
 import type { ReviewAnnotation, DiffInteractionMode } from './review-types';
 
 /** Generic selection info used to create annotations or questions. */
@@ -65,6 +69,10 @@ export interface ReviewContextValue {
   findingsError: () => string;
   clearFindingsError: () => void;
 
+  beginDiffLoad: () => void;
+  completeDiffLoad: (diffIdentity: string, files: FileDiff[]) => void;
+  suspendDiffLoad: () => void;
+
   scrollTarget: () => ReviewScrollTarget | null;
   setScrollTarget: (target: ReviewScrollTarget | null) => void;
 
@@ -89,6 +97,10 @@ interface ReviewProviderProps {
   taskId?: string;
   agentId?: string;
   findingProvider?: QualityFindingProvider;
+  /** Stable task/worktree identity. Durable review state never crosses this boundary. */
+  reviewIdentity?: string;
+  /** Whether the review surface is currently mounted and interactive. */
+  open?: boolean;
   compilePrompt: (annotations: ReviewAnnotation[]) => string;
   onSubmitted?: () => void;
   children: JSX.Element;
@@ -137,34 +149,56 @@ export function ReviewProvider(props: ReviewProviderProps) {
   const submission = createReviewSubmissionGuard();
   const openFindings = createMemo(() => findings().filter((finding) => finding.state === 'open'));
   let findingLoadGeneration = 0;
+  let activeReviewDiff: ReviewDiffIdentity | null = null;
+  let findingsLoadedFor: ReviewDiffIdentity | null = null;
+  let findingsLoadedProvider: QualityFindingProvider | undefined;
+  let trackedReviewIdentity = untrack(() => props.reviewIdentity ?? '');
+  let wasOpen = untrack(() => props.open ?? true);
+
+  function invalidateFindingLoad() {
+    findingLoadGeneration++;
+    setFindingsLoading(false);
+  }
+
+  function resetTransientState() {
+    setSelectedFindingIds(new Set<string>());
+    setSidebarOpen(false);
+    setScrollTarget(null);
+    setPendingSelection(null);
+    setActiveQuestions([]);
+    setSubmitError('');
+    setFindingsError('');
+  }
+
+  function clearReviewState() {
+    invalidateFindingLoad();
+    setAnnotations([]);
+    setFindings([]);
+    activeReviewDiff = null;
+    findingsLoadedFor = null;
+    findingsLoadedProvider = undefined;
+    resetTransientState();
+  }
 
   createEffect(() => {
-    const provider = props.findingProvider;
-    const generation = ++findingLoadGeneration;
-    setFindingsError('');
-    setSelectedFindingIds(new Set<string>());
-    if (!provider) {
-      setFindings([]);
-      setFindingsLoading(false);
-      return;
-    }
-
-    setFindingsLoading(true);
-    void provider
-      .loadFindings()
-      .then((loaded) => {
-        if (generation === findingLoadGeneration) setFindings(loaded);
-      })
-      .catch((err: unknown) => {
-        if (generation !== findingLoadGeneration) return;
-        setFindings([]);
-        setFindingsError(err instanceof Error ? err.message : 'Failed to load quality findings');
-        setSidebarOpen(true);
-      })
-      .finally(() => {
-        if (generation === findingLoadGeneration) setFindingsLoading(false);
-      });
+    const reviewIdentity = props.reviewIdentity ?? '';
+    if (reviewIdentity === trackedReviewIdentity) return;
+    trackedReviewIdentity = reviewIdentity;
+    clearReviewState();
   });
+
+  createEffect(() => {
+    const open = props.open ?? true;
+    if (open === wasOpen) return;
+    wasOpen = open;
+    if (open) {
+      resetTransientState();
+    } else {
+      suspendDiffLoad();
+    }
+  });
+
+  onCleanup(invalidateFindingLoad);
 
   // Auto-open sidebar when human comments or provider findings are added.
   createEffect(() => {
@@ -215,6 +249,126 @@ export function ReviewProvider(props: ReviewProviderProps) {
 
   function replaceFindings(fn: (prev: QualityFinding[]) => QualityFinding[]) {
     setFindings(fn);
+  }
+
+  function sameReviewDiff(
+    left: ReviewDiffIdentity | null,
+    right: ReviewDiffIdentity | null,
+  ): boolean {
+    return Boolean(
+      left &&
+      right &&
+      left.reviewIdentity === right.reviewIdentity &&
+      left.diffIdentity === right.diffIdentity,
+    );
+  }
+
+  function beginDiffLoad() {
+    invalidateFindingLoad();
+    setFindings((prev) => reconcileQualityFindingsForDiff(prev, [], false));
+    resetTransientState();
+  }
+
+  function loadFindingsForDiff(next: ReviewDiffIdentity, files: FileDiff[]) {
+    const provider = props.findingProvider;
+    if (!provider) {
+      setFindings([]);
+      setFindingsLoading(false);
+      findingsLoadedFor = next;
+      findingsLoadedProvider = undefined;
+      return;
+    }
+
+    const generation = ++findingLoadGeneration;
+    setFindingsError('');
+    setFindingsLoading(true);
+    void provider
+      .loadFindings({
+        reviewIdentity: next.reviewIdentity,
+        diffIdentity: next.diffIdentity,
+        files,
+      })
+      .then((loaded) => {
+        if (
+          generation !== findingLoadGeneration ||
+          !sameReviewDiff(activeReviewDiff, next) ||
+          !wasOpen
+        ) {
+          return;
+        }
+        const reconciled = reconcileQualityFindingsForDiff(
+          loaded,
+          files,
+          true,
+          next.diffIdentity,
+          activeReviewDiff?.diffIdentity,
+        );
+        findingsLoadedFor = next;
+        findingsLoadedProvider = provider;
+        setFindings(reconciled);
+        setSidebarOpen(
+          untrack(annotations).length > 0 ||
+            reconciled.some(
+              (finding) => finding.state === 'open' && finding.freshness === 'current',
+            ),
+        );
+      })
+      .catch((err: unknown) => {
+        if (generation !== findingLoadGeneration || !sameReviewDiff(activeReviewDiff, next)) {
+          return;
+        }
+        setFindings([]);
+        setFindingsError(err instanceof Error ? err.message : 'Failed to load quality findings');
+        setSidebarOpen(true);
+      })
+      .finally(() => {
+        if (generation === findingLoadGeneration) setFindingsLoading(false);
+      });
+  }
+
+  function completeDiffLoad(diffIdentity: string, files: FileDiff[]) {
+    const next: ReviewDiffIdentity = {
+      reviewIdentity: props.reviewIdentity ?? '',
+      diffIdentity,
+    };
+    const sameDiff = sameReviewDiff(activeReviewDiff, next);
+
+    setAnnotations((prev) => transitionReviewAnnotations(prev, activeReviewDiff, next, files));
+    activeReviewDiff = next;
+
+    if (!sameDiff) {
+      invalidateFindingLoad();
+      setFindings([]);
+      setSelectedFindingIds(new Set<string>());
+      findingsLoadedFor = null;
+      findingsLoadedProvider = undefined;
+    } else if (
+      sameReviewDiff(findingsLoadedFor, next) &&
+      findingsLoadedProvider === props.findingProvider
+    ) {
+      setFindings((prev) =>
+        reconcileQualityFindingsForDiff(
+          prev,
+          files,
+          true,
+          findingsLoadedFor?.diffIdentity,
+          diffIdentity,
+        ),
+      );
+      setSidebarOpen(
+        annotations().length > 0 ||
+          findings().some((finding) => finding.state === 'open' && finding.freshness === 'current'),
+      );
+      return;
+    }
+
+    loadFindingsForDiff(next, files);
+  }
+
+  function suspendDiffLoad() {
+    invalidateFindingLoad();
+    setFindings((prev) => reconcileQualityFindingsForDiff(prev, [], false));
+    resetTransientState();
   }
 
   function handleSelection(selection: ContentSelection) {
@@ -327,6 +481,9 @@ export function ReviewProvider(props: ReviewProviderProps) {
     findingsLoading,
     findingsError,
     clearFindingsError: () => setFindingsError(''),
+    beginDiffLoad,
+    completeDiffLoad,
+    suspendDiffLoad,
     sidebarOpen,
     setSidebarOpen,
     scrollTarget,
