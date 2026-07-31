@@ -4,6 +4,7 @@ import {
   createDiffIdentity,
   createRequestGenerationGuard,
   transitionReviewAnnotations,
+  type ReviewDiffSnapshot,
 } from './diff-review-lifecycle';
 import type { FileDiff } from './unified-diff-parser';
 
@@ -18,7 +19,7 @@ function annotation(): ReviewAnnotation {
   };
 }
 
-function touchingDiff(): FileDiff[] {
+function renderedDiff(content = 'before();'): FileDiff[] {
   return [
     {
       path: 'src/app.ts',
@@ -31,8 +32,8 @@ function touchingDiff(): FileDiff[] {
           newStart: 10,
           newCount: 1,
           lines: [
-            { type: 'remove', content: 'before();', oldLine: 10, newLine: null },
-            { type: 'add', content: 'after();', oldLine: null, newLine: 10 },
+            { type: 'remove', content: 'base();', oldLine: 10, newLine: null },
+            { type: 'add', content, oldLine: null, newLine: 10 },
           ],
         },
       ],
@@ -40,23 +41,66 @@ function touchingDiff(): FileDiff[] {
   ];
 }
 
+function unrelatedDiff(): FileDiff {
+  return {
+    path: 'src/other.ts',
+    status: 'M',
+    binary: false,
+    hunks: [
+      {
+        oldStart: 2,
+        oldCount: 1,
+        newStart: 2,
+        newCount: 1,
+        lines: [
+          { type: 'remove', content: 'old();', oldLine: 2, newLine: null },
+          { type: 'add', content: 'newer();', oldLine: null, newLine: 2 },
+        ],
+      },
+    ],
+  };
+}
+
+function snapshot(
+  diffIdentity: string,
+  files: FileDiff[],
+  reviewIdentity = 'task-a',
+): ReviewDiffSnapshot {
+  return { reviewIdentity, diffIdentity, files };
+}
+
 describe('diff review lifecycle', () => {
   it('keeps durable comments when the exact same diff is reopened', () => {
     const annotations = [annotation()];
-    const identity = { reviewIdentity: 'task-a', diffIdentity: 'diff-a' };
+    const identity = snapshot('diff-a', renderedDiff());
 
-    expect(transitionReviewAnnotations(annotations, identity, identity, touchingDiff())).toBe(
-      annotations,
-    );
+    expect(transitionReviewAnnotations(annotations, identity, identity)).toBe(annotations);
   });
 
-  it('evicts touched comments only on an actual diff transition', () => {
+  it('keeps an annotation when a cumulative diff changes only an unrelated file', () => {
+    const annotations = [annotation()];
+    const previous = snapshot('diff-a', renderedDiff());
+    const next = snapshot('diff-b', [...renderedDiff(), unrelatedDiff()]);
+
+    expect(transitionReviewAnnotations(annotations, previous, next)).toBe(annotations);
+  });
+
+  it('evicts an annotation when its anchored content changes', () => {
     expect(
       transitionReviewAnnotations(
         [annotation()],
-        { reviewIdentity: 'task-a', diffIdentity: 'diff-a' },
-        { reviewIdentity: 'task-a', diffIdentity: 'diff-b' },
-        touchingDiff(),
+        snapshot('diff-a', renderedDiff()),
+        snapshot('diff-b', renderedDiff('after();')),
+      ),
+    ).toEqual([]);
+  });
+
+  it('evicts an annotation when its anchored range disappears from the diff', () => {
+    expect(
+      transitionReviewAnnotations(
+        [annotation()],
+        snapshot('diff-a', renderedDiff()),
+        snapshot('diff-b', [unrelatedDiff()]),
       ),
     ).toEqual([]);
   });
@@ -65,9 +109,8 @@ describe('diff review lifecycle', () => {
     expect(
       transitionReviewAnnotations(
         [annotation()],
-        { reviewIdentity: 'worktree-a', diffIdentity: 'same-diff' },
-        { reviewIdentity: 'worktree-b', diffIdentity: 'same-diff' },
-        [],
+        snapshot('same-diff', renderedDiff(), 'worktree-a'),
+        snapshot('same-diff', renderedDiff(), 'worktree-b'),
       ),
     ).toEqual([]);
   });

@@ -19,7 +19,11 @@ import {
   type QualityFinding,
   type QualityFindingProvider,
 } from '../lib/quality-findings';
-import { transitionReviewAnnotations, type ReviewDiffIdentity } from '../lib/diff-review-lifecycle';
+import {
+  transitionReviewAnnotations,
+  type ReviewDiffIdentity,
+  type ReviewDiffSnapshot,
+} from '../lib/diff-review-lifecycle';
 import type { FileDiff } from '../lib/unified-diff-parser';
 import type { ReviewAnnotation, DiffInteractionMode } from './review-types';
 
@@ -149,11 +153,12 @@ export function ReviewProvider(props: ReviewProviderProps) {
   const submission = createReviewSubmissionGuard();
   const openFindings = createMemo(() => findings().filter((finding) => finding.state === 'open'));
   let findingLoadGeneration = 0;
-  let activeReviewDiff: ReviewDiffIdentity | null = null;
+  let activeReviewDiff: ReviewDiffSnapshot | null = null;
   let findingsLoadedFor: ReviewDiffIdentity | null = null;
   let findingsLoadedProvider: QualityFindingProvider | undefined;
   let trackedReviewIdentity = untrack(() => props.reviewIdentity ?? '');
   let wasOpen = untrack(() => props.open ?? true);
+  let reviewLifecycleGeneration = 0;
 
   function invalidateFindingLoad() {
     findingLoadGeneration++;
@@ -171,6 +176,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
   }
 
   function clearReviewState() {
+    reviewLifecycleGeneration++;
     invalidateFindingLoad();
     setAnnotations([]);
     setFindings([]);
@@ -264,6 +270,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
   }
 
   function beginDiffLoad() {
+    reviewLifecycleGeneration++;
     invalidateFindingLoad();
     setFindings((prev) => reconcileQualityFindingsForDiff(prev, [], false));
     resetTransientState();
@@ -327,13 +334,16 @@ export function ReviewProvider(props: ReviewProviderProps) {
   }
 
   function completeDiffLoad(diffIdentity: string, files: FileDiff[]) {
-    const next: ReviewDiffIdentity = {
+    const next: ReviewDiffSnapshot = {
       reviewIdentity: props.reviewIdentity ?? '',
       diffIdentity,
+      files,
     };
     const sameDiff = sameReviewDiff(activeReviewDiff, next);
 
-    setAnnotations((prev) => transitionReviewAnnotations(prev, activeReviewDiff, next, files));
+    if (!sameDiff) reviewLifecycleGeneration++;
+
+    setAnnotations((prev) => transitionReviewAnnotations(prev, activeReviewDiff, next));
     activeReviewDiff = next;
 
     if (!sameDiff) {
@@ -366,6 +376,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
   }
 
   function suspendDiffLoad() {
+    reviewLifecycleGeneration++;
     invalidateFindingLoad();
     setFindings((prev) => reconcileQualityFindingsForDiff(prev, [], false));
     resetTransientState();
@@ -438,11 +449,13 @@ export function ReviewProvider(props: ReviewProviderProps) {
       .join('\n');
     const submittedAnnotationIds = new Set(submittedAnnotations.map((annotation) => annotation.id));
     const onSubmitted = props.onSubmitted;
+    const submittedReviewLifecycle = reviewLifecycleGeneration;
 
     await submission.run(async () => {
       setSubmitError('');
       try {
         await sendPrompt(taskId, agentId, prompt);
+        if (submittedReviewLifecycle !== reviewLifecycleGeneration) return;
         const remainingAnnotations = untrack(annotations).filter(
           (annotation) => !submittedAnnotationIds.has(annotation.id),
         );
@@ -460,6 +473,7 @@ export function ReviewProvider(props: ReviewProviderProps) {
         setSidebarOpen(hasRemainingActionableReview);
         if (!hasRemainingActionableReview) onSubmitted?.();
       } catch (err: unknown) {
+        if (submittedReviewLifecycle !== reviewLifecycleGeneration) return;
         setSubmitError(err instanceof Error ? err.message : 'Failed to send review');
         setSidebarOpen(true);
       }

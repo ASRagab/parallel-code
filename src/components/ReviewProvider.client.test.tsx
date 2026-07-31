@@ -5,6 +5,7 @@ import {
   createRequestGenerationGuard,
   type RequestGenerationGuard,
 } from '../lib/diff-review-lifecycle';
+import { sendPrompt } from '../store/tasks';
 import type {
   QualityFinding,
   QualityFindingLoadContext,
@@ -22,6 +23,7 @@ const disposers: Array<() => void> = [];
 afterEach(() => {
   while (disposers.length > 0) disposers.pop()?.();
   document.body.replaceChildren();
+  vi.mocked(sendPrompt).mockReset();
 });
 
 function finding(id: string): QualityFinding {
@@ -67,7 +69,10 @@ interface MountedReview {
   setReviewIdentity: Setter<string>;
 }
 
-function mountReview(findingProvider?: QualityFindingProvider): MountedReview {
+function mountReview(
+  findingProvider?: QualityFindingProvider,
+  onSubmitted?: () => void,
+): MountedReview {
   const [open, setOpen] = createSignal(true);
   const [reviewIdentity, setReviewIdentity] = createSignal('task-a:/worktree-a');
   let review: ReviewContextValue | undefined;
@@ -89,6 +94,7 @@ function mountReview(findingProvider?: QualityFindingProvider): MountedReview {
           reviewIdentity={reviewIdentity()}
           open={open()}
           compilePrompt={() => ''}
+          onSubmitted={onSubmitted}
         >
           <CaptureReview />
         </ReviewProvider>
@@ -219,6 +225,75 @@ describe('ReviewProvider client lifecycle', () => {
     expect(review.findings()).toMatchObject([
       { id: 'current-finding', freshness: 'current', state: 'open' },
     ]);
+  });
+
+  it('ignores a completed submission after navigation moves to another diff', async () => {
+    let resolveSend: (() => void) | undefined;
+    vi.mocked(sendPrompt).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    const onSubmitted = vi.fn();
+    const { review } = mountReview(undefined, onSubmitted);
+    review.beginDiffLoad();
+    review.completeDiffLoad('diff-a', renderedDiff('runA();'));
+    review.addAnnotation({
+      id: 'annotation-a',
+      filePath: 'src/app.ts',
+      startLine: 10,
+      endLine: 10,
+      selectedText: 'runA();',
+      comment: 'Review diff A.',
+    });
+
+    const submission = review.submitReview();
+    review.beginDiffLoad();
+    review.completeDiffLoad('diff-b', renderedDiff('runB();'));
+    review.addAnnotation({
+      id: 'annotation-b',
+      filePath: 'src/app.ts',
+      startLine: 10,
+      endLine: 10,
+      selectedText: 'runB();',
+      comment: 'Review diff B.',
+    });
+    resolveSend?.();
+    await submission;
+
+    expect(review.annotations().map((annotation) => annotation.id)).toEqual(['annotation-b']);
+    expect(review.submitError()).toBe('');
+    expect(onSubmitted).not.toHaveBeenCalled();
+  });
+
+  it('ignores a rejected submission after navigation moves to another diff', async () => {
+    let rejectSend: ((error: Error) => void) | undefined;
+    vi.mocked(sendPrompt).mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSend = reject;
+        }),
+    );
+    const { review } = mountReview();
+    review.beginDiffLoad();
+    review.completeDiffLoad('diff-a', renderedDiff('runA();'));
+    review.addAnnotation({
+      id: 'annotation-a',
+      filePath: 'src/app.ts',
+      startLine: 10,
+      endLine: 10,
+      selectedText: 'runA();',
+      comment: 'Review diff A.',
+    });
+
+    const submission = review.submitReview();
+    review.beginDiffLoad();
+    review.completeDiffLoad('diff-b', renderedDiff('runB();'));
+    rejectSend?.(new Error('diff A terminal failure'));
+    await submission;
+
+    expect(review.submitError()).toBe('');
   });
 });
 
