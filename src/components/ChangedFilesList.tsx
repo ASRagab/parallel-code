@@ -393,16 +393,28 @@ export function ChangedFilesList(props: ChangedFilesListProps) {
     const baseReport = baseCoverage();
     if (isCommitHashSelection(props.selectedCommit)) return null;
     if (!inventory && !taskReport && !baseReport) return null;
+    const comparison = buildCoverageComparison(
+      taskReport,
+      baseReport,
+      inventory ?? [],
+      baseHeadAt(),
+      baseBranchName(),
+      taskHeadAt(),
+    );
+    const inventoryState = inventory ? 'available' : comparisonInventoryState();
+
+    if (!inventory) {
+      return {
+        ...comparison,
+        files: Object.create(null) as Record<string, CoverageFileComparison>,
+        impactedUnchangedFiles: [],
+        inventoryState,
+      };
+    }
+
     return {
-      ...buildCoverageComparison(
-        taskReport,
-        baseReport,
-        inventory ?? [],
-        baseHeadAt(),
-        baseBranchName(),
-        taskHeadAt(),
-      ),
-      inventoryState: inventory ? 'available' : comparisonInventoryState(),
+      ...comparison,
+      inventoryState,
     };
   });
   const coveredEligibleFiles = createMemo(() =>
