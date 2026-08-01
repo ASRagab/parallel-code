@@ -190,6 +190,24 @@ describe('ReviewProvider client lifecycle', () => {
     expect(review.findings()).toEqual([]);
   });
 
+  it('evicts an expanded-context annotation after its diff location disappears', () => {
+    const { review } = mountReview();
+    review.completeDiffLoad('diff-a', renderedDiff());
+    review.addAnnotation({
+      id: 'expanded-context-annotation',
+      filePath: 'src/app.ts',
+      startLine: 50,
+      endLine: 50,
+      selectedText: 'expandedContext();',
+      comment: 'Review the expanded context line.',
+    });
+
+    review.beginDiffLoad();
+    review.completeDiffLoad('diff-b', []);
+
+    expect(review.annotations()).toEqual([]);
+  });
+
   it('ignores a provider response from a closed session after the same diff reopens', async () => {
     const requests: Array<{
       context: QualityFindingLoadContext;

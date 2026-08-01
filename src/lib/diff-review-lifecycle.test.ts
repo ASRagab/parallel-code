@@ -105,6 +105,23 @@ describe('diff review lifecycle', () => {
     ).toEqual([]);
   });
 
+  it('evicts an expanded-context annotation when its previous anchor cannot be reconstructed', () => {
+    const expandedContextAnnotation = {
+      ...annotation(),
+      startLine: 50,
+      endLine: 50,
+      selectedText: 'expandedContext();',
+    };
+
+    expect(
+      transitionReviewAnnotations(
+        [expandedContextAnnotation],
+        snapshot('diff-a', renderedDiff()),
+        snapshot('diff-b', []),
+      ),
+    ).toEqual([]);
+  });
+
   it('never carries durable comments into another worktree review', () => {
     expect(
       transitionReviewAnnotations(

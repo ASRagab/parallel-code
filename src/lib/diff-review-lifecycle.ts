@@ -81,7 +81,7 @@ export function transitionReviewAnnotations(
 
   const retained = annotations.filter((annotation) => {
     const previousAnchor = annotationContentAnchor(annotation, previous.files);
-    if (!previousAnchor) return true;
+    if (!previousAnchor) return false;
     const nextAnchor = annotationContentAnchor(annotation, next.files);
     return nextAnchor !== null && sameContentAnchor(previousAnchor, nextAnchor);
   });
