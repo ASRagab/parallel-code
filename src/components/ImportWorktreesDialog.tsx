@@ -15,6 +15,10 @@ interface ImportWorktreesDialogProps {
   onClose: () => void;
 }
 
+export function shouldDisableImportClose(importing: boolean): boolean {
+  return importing;
+}
+
 export function ImportWorktreesDialog(props: ImportWorktreesDialogProps) {
   const [candidates, setCandidates] = createSignal<ImportableWorktree[]>([]);
   const [selectedPaths, setSelectedPaths] = createSignal<Set<string>>(new Set());
@@ -100,6 +104,13 @@ export function ImportWorktreesDialog(props: ImportWorktreesDialogProps) {
     !!selectedAgent() &&
     visibleCandidates().some((candidate) => selectedPaths().has(candidate.path));
 
+  const closeDisabled = () => shouldDisableImportClose(importing());
+
+  function handleClose(): void {
+    if (closeDisabled()) return;
+    props.onClose();
+  }
+
   async function handleImport(): Promise<void> {
     const project = props.project;
     const agent = selectedAgent();
@@ -127,7 +138,7 @@ export function ImportWorktreesDialog(props: ImportWorktreesDialogProps) {
   }
 
   return (
-    <Dialog open={props.open} onClose={props.onClose} width="560px" panelStyle={{ gap: '18px' }}>
+    <Dialog open={props.open} onClose={handleClose} width="560px" panelStyle={{ gap: '18px' }}>
       <div style={{ display: 'flex', 'flex-direction': 'column', gap: '18px' }}>
         <div>
           <h2
@@ -302,15 +313,17 @@ export function ImportWorktreesDialog(props: ImportWorktreesDialogProps) {
         <div style={{ display: 'flex', 'justify-content': 'flex-end', gap: '8px' }}>
           <button
             type="button"
-            onClick={() => props.onClose()}
+            disabled={closeDisabled()}
+            onClick={handleClose}
             style={{
               padding: '9px 18px',
               background: theme.bgInput,
               border: `1px solid ${theme.border}`,
               'border-radius': '8px',
               color: theme.fgMuted,
-              cursor: 'pointer',
+              cursor: closeDisabled() ? 'not-allowed' : 'pointer',
               'font-size': '13px',
+              opacity: closeDisabled() ? '0.4' : '1',
             }}
           >
             Cancel
