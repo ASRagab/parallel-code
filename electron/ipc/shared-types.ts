@@ -106,6 +106,7 @@ export interface CommitInfo {
 
 export type PrCheckBucket = 'pass' | 'fail' | 'pending' | 'skipping' | 'cancel';
 export type PrChecksOverall = 'pending' | 'success' | 'failure' | 'none';
+export type PrReviewDecision = 'APPROVED' | 'CHANGES_REQUESTED' | 'REVIEW_REQUIRED';
 
 export interface PrCheckRun {
   name: string;
@@ -115,6 +116,10 @@ export interface PrCheckRun {
 export interface PrChecksUpdatePayload {
   taskId: string;
   overall: PrChecksOverall;
+  /** Additive review metadata from GitHub. Absent for older senders and null
+   *  when GitHub has no supported review decision. */
+  isDraft?: boolean;
+  reviewDecision?: PrReviewDecision | null;
   passing: number;
   pending: number;
   failing: number;

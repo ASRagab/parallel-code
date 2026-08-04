@@ -15,6 +15,8 @@ import type { Task } from './types';
 
 export interface PrChecksState {
   overall: PrChecksOverall;
+  isDraft?: boolean;
+  reviewDecision?: PrChecksUpdatePayload['reviewDecision'];
   passing: number;
   pending: number;
   failing: number;
@@ -173,6 +175,13 @@ export function startPrChecksSubscription(): () => void {
     }
     setPrChecks(msg.taskId, {
       overall: msg.overall as PrChecksOverall,
+      isDraft: msg.isDraft === true,
+      reviewDecision:
+        msg.reviewDecision === 'APPROVED' ||
+        msg.reviewDecision === 'CHANGES_REQUESTED' ||
+        msg.reviewDecision === 'REVIEW_REQUIRED'
+          ? msg.reviewDecision
+          : null,
       passing: typeof msg.passing === 'number' ? msg.passing : 0,
       pending: typeof msg.pending === 'number' ? msg.pending : 0,
       failing: typeof msg.failing === 'number' ? msg.failing : 0,

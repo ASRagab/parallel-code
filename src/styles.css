@@ -110,6 +110,131 @@ body.font-smoothing {
   border: 0;
 }
 
+.task-branch-info-bar {
+  container-name: task-branch-info;
+  container-type: inline-size;
+  min-width: 0;
+}
+
+.task-branch-info-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-pr-link {
+  flex: 0 0 auto;
+}
+
+.task-branch-project,
+.task-branch-source,
+.task-branch-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-pr-ci-state {
+  width: 10px;
+  height: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.task-pr-label,
+.task-pr-review-status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.task-pr-review-icon {
+  display: none;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.task-branch-project-label,
+.task-branch-source-label,
+.task-branch-name-label,
+.task-branch-path-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-branch-source-prefix {
+  flex: 0 0 auto;
+}
+
+.task-branch-path {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.task-branch-existing-worktree {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+@container task-branch-info (max-width: 720px) {
+  .task-branch-source {
+    display: none;
+  }
+}
+
+@container task-branch-info (max-width: 620px) {
+  .task-branch-path,
+  .task-branch-existing-worktree {
+    display: none;
+  }
+
+  .task-branch-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@container task-branch-info (max-width: 480px) {
+  .task-branch-project {
+    display: none;
+  }
+}
+
+@container task-branch-info (max-width: 420px) {
+  .task-pr-review-label {
+    display: none;
+  }
+
+  .task-pr-review-icon {
+    display: inline-flex;
+  }
+}
+
+@container task-branch-info (max-width: 340px) {
+  .task-branch-name,
+  .task-pr-prefix {
+    display: none;
+  }
+
+  .task-pr-ci-state {
+    order: 1;
+  }
+
+  .task-pr-review-status {
+    order: 2;
+  }
+
+  .task-pr-label {
+    order: 3;
+  }
+}
+
 .app-shell {
   position: relative;
   isolation: isolate;

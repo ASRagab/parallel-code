@@ -193,6 +193,8 @@ describe('fetchPrStatus', () => {
     const payload = {
       state: 'OPEN',
       headRefOid: 'abc123',
+      isDraft: true,
+      reviewDecision: 'CHANGES_REQUESTED',
       statusCheckRollup: [
         { name: 'build', status: 'COMPLETED', conclusion: 'SUCCESS' },
         { name: 'lint', status: 'IN_PROGRESS', conclusion: null },
@@ -208,8 +210,11 @@ describe('fetchPrStatus', () => {
     expect(calls.length).toBe(1);
     expect(calls[0][0]).toBe('pr');
     expect(calls[0][1]).toBe('view');
+    expect(calls[0]).toContain('state,headRefOid,isDraft,reviewDecision,statusCheckRollup');
     expect(out.state).toBe('OPEN');
     expect(out.headRefOid).toBe('abc123');
+    expect(out.isDraft).toBe(true);
+    expect(out.reviewDecision).toBe('CHANGES_REQUESTED');
     expect(out.checks).toEqual([
       { name: 'build', bucket: 'pass' },
       { name: 'lint', bucket: 'pending' },
@@ -223,7 +228,34 @@ describe('fetchPrStatus', () => {
   it('returns empty checks when response is malformed', async () => {
     stubGh((_args, cb) => cb(null, JSON.stringify(null), ''));
     const out = await fetchPrStatus('https://github.com/a/b/pull/1');
-    expect(out).toEqual({ state: 'UNKNOWN', headRefOid: '', checks: [] });
+    expect(out).toEqual({
+      state: 'UNKNOWN',
+      headRefOid: '',
+      isDraft: false,
+      reviewDecision: null,
+      checks: [],
+    });
+  });
+
+  it('ignores unknown review metadata from GitHub', async () => {
+    stubGh((_args, cb) =>
+      cb(
+        null,
+        JSON.stringify({
+          state: 'OPEN',
+          headRefOid: 'abc123',
+          isDraft: 'yes',
+          reviewDecision: 'NEW_REVIEW_STATE',
+          statusCheckRollup: [],
+        }),
+        '',
+      ),
+    );
+
+    await expect(fetchPrStatus('https://github.com/a/b/pull/1')).resolves.toMatchObject({
+      isDraft: false,
+      reviewDecision: null,
+    });
   });
 });
 
@@ -403,6 +435,98 @@ describe('refreshPrChecksWatcher', () => {
       overall: 'success',
       passing: 1,
     });
+  });
+
+  it('publishes review metadata while stale post-push CI remains hidden', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(0);
+    try {
+      const send = vi.fn();
+      initPrChecks(fakeWindow(send));
+      const statuses = [
+        {
+          state: 'OPEN',
+          headRefOid: 'old-sha',
+          isDraft: false,
+          reviewDecision: 'REVIEW_REQUIRED',
+          statusCheckRollup: [{ name: 'build', status: 'COMPLETED', conclusion: 'SUCCESS' }],
+        },
+        {
+          state: 'OPEN',
+          headRefOid: 'old-sha',
+          isDraft: true,
+          reviewDecision: 'CHANGES_REQUESTED',
+          statusCheckRollup: [{ name: 'build', status: 'COMPLETED', conclusion: 'FAILURE' }],
+        },
+      ];
+      let nextStatus = 0;
+      stubGh((_args, cb) => {
+        const payload = statuses[Math.min(nextStatus, statuses.length - 1)];
+        nextStatus += 1;
+        cb(null, JSON.stringify(payload), '');
+      });
+
+      startPrChecksWatcher({
+        taskId: 't1',
+        prUrl: 'https://github.com/a/b/pull/1',
+        taskName: 'test',
+      });
+      await flushPromises();
+      refreshPrChecksWatcher('t1');
+
+      now.mockReturnValue(30_000);
+      await __runTickForTests();
+
+      expect(send).toHaveBeenCalledTimes(3);
+      expect(send.mock.calls[2][1]).toMatchObject({
+        overall: 'pending',
+        isDraft: true,
+        reviewDecision: 'CHANGES_REQUESTED',
+        passing: 0,
+        pending: 1,
+        failing: 0,
+      });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('publishes a review-decision change when CI and the head SHA are unchanged', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(0);
+    try {
+      const send = vi.fn();
+      initPrChecks(fakeWindow(send));
+      let reviewDecision = 'REVIEW_REQUIRED';
+      stubGh((_args, cb) =>
+        cb(
+          null,
+          JSON.stringify({
+            state: 'OPEN',
+            headRefOid: 'same-sha',
+            isDraft: false,
+            reviewDecision,
+            statusCheckRollup: [{ name: 'build', status: 'COMPLETED', conclusion: 'SUCCESS' }],
+          }),
+          '',
+        ),
+      );
+
+      startPrChecksWatcher({
+        taskId: 't1',
+        prUrl: 'https://github.com/a/b/pull/1',
+        taskName: 'test',
+      });
+      await flushPromises();
+      expect(send).toHaveBeenCalledTimes(1);
+
+      reviewDecision = 'APPROVED';
+      now.mockReturnValue(6 * 60_000);
+      await __runTickForTests();
+
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send.mock.calls[1][1]).toMatchObject({ reviewDecision: 'APPROVED' });
+    } finally {
+      now.mockRestore();
+    }
   });
 });
 

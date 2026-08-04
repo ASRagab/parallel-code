@@ -16,6 +16,7 @@ export type {
   PrCheckRun,
   PrChecksOverall,
   PrChecksUpdatePayload,
+  PrReviewDecision,
   PtyOutput,
   StepEntry,
   WorktreeStatus,

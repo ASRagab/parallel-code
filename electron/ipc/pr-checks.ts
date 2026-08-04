@@ -8,6 +8,7 @@ import type {
   PrCheckRun,
   PrChecksOverall,
   PrChecksUpdatePayload,
+  PrReviewDecision,
 } from './shared-types.js';
 
 export type {
@@ -15,6 +16,7 @@ export type {
   PrCheckRun,
   PrChecksOverall,
   PrChecksUpdatePayload,
+  PrReviewDecision,
 } from './shared-types.js';
 
 const exec = promisify(execFile);
@@ -30,6 +32,8 @@ interface TaskEntry {
   taskName: string;
   prUrl: string;
   overall: PrChecksOverall;
+  isDraft: boolean;
+  reviewDecision: PrReviewDecision | null;
   passing: number;
   pending: number;
   failing: number;
@@ -105,6 +109,8 @@ export function startPrChecksWatcher(args: {
         taskName: args.taskName,
         prUrl: args.prUrl,
         overall: 'pending',
+        isDraft: false,
+        reviewDecision: null,
         passing: 0,
         pending: 0,
         failing: 0,
@@ -236,11 +242,20 @@ async function refreshOne(taskId: string): Promise<void> {
     Date.now() < entry.postPushRefreshUntil;
   if (waitingForPostPushHead) {
     entry.lastRefreshedAt = Date.now();
+    // Review metadata is PR-wide, so it can advance while old-head CI data
+    // remains suppressed during the post-push grace period.
+    if (entry.isDraft !== status.isDraft || entry.reviewDecision !== status.reviewDecision) {
+      entry.isDraft = status.isDraft;
+      entry.reviewDecision = status.reviewDecision;
+      sendUpdate(entry);
+    }
     return;
   }
   const nothingChanged =
     !firstRefresh &&
     entry.overall === overall &&
+    entry.isDraft === status.isDraft &&
+    entry.reviewDecision === status.reviewDecision &&
     entry.passing === counts.passing &&
     entry.pending === counts.pending &&
     entry.failing === counts.failing &&
@@ -256,6 +271,8 @@ async function refreshOne(taskId: string): Promise<void> {
   }
 
   entry.overall = overall;
+  entry.isDraft = status.isDraft;
+  entry.reviewDecision = status.reviewDecision;
   entry.passing = counts.passing;
   entry.pending = counts.pending;
   entry.failing = counts.failing;
@@ -295,6 +312,8 @@ function sendUpdate(entry: TaskEntry, opts?: { cleared?: boolean }): void {
   const payload: PrChecksUpdatePayload = {
     taskId: entry.taskId,
     overall: entry.overall,
+    isDraft: entry.isDraft,
+    reviewDecision: entry.reviewDecision,
     passing: entry.passing,
     pending: entry.pending,
     failing: entry.failing,
@@ -426,22 +445,32 @@ async function isDirectory(path: string): Promise<boolean> {
   }
 }
 
-/** Single gh call: combines PR state, head SHA, and check runs in one fork.
+/** Single gh call: combines PR state, review metadata, head SHA, and check runs in one fork.
  *  Uses `statusCheckRollup` which bundles check-run data with a normalised
  *  conclusion, so we map that to the same `bucket` taxonomy `gh pr checks`
  *  would have produced. The subcommand is `gh pr view`, not `gh pr status`
  *  (a different command). */
-export async function fetchPrStatus(
-  prUrl: string,
-): Promise<{ state: string; headRefOid: string; checks: PrCheckRun[] }> {
+export async function fetchPrStatus(prUrl: string): Promise<{
+  state: string;
+  headRefOid: string;
+  isDraft: boolean;
+  reviewDecision: PrReviewDecision | null;
+  checks: PrCheckRun[];
+}> {
   const { stdout } = await exec(
     'gh',
-    ['pr', 'view', prUrl, '--json', 'state,headRefOid,statusCheckRollup'],
+    ['pr', 'view', prUrl, '--json', 'state,headRefOid,isDraft,reviewDecision,statusCheckRollup'],
     { timeout: GH_TIMEOUT_MS, maxBuffer: GH_MAX_BUFFER },
   );
   const parsed: unknown = JSON.parse(stdout);
   if (!parsed || typeof parsed !== 'object') {
-    return { state: 'UNKNOWN', headRefOid: '', checks: [] };
+    return {
+      state: 'UNKNOWN',
+      headRefOid: '',
+      isDraft: false,
+      reviewDecision: null,
+      checks: [],
+    };
   }
   const r = parsed as Record<string, unknown>;
   const rollup = Array.isArray(r['statusCheckRollup']) ? r['statusCheckRollup'] : [];
@@ -463,8 +492,17 @@ export async function fetchPrStatus(
   return {
     state: asString(r['state']) ?? 'UNKNOWN',
     headRefOid: asString(r['headRefOid']) ?? '',
+    isDraft: r['isDraft'] === true,
+    reviewDecision: parseReviewDecision(r['reviewDecision']),
     checks,
   };
+}
+
+function parseReviewDecision(value: unknown): PrReviewDecision | null {
+  if (value === 'APPROVED' || value === 'CHANGES_REQUESTED' || value === 'REVIEW_REQUIRED') {
+    return value;
+  }
+  return null;
 }
 
 /** Maps GitHub's CheckRun status/conclusion (or legacy status-context state)

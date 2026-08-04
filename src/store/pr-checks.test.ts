@@ -18,9 +18,10 @@ vi.mock('./persistence', () => ({
 }));
 
 import { setStore, store } from './core';
-import { startPrChecksSubscription } from './pr-checks';
+import { getPrChecks, startPrChecksSubscription } from './pr-checks';
 
 const flushPromises = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const mockOn = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -28,13 +29,63 @@ beforeEach(() => {
   setStore('collapsedTaskOrder', []);
   setStore('tasks', {});
   mockSaveState.mockResolvedValue(undefined);
+  mockOn.mockReturnValue(vi.fn());
   vi.stubGlobal('window', {
     electron: {
       ipcRenderer: {
-        on: vi.fn(() => vi.fn()),
+        on: mockOn,
       },
     },
     setInterval: vi.fn(() => 1),
+  });
+});
+
+describe('startPrChecksSubscription updates', () => {
+  it('stores draft and review-decision metadata from the watcher', () => {
+    setStore('taskOrder', ['task-1']);
+    setStore('tasks', {
+      'task-1': {
+        id: 'task-1',
+        name: 'Task',
+        projectId: 'project-1',
+        branchName: 'task/task-1',
+        worktreePath: '/repo/.worktrees/task-1',
+        agentIds: [],
+        shellAgentIds: [],
+        notes: '',
+        lastPrompt: '',
+        gitIsolation: 'worktree',
+        prUrl: 'https://github.com/acme/app/pull/12',
+      },
+    });
+
+    let disposeRoot: (() => void) | undefined;
+    createRoot((dispose) => {
+      disposeRoot = dispose;
+      startPrChecksSubscription();
+    });
+    const updateHandler = mockOn.mock.calls.find(
+      ([channel]) => channel === IPC.PrChecksUpdate,
+    )?.[1] as ((data: unknown) => void) | undefined;
+
+    updateHandler?.({
+      taskId: 'task-1',
+      overall: 'success',
+      passing: 2,
+      pending: 0,
+      failing: 0,
+      checks: [],
+      isDraft: false,
+      reviewDecision: 'APPROVED',
+      checkedAt: '2026-08-04T10:00:00.000Z',
+      cleared: false,
+    });
+
+    expect(getPrChecks('task-1')).toMatchObject({
+      isDraft: false,
+      reviewDecision: 'APPROVED',
+    });
+    disposeRoot?.();
   });
 });
 
