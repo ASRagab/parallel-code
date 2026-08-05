@@ -55,7 +55,7 @@ describe('TaskBranchInfoBar PR review metadata', () => {
     const html = renderToString(() => TaskBranchInfoBar({ task, onEditProject: vi.fn() }));
 
     expect(html).toContain('PR #12');
-    expect(html).toContain('>Changes requested<');
+    expect(html).toContain('>Changes<');
     expect(html).toContain(
       'title="Review: changes requested\nCI running — 2 pending, 1 passing\nhttps://github.com/acme/app/pull/12"',
     );
@@ -63,19 +63,24 @@ describe('TaskBranchInfoBar PR review metadata', () => {
 
   it.each([
     ['APPROVED', 'Approved', 'approved', 'var(--success)'],
-    ['CHANGES_REQUESTED', 'Changes requested', 'changes-requested', 'var(--warning)'],
-    ['REVIEW_REQUIRED', 'Review needed', 'review-needed', 'var(--accent)'],
-  ])('shows the %s decision as %s with its semantic icon', (reviewDecision, label, icon, color) => {
-    mockGetPrChecks.mockReturnValue({
-      ...mockGetPrChecks(),
-      reviewDecision,
-    });
+    ['CHANGES_REQUESTED', 'Changes', 'changes-requested', 'var(--warning)'],
+    ['REVIEW_REQUIRED', 'Review', 'review-needed', 'var(--accent)'],
+  ])(
+    'shows the %s decision as compact color-coded %s text with its semantic icon',
+    (reviewDecision, label, icon, color) => {
+      mockGetPrChecks.mockReturnValue({
+        ...mockGetPrChecks(),
+        reviewDecision,
+      });
 
-    const html = renderToString(() => TaskBranchInfoBar({ task, onEditProject: vi.fn() }));
+      const html = renderToString(() => TaskBranchInfoBar({ task, onEditProject: vi.fn() }));
 
-    expect(html).toContain(`>${label}<`);
-    expect(html).toContain(`task-pr-review-icon--${icon}" style="color:${color}`);
-  });
+      expect(html).toContain(`<span class="task-pr-review-label">${label}</span>`);
+      expect(html).toContain(`class="task-pr-review-status" style="color:${color}`);
+      expect(html).toContain(`task-pr-review-icon--${icon}">`);
+      expect(html).not.toContain('background:color-mix');
+    },
+  );
 
   it('shows draft with its semantic icon ahead of any review decision', () => {
     mockGetPrChecks.mockReturnValue({
@@ -86,8 +91,8 @@ describe('TaskBranchInfoBar PR review metadata', () => {
 
     const html = renderToString(() => TaskBranchInfoBar({ task, onEditProject: vi.fn() }));
 
-    expect(html).toContain('>Draft<');
-    expect(html).toContain('task-pr-review-icon--draft" style="color:var(--fg-muted)');
+    expect(html).toContain('<span class="task-pr-review-label">Draft</span>');
+    expect(html).toContain('task-pr-review-icon--draft">');
     expect(html).not.toContain('>Approved<');
     expect(html).not.toContain('task-pr-review-icon--approved');
   });

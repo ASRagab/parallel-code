@@ -7,7 +7,6 @@ import { theme } from '../lib/theme';
 import { isMac } from '../lib/platform';
 import { parseGitHubUrl } from '../lib/github-url';
 import { abbreviateHomePath } from '../lib/path';
-import { badgeStyle } from '../lib/badgeStyle';
 import type { Task } from '../store/types';
 import { AlertIcon, CheckIcon, PencilIcon, PersonIcon } from './icons';
 
@@ -27,6 +26,7 @@ type ReviewStatusKind = 'approved' | 'changes-requested' | 'review-needed' | 'dr
 interface ReviewStatus {
   kind: ReviewStatusKind;
   label: string;
+  accessibleLabel: string;
   title: string;
   color: string;
 }
@@ -146,6 +146,7 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
               return {
                 kind: 'draft',
                 label: 'Draft',
+                accessibleLabel: 'Draft',
                 title: 'Draft pull request',
                 color: theme.fgMuted,
               };
@@ -154,7 +155,8 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
               case 'CHANGES_REQUESTED':
                 return {
                   kind: 'changes-requested',
-                  label: 'Changes requested',
+                  label: 'Changes',
+                  accessibleLabel: 'Changes requested',
                   title: 'Review: changes requested',
                   color: theme.warning,
                 };
@@ -162,13 +164,15 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
                 return {
                   kind: 'approved',
                   label: 'Approved',
+                  accessibleLabel: 'Approved',
                   title: 'Review: approved',
                   color: theme.success,
                 };
               case 'REVIEW_REQUIRED':
                 return {
                   kind: 'review-needed',
-                  label: 'Review needed',
+                  label: 'Review',
+                  accessibleLabel: 'Review needed',
                   title: 'Review required',
                   color: theme.accent,
                 };
@@ -202,7 +206,7 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
           const buttonTitle = () =>
             [reviewStatus()?.title, ciStatus()?.title, url()].filter(Boolean).join('\n');
           const buttonLabel = () =>
-            [`PR #${prNumber()}`, reviewStatus()?.label, ciStatus()?.label]
+            [`PR #${prNumber()}`, reviewStatus()?.accessibleLabel, ciStatus()?.label]
               .filter(Boolean)
               .join(', ');
           return (
@@ -244,14 +248,9 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
               </span>
               <Show when={reviewStatus()}>
                 {(review) => (
-                  <span class="task-pr-review-status">
-                    <span class="task-pr-review-label" style={badgeStyle(review().color)}>
-                      {review().label}
-                    </span>
-                    <span
-                      class={`task-pr-review-icon task-pr-review-icon--${review().kind}`}
-                      style={{ color: review().color }}
-                    >
+                  <span class="task-pr-review-status" style={{ color: review().color }}>
+                    <span class="task-pr-review-label">{review().label}</span>
+                    <span class={`task-pr-review-icon task-pr-review-icon--${review().kind}`}>
                       <ReviewStatusIcon kind={review().kind} />
                     </span>
                   </span>
