@@ -107,6 +107,22 @@ describe('TaskBranchInfoBar PR review metadata', () => {
   });
 });
 
+describe('TaskBranchInfoBar source link', () => {
+  it('renders a compact issue number without removing the full accessible label', () => {
+    const issueTask: Task = {
+      ...task,
+      githubUrl: 'https://github.com/acme/app/issues/249',
+    };
+
+    const html = renderToString(() =>
+      TaskBranchInfoBar({ task: issueTask, onEditProject: vi.fn() }),
+    );
+
+    expect(html).toContain('class="task-branch-source-compact-label">#249</span>');
+    expect(html).toContain('aria-label="Source: acme/app/issues/249"');
+  });
+});
+
 describe('TaskBranchInfoBar responsive styles', () => {
   const css = readFileSync(resolve(__dirname, '../styles.css'), 'utf8');
 
@@ -117,7 +133,6 @@ describe('TaskBranchInfoBar responsive styles', () => {
   });
 
   it.each([
-    { width: 720, className: 'task-branch-source' },
     { width: 620, className: 'task-branch-path' },
     { width: 620, className: 'task-branch-existing-worktree' },
     { width: 480, className: 'task-branch-project' },
@@ -129,6 +144,15 @@ describe('TaskBranchInfoBar responsive styles', () => {
       new RegExp(
         `@container\\s+task-branch-info\\s+\\(max-width:\\s*${width}px\\)[\\s\\S]*?\\.${className}\\b[^{]*{[^}]*display:\\s*none`,
       ),
+    );
+  });
+
+  it('keeps a compact source link visible at 720px', () => {
+    expect(css).not.toMatch(
+      /@container\s+task-branch-info\s+\(max-width:\s*720px\)[\s\S]*?\.task-branch-source\s*{[^}]*display:\s*none/,
+    );
+    expect(css).toMatch(
+      /@container\s+task-branch-info\s+\(max-width:\s*720px\)[\s\S]*?\.task-branch-source-compact-label\s*{[^}]*display:\s*inline/,
     );
   });
 

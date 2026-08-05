@@ -171,6 +171,11 @@ body.font-smoothing {
   flex: 0 0 auto;
 }
 
+.task-branch-source-compact-label {
+  display: none;
+  flex: 0 0 auto;
+}
+
 .task-branch-path {
   flex: 1 1 auto;
   min-width: 0;
@@ -182,8 +187,13 @@ body.font-smoothing {
 }
 
 @container task-branch-info (max-width: 720px) {
-  .task-branch-source {
+  .task-branch-source-prefix,
+  .task-branch-source-label {
     display: none;
+  }
+
+  .task-branch-source-compact-label {
+    display: inline;
   }
 }
 
