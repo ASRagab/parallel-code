@@ -1,7 +1,7 @@
 import { onMount, onCleanup, createSignal, createEffect, untrack, Show, For } from 'solid-js';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { TERMINAL_SCROLLBACK_LINES, base64ToUint8Array } from '../lib/terminalConstants';
+import { TERMINAL_SCROLL_OPTIONS, base64ToUint8Array } from '../lib/terminalConstants';
 import { createTerminalHttpLinkHandler } from '../lib/terminalLinks';
 import { fetchNotes, saveNotes } from './api';
 import { agentStatusDisplay } from './attention';
@@ -209,7 +209,7 @@ export function AgentDetail(props: AgentDetailProps) {
       fontSize: 10,
       fontFamily: TERM_FONT_FAMILY,
       theme: { background: '#0b0f14' },
-      scrollback: TERMINAL_SCROLLBACK_LINES,
+      ...TERMINAL_SCROLL_OPTIONS,
       cursorBlink: false,
       disableStdin: true,
       convertEol: false,

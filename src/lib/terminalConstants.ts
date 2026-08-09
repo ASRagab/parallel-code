@@ -2,6 +2,12 @@
 // without turning xterm into a memory landfill.
 export const TERMINAL_SCROLLBACK_LINES = 10_000;
 
+export const TERMINAL_SCROLL_OPTIONS = {
+  scrollback: TERMINAL_SCROLLBACK_LINES,
+  scrollSensitivity: 4,
+  fastScrollSensitivity: 5,
+} as const;
+
 // Pre-computed base64 lookup table — avoids atob() intermediate string allocation.
 const B64_LOOKUP = new Uint8Array(128);
 for (let i = 0; i < 64; i++) {

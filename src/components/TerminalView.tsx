@@ -9,7 +9,7 @@ import { TerminalBookmarkGutter } from './TerminalBookmarks';
 import { invoke, fireAndForget, Channel } from '../lib/ipc';
 import { IPC } from '../../electron/ipc/channels';
 import { getTerminalFontFamily } from '../lib/fonts';
-import { TERMINAL_SCROLLBACK_LINES, base64ToUint8Array } from '../lib/terminalConstants';
+import { TERMINAL_SCROLL_OPTIONS, base64ToUint8Array } from '../lib/terminalConstants';
 import {
   getTerminalSearchDecorations,
   getTerminalTheme,
@@ -421,7 +421,7 @@ export function TerminalView(props: TerminalViewProps) {
       screenReaderMode: store.terminalScreenReaderMode,
       theme: activeTerminalTheme(),
       allowProposedApi: true,
-      scrollback: TERMINAL_SCROLLBACK_LINES,
+      ...TERMINAL_SCROLL_OPTIONS,
       disableStdin: taskPtyDetached(),
       linkHandler: {
         activate: openTerminalHttpLinkWithModifier,
