@@ -9,6 +9,11 @@ import {
   normalizeExcludeLine,
   resolveGitInfoExcludePath,
 } from './git-exclude.js';
+import {
+  findForeignOwnedEntries,
+  foreignOwnedRemovalError,
+  reclaimOwnership,
+} from './worktree-cleanup.js';
 import type { ChangedFile, CommitInfo, FileDiffResult, GitIgnoredEntry } from './shared-types.js';
 
 export type { ChangedFile, CommitInfo, FileDiffResult, GitIgnoredEntry } from './shared-types.js';
@@ -808,6 +813,60 @@ async function computeBranchDiffStats(
   return { linesAdded, linesRemoved };
 }
 
+/**
+ * Remove a worktree directory, trying progressively harder:
+ * `git worktree remove` → direct removal (retried, because Docker Desktop's
+ * VirtioFS bind-mount may still be releasing after the container exits) →
+ * ownership reclaim for files a root container left behind.
+ *
+ * Throws with an actionable message when the leftovers need `sudo` to clear.
+ */
+async function forceRemoveWorktreeDir(repoRoot: string, worktreePath: string): Promise<void> {
+  try {
+    await exec('git', ['worktree', 'remove', '--force', worktreePath], { cwd: repoRoot });
+    return;
+  } catch {
+    // Fall through to direct removal.
+  }
+
+  const rmError = await removeDirWithRetries(worktreePath);
+  if (!rmError) return;
+
+  const uid = process.getuid?.() ?? -1;
+  const gid = process.getgid?.() ?? -1;
+  const foreign = findForeignOwnedEntries(worktreePath, uid);
+  if (foreign.length === 0) throw rmError;
+
+  const reclaimFailure = await reclaimOwnership(worktreePath, uid, gid);
+  if (!reclaimFailure) {
+    const retryError = await removeDirWithRetries(worktreePath);
+    if (!retryError) return;
+  }
+  // Either the reclaim could not run, or it ran without freeing the files
+  // (macOS bind mounts can drop the chown). Both need the same manual step.
+  throw foreignOwnedRemovalError(
+    worktreePath,
+    foreign,
+    reclaimFailure ?? 'ownership reclaim did not release the files',
+  );
+}
+
+/** Delete a directory tree, retrying with backoff. Returns the last error, or undefined on success. */
+async function removeDirWithRetries(dirPath: string): Promise<unknown> {
+  const delays = [0, 500, 1500, 3000];
+  let lastErr: unknown;
+  for (const delay of delays) {
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+    try {
+      fs.rmSync(dirPath, { recursive: true, force: true });
+      return undefined;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  return lastErr;
+}
+
 // --- Public functions (used by tasks.ts and register.ts) ---
 
 export async function createWorktree(
@@ -822,11 +881,7 @@ export async function createWorktree(
   if (forceClean) {
     // Clean up stale worktree/branch from a previous session that wasn't properly removed
     if (fs.existsSync(worktreePath)) {
-      try {
-        await exec('git', ['worktree', 'remove', '--force', worktreePath], { cwd: repoRoot });
-      } catch {
-        fs.rmSync(worktreePath, { recursive: true, force: true });
-      }
+      await forceRemoveWorktreeDir(repoRoot, worktreePath);
       await exec('git', ['worktree', 'prune'], { cwd: repoRoot }).catch((e) =>
         console.warn('git worktree prune failed:', e),
       );
@@ -1094,25 +1149,7 @@ export async function removeWorktree(
   if (!fs.existsSync(repoRoot)) return;
 
   if (fs.existsSync(worktreePath)) {
-    try {
-      await exec('git', ['worktree', 'remove', '--force', worktreePath], { cwd: repoRoot });
-    } catch {
-      // Fallback: direct directory removal. Docker Desktop's VirtioFS bind-mount
-      // may still be releasing after the container exits — retry with backoff.
-      const delays = [0, 500, 1500, 3000];
-      let lastErr: unknown;
-      for (const delay of delays) {
-        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-        try {
-          fs.rmSync(worktreePath, { recursive: true, force: true });
-          lastErr = undefined;
-          break;
-        } catch (e) {
-          lastErr = e;
-        }
-      }
-      if (lastErr) throw lastErr;
-    }
+    await forceRemoveWorktreeDir(repoRoot, worktreePath);
   }
 
   // Prune stale worktree entries
