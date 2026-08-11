@@ -42,6 +42,7 @@ import {
   checkForUpdates,
 } from '../store/store';
 import { CustomAgentEditor } from './CustomAgentEditor';
+import { AgentEnvFileEditor } from './AgentEnvFileEditor';
 import { mod } from '../lib/platform';
 import { DEFAULT_DOCKER_IMAGE, PROJECT_DOCKERFILE_RELATIVE_PATH } from '../lib/docker';
 
@@ -793,6 +794,10 @@ export function SettingsDialog(props: SettingsDialogProps) {
             </div>
             <CustomAgentEditor />
           </div>
+
+          <SettingsSection title="Agent Environment">
+            <AgentEnvFileEditor />
+          </SettingsSection>
 
           <div style={{ display: 'flex', 'flex-direction': 'column', gap: '10px' }}>
             <div

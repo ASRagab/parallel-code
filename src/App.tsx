@@ -416,6 +416,7 @@ function App() {
           propagateSkipPermissions: task.propagateSkipPermissions ?? false,
           agentCommand: agentDef?.command ?? 'claude',
           agentArgs: agentDef?.args ?? [],
+          agentEnvFile: agentDef ? store.agentEnvFiles[agentDef.id] : undefined,
           dockerContainerName,
           dockerImage: task.dockerMode ? task.dockerImage : undefined,
         })

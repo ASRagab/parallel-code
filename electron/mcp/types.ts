@@ -78,6 +78,9 @@ export interface CoordinatorState {
   } | null;
   /** Per-coordinator agent spawn defaults; set when the coordinator registers. */
   spawnDefaults: { command: string; args: string[] };
+  /** Env file the coordinator's own agent uses; sub-tasks inherit it so they
+   *  get the same credentials. Undefined when no env file is configured. */
+  agentEnvFile?: string;
   pendingNotifications: PendingNotification[];
   /** batchId → array of pendingNotification IDs included in that batch */
   stagedBatches: Map<string, string[]>;

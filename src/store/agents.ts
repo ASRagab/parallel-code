@@ -153,9 +153,25 @@ export function removeCustomAgent(agentId: string): void {
   setStore(
     produce((s) => {
       s.customAgents = s.customAgents.filter((a) => a.id !== agentId);
+      // Custom agent ids are slugs of the name, so a later agent with the same
+      // name would otherwise silently inherit this one's env file.
+      delete s.agentEnvFiles[agentId];
     }),
   );
   void refreshAvailableAgents();
+}
+
+/** Point an agent at a `KEY=VALUE` env file, or clear it with an empty path.
+ *  Applies to built-in and custom agents alike, and takes effect on the next
+ *  spawn — the file itself is read by the main process, never by the renderer. */
+export function setAgentEnvFile(agentId: string, filePath: string): void {
+  const trimmed = filePath.trim();
+  setStore(
+    produce((s) => {
+      if (trimmed) s.agentEnvFiles[agentId] = trimmed;
+      else delete s.agentEnvFiles[agentId];
+    }),
+  );
 }
 
 /** Rebuild availableAgents from backend defaults + custom agents. */

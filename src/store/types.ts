@@ -266,6 +266,7 @@ export interface PersistedState {
   shareDockerAgentAuth?: boolean;
   askCodeProvider?: 'claude' | 'minimax';
   customAgents?: AgentDef[];
+  agentEnvFiles?: Record<string, string>;
   keybindingMigrationDismissed?: boolean;
   focusMode?: boolean;
   verboseLogging?: boolean;
@@ -323,6 +324,9 @@ export interface AppStore {
   activeAgentId: string | null;
   availableAgents: AgentDef[];
   customAgents: AgentDef[];
+  /** Agent id → path of a `KEY=VALUE` file merged into that agent's environment
+   *  at spawn. Only the path is stored here; secrets stay in the file on disk. */
+  agentEnvFiles: Record<string, string>;
   showNewTaskDialog: boolean;
   sidebarVisible: boolean;
   /** User-dragged sizes keyed by `${persistKey}:${childId}`. Presence of an

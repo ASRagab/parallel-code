@@ -8,6 +8,7 @@ import type { BrowserWindow } from 'electron';
 import { RingBuffer } from '../remote/ring-buffer.js';
 import { resolveUserShell } from '../user-shell.js';
 import { ensureClaudeSandboxFiles, ensureSandboxExcludes } from './git.js';
+import { loadEnvFile } from './env-file.js';
 import { debug as logDebug } from '../log.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,17 +70,61 @@ const BATCH_MAX = 64 * 1024;
 const BATCH_INTERVAL = 8; // ms
 const TAIL_CAP = 8 * 1024;
 const MAX_LINES = 50;
-const ENV_BLOCK_LIST = new Set([
+// Vars an env source must never set: each one turns "supply a credential" into
+// "run arbitrary code in every process the agent starts", or redirects the
+// agent's traffic. Now that a file on disk is a first-class env source, anyone
+// who can write that file would otherwise inherit the agent's privileges.
+export const ENV_BLOCK_LIST = new Set([
   'PATH',
   'HOME',
   'USER',
   'SHELL',
   'LD_PRELOAD',
   'LD_LIBRARY_PATH',
+  'LD_AUDIT',
   'DYLD_INSERT_LIBRARIES',
+  'DYLD_LIBRARY_PATH',
+  'DYLD_FRAMEWORK_PATH',
+  'DYLD_FALLBACK_LIBRARY_PATH',
   'NODE_OPTIONS',
+  // Node reads this for TLS trust; an attacker CA plus a *_BASE_URL override
+  // would silently MITM the agent's API traffic, key included.
+  'NODE_EXTRA_CA_CERTS',
+  // bash sources BASH_ENV for non-interactive shells — i.e. every `bash -c`
+  // an agent runs for its own tool calls. ENV is the POSIX sh equivalent.
+  'BASH_ENV',
+  'ENV',
+  // git runs these as commands, and agents run git constantly. The config
+  // overrides are supersets that can set core.sshCommand, core.pager,
+  // diff.external or credential.helper directly, so blocking only the named
+  // vars would leave the guard trivially routed around. GIT_CONFIG_COUNT is
+  // the gate for GIT_CONFIG_KEY_n/VALUE_n — git ignores those without it.
+  'GIT_SSH_COMMAND',
+  'GIT_EXTERNAL_DIFF',
+  'GIT_PAGER',
+  'GIT_CONFIG_COUNT',
+  'GIT_CONFIG_GLOBAL',
+  'GIT_CONFIG_SYSTEM',
+  'PERL5OPT',
+  'PERL5LIB',
+  'RUBYOPT',
+  'RUBYLIB',
+  'PYTHONSTARTUP',
+  'PYTHONPATH',
+  // NODE_TLS_REJECT_UNAUTHORIZED=0 plus a proxy achieves the same MITM that
+  // blocking NODE_EXTRA_CA_CERTS above is meant to prevent.
+  'NODE_TLS_REJECT_UNAUTHORIZED',
   'ELECTRON_RUN_AS_NODE',
   'PARALLEL_CODE_MCP_TOKEN',
+  // Docker mode spawns the docker client with this env so `-e KEY` can pick up
+  // values without exposing them in argv. These would redirect that client at
+  // another daemon, so only the real process environment may set them.
+  'DOCKER_HOST',
+  'DOCKER_CONTEXT',
+  'DOCKER_CONFIG',
+  'DOCKER_CERT_PATH',
+  'DOCKER_TLS_VERIFY',
+  'DOCKER_API_VERSION',
 ]);
 
 export interface SpawnAgentArgs {
@@ -89,6 +134,9 @@ export interface SpawnAgentArgs {
   args: string[];
   cwd: string;
   env: Record<string, string>;
+  /** Optional path to a `KEY=VALUE` file whose contents are merged into the
+   *  spawn environment. Re-read on every spawn so edits need no app restart. */
+  envFile?: string;
   cols: number;
   rows: number;
   isShell?: boolean;
@@ -140,7 +188,9 @@ function redactDockerArgs(args: string[]): string[] {
 
 function redactEnvAssignment(value: string): string {
   const eqIdx = value.indexOf('=');
-  if (eqIdx <= 0) return '<redacted>';
+  // Name-only `-e KEY` carries no value to leak, and the name aids debugging.
+  if (eqIdx < 0) return value;
+  if (eqIdx === 0) return '<redacted>';
   return `${value.slice(0, eqIdx)}=<redacted>`;
 }
 
@@ -178,14 +228,20 @@ function copyProcessEnv(): Record<string, string> {
   return env;
 }
 
-export function buildPtySpawnEnv(rendererEnv: Record<string, string> = {}): Record<string, string> {
+export function buildPtySpawnEnv(
+  rendererEnv: Record<string, string> = {},
+  fileEnv: Record<string, string> = {},
+): Record<string, string> {
   const spawnEnv: Record<string, string> = {
     ...copyProcessEnv(),
     TERM: 'xterm-256color',
     COLORTERM: 'truecolor',
   };
 
-  for (const [key, value] of Object.entries(rendererEnv)) {
+  // Both override the inherited login-shell environment, per-task env winning
+  // over the file, and both stay subject to ENV_BLOCK_LIST so the main process
+  // remains authoritative over PATH/HOME/SHELL and the MCP token.
+  for (const [key, value] of Object.entries({ ...fileEnv, ...rendererEnv })) {
     if (!ENV_BLOCK_LIST.has(key)) spawnEnv[key] = value;
   }
 
@@ -242,7 +298,6 @@ function buildPtySpawnSpec(
   command: string,
   cwd: string,
   spawnEnv: Record<string, string>,
-  filteredEnv: Record<string, string>,
 ): PtySpawnSpec {
   const containerName = args.dockerMode ? `parallel-code-${args.agentId.slice(0, 12)}` : null;
 
@@ -301,7 +356,9 @@ function buildPtySpawnSpec(
       ...args.args,
     ],
     cwd: undefined,
-    env: filteredEnv,
+    // The docker client needs the same env the `-e KEY` flags name, so it can
+    // read those values from its own environment instead of from argv.
+    env: spawnEnv,
     containerName,
   };
 }
@@ -456,10 +513,13 @@ export function spawnAgent(win: BrowserWindow, args: SpawnAgentArgs): void {
     validateCommand('docker');
   }
 
+  // Load before cleanupExistingSession so a bad env file path surfaces as a
+  // spawn error instead of killing the running session it was meant to replace.
+  const fileEnv = args.envFile?.trim() ? loadEnvFile(args.envFile) : {};
+
   cleanupExistingSession(args.agentId, existing);
 
-  const filteredEnv = copyProcessEnv();
-  const spawnEnv = buildPtySpawnEnv(args.env);
+  const spawnEnv = buildPtySpawnEnv(args.env, fileEnv);
 
   // Backfill sandbox placeholders for pre-existing worktrees (and anywhere
   // Claude Code may launch). See ensureClaudeSandboxFiles for the why.
@@ -468,7 +528,7 @@ export function spawnAgent(win: BrowserWindow, args: SpawnAgentArgs): void {
     ensureSandboxExcludes(cwd);
   }
 
-  const spawnSpec = buildPtySpawnSpec(args, command, cwd, spawnEnv, filteredEnv);
+  const spawnSpec = buildPtySpawnSpec(args, command, cwd, spawnEnv);
 
   logDebug('pty', `spawn command ${args.agentId}`, {
     taskId: args.taskId,
@@ -696,11 +756,16 @@ function isBlockedDockerEnvKey(key: string): boolean {
   return false;
 }
 
+/** Emits the name-only `-e KEY` form, which tells docker to read the value from
+ *  its own environment. The `-e KEY=VALUE` form would put API keys in the
+ *  `docker run` argv, which any local user can read via `ps` or /proc/<pid>/cmdline
+ *  for as long as the container runs. Callers must therefore spawn the docker
+ *  client with the same env these names come from. */
 function buildDockerEnvFlags(env: Record<string, string>): string[] {
   const flags: string[] = [];
   for (const [key, value] of Object.entries(env)) {
     if (!isBlockedDockerEnvKey(key) && value !== undefined) {
-      flags.push('-e', `${key}=${value}`);
+      flags.push('-e', key);
     }
   }
   return flags;

@@ -308,6 +308,7 @@ export async function createTask(opts: CreateTaskOptions): Promise<string> {
         propagateSkipPermissions: opts.propagateSkipPermissions ?? false,
         agentCommand: agentDef.command,
         agentArgs: agentDef.args,
+        agentEnvFile: store.agentEnvFiles[agentDef.id],
         dockerContainerName,
         dockerImage,
       });
@@ -1445,6 +1446,9 @@ export function retryTaskMcpStartup(taskId: string): Promise<void> {
       propagateSkipPermissions: task.propagateSkipPermissions ?? false,
       agentCommand: agentDef?.command ?? 'claude',
       agentArgs: agentDef?.args ?? [],
+      // Sub-tasks are spawned by the coordinator in the main process, which has
+      // no access to the settings store — hand it the env file up front.
+      agentEnvFile: agentDef ? store.agentEnvFiles[agentDef.id] : undefined,
       dockerContainerName,
       dockerImage: task.dockerImage,
     })

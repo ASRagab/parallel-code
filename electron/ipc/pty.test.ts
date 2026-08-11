@@ -237,6 +237,39 @@ describe('buildPtySpawnEnv', () => {
     expect(env.CLAUDECODE).toBeUndefined();
     expect(env.CLAUDE_CODE_SESSION).toBeUndefined();
   });
+
+  it('merges agent env file values over the inherited environment', () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'from-login-shell');
+
+    const env = buildPtySpawnEnv(
+      {},
+      {
+        ANTHROPIC_API_KEY: 'from-env-file',
+        ANTHROPIC_CUSTOM_HEADERS: 'x-api-key: abc\nx-tenant: acme',
+      },
+    );
+
+    expect(env.ANTHROPIC_API_KEY).toBe('from-env-file');
+    expect(env.ANTHROPIC_CUSTOM_HEADERS).toBe('x-api-key: abc\nx-tenant: acme');
+  });
+
+  it('keeps the block list authoritative over agent env file values', () => {
+    vi.stubEnv('PARALLEL_CODE_MCP_TOKEN', 'host-token');
+
+    const env = buildPtySpawnEnv(
+      {},
+      { PATH: '/tmp/bad-path', HOME: '/tmp/bad-home', PARALLEL_CODE_MCP_TOKEN: 'file-token' },
+    );
+
+    expect(env.PATH).not.toBe('/tmp/bad-path');
+    expect(env.HOME).not.toBe('/tmp/bad-home');
+    expect(env.PARALLEL_CODE_MCP_TOKEN).toBe('host-token');
+  });
+
+  it('lets per-task renderer env win over the agent env file', () => {
+    const env = buildPtySpawnEnv({ ANTHROPIC_API_KEY: 'per-task' }, { ANTHROPIC_API_KEY: 'file' });
+    expect(env.ANTHROPIC_API_KEY).toBe('per-task');
+  });
 });
 
 describe('spawnAgent docker mode', () => {
@@ -295,12 +328,28 @@ describe('spawnAgent docker mode', () => {
     );
 
     const envFlags = getFlagValues(getLastSpawnCall().args, '-e');
-    expect(envFlags).toContain('API_KEY=secret');
-    expect(envFlags.filter((value) => value.startsWith('HOME='))).toEqual([
+    expect(envFlags).toContain('API_KEY');
+    // HOME may appear only as the explicit container assignment — never
+    // forwarded by name, and never carrying a host or renderer path.
+    expect(envFlags.filter((value) => value === 'HOME' || value.startsWith('HOME='))).toEqual([
       `HOME=${DOCKER_CONTAINER_HOME}/agent-${agentId}`,
     ]);
     expect(envFlags).not.toContain(`HOME=${hostHome}`);
     expect(envFlags).not.toContain(`HOME=${rendererHome}`);
+  });
+
+  it('passes env values through the docker client env, never in argv', () => {
+    // `-e KEY=VALUE` would expose API keys via ps / /proc/<pid>/cmdline for the
+    // lifetime of the container. Values must reach docker via its own env.
+    spawnAgent(
+      createMockWindow(),
+      buildSpawnArgs({ env: { ANTHROPIC_API_KEY: 'sk-ant-super-secret' } }),
+    );
+
+    const { args, options } = getLastSpawnCall();
+    expect(getFlagValues(args, '-e')).toContain('ANTHROPIC_API_KEY');
+    expect(args.join(' ')).not.toContain('sk-ant-super-secret');
+    expect(options.env.ANTHROPIC_API_KEY).toBe('sk-ant-super-secret');
   });
 
   it('redacts docker env values in spawn debug logs', () => {
@@ -318,8 +367,10 @@ describe('spawnAgent docker mode', () => {
     const logged = ctx.args.join(' ');
 
     expect(ctx.command).toBe('docker');
-    expect(getFlagValues(ctx.args, '-e')).toContain('API_KEY=<redacted>');
-    expect(getFlagValues(ctx.args, '-e')).toContain('NO_VALUE=<redacted>');
+    // Name-only flags carry no value, so the name is logged as-is; only the
+    // explicit `HOME=<path>` assignment still needs redacting.
+    expect(getFlagValues(ctx.args, '-e')).toContain('API_KEY');
+    expect(getFlagValues(ctx.args, '-e')).toContain('NO_VALUE');
     expect(getFlagValues(ctx.args, '-e')).toContain(`HOME=<redacted>`);
     expect(logged).not.toContain('secret-api-key');
     expect(logged).not.toContain(`HOME=${DOCKER_CONTAINER_HOME}`);

@@ -36,6 +36,7 @@ export function persistedSnapshot(): string {
     inactiveColumnOpacity: store.inactiveColumnOpacity,
     editorCommand: store.editorCommand,
     customAgents: store.customAgents,
+    agentEnvFiles: store.agentEnvFiles,
     focusMode: store.focusMode,
     coordinatorNotificationDelayMs: store.coordinatorNotificationDelayMs,
     coordinatorModeEnabled: store.coordinatorModeEnabled,

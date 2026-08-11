@@ -24,6 +24,7 @@ export {
   switchAgent,
   addCustomAgent,
   removeCustomAgent,
+  setAgentEnvFile,
 } from './agents';
 export {
   createTask,

@@ -37,6 +37,7 @@ let mockAgents: Record<string, unknown> = {};
 let mockTaskOrder: string[] = [];
 let mockCollapsedTaskOrder: string[] = [];
 let mockProjects: { id: string; path: string }[] = [];
+let mockAgentEnvFiles: Record<string, string> = {};
 const ipcHandlers = new Map<string, (data: unknown) => void>();
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
@@ -79,6 +80,12 @@ vi.mock('./core', async () => {
       mockProjects = next;
     },
     availableAgents: [],
+    get agentEnvFiles() {
+      return mockAgentEnvFiles;
+    },
+    set agentEnvFiles(next) {
+      mockAgentEnvFiles = next;
+    },
     get defaultStepsEnabled() {
       return mockDefaultStepsEnabled;
     },
@@ -236,6 +243,7 @@ beforeEach(() => {
   mockTaskOrder = [];
   mockCollapsedTaskOrder = [];
   mockProjects = [];
+  mockAgentEnvFiles = {};
   mockDefaultStepsEnabled = false;
   mockInvoke.mockResolvedValue(undefined);
   mockSaveState.mockResolvedValue(undefined);
@@ -881,6 +889,33 @@ describe('createTask coordinator base branch prompt', () => {
     expect(mockInvoke).toHaveBeenCalledWith(
       IPC.MCP_CoordinatorRegistered,
       expect.objectContaining({ coordinatorBranch: 'task/coordinator-work' }),
+    );
+  });
+
+  it('sends the agent env file so coordinator sub-tasks inherit its credentials', async () => {
+    mockAgentEnvFiles = { 'agent-def': '~/.config/parallel-code/claude.env' };
+
+    await createTask({
+      name: 'Coordinator',
+      agentDef: {
+        id: 'agent-def',
+        name: 'Claude',
+        command: 'claude',
+        args: [],
+        resume_args: [],
+        skip_permissions_args: [],
+        description: 'Claude',
+      },
+      projectId: 'proj-1',
+      gitIsolation: 'worktree',
+      baseBranch: 'main',
+      initialPrompt: 'Pick a task',
+      coordinatorMode: true,
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      IPC.StartMCPServer,
+      expect.objectContaining({ agentEnvFile: '~/.config/parallel-code/claude.env' }),
     );
   });
 });

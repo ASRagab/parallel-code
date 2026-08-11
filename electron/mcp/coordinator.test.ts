@@ -1806,6 +1806,15 @@ describe('Coordinator sub-agent spawn settings', () => {
     );
   });
 
+  it('passes the coordinator env file to sub-tasks so they get its credentials', async () => {
+    coordinator.setCoordinatorAgentEnvFile('coord-1', '~/.config/parallel-code/claude.env');
+    await coordinator.createTask({ name: 'test', prompt: 'do', coordinatorTaskId: 'coord-1' });
+    expect(mockSpawnAgent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ envFile: '~/.config/parallel-code/claude.env' }),
+    );
+  });
+
   it('inherits coordinator base args (e.g. --model)', async () => {
     coordinator.setCoordinatorSpawnDefaults('coord-1', 'claude', ['--model', 'claude-opus-4-7']);
     await coordinator.createTask({ name: 'test', prompt: 'do', coordinatorTaskId: 'coord-1' });

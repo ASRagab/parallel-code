@@ -168,6 +168,7 @@ export class Coordinator {
     command: 'claude',
     args: [],
   };
+  private coordinatorAgentEnvFile: string | undefined;
   private coordinators = new Map<string, CoordinatorState>();
   private notificationDelayMs = 30_000;
   private readonly COORDINATOR_RESTAMP_DELAY_MS = 5 * 60_000;
@@ -620,6 +621,14 @@ export class Coordinator {
     this.coordinatorSpawnDefaults = { command, args };
   }
 
+  /** Sub-tasks run the same agent CLI as the coordinator, so they need the same
+   *  env file — otherwise they spawn without the credentials it supplies. */
+  setCoordinatorAgentEnvFile(coordinatorTaskId: string, envFile: string | undefined): void {
+    const state = this.coordinators.get(coordinatorTaskId);
+    if (state) state.agentEnvFile = envFile;
+    this.coordinatorAgentEnvFile = envFile;
+  }
+
   setDockerContainerName(coordinatorTaskId: string, name: string | null): void {
     const state = this.coordinators.get(coordinatorTaskId);
     if (state) {
@@ -926,6 +935,7 @@ export class Coordinator {
         args: agentFinalArgs,
         cwd: result.worktree_path,
         env: {},
+        envFile: coordinatorState.agentEnvFile,
         cols: 120,
         rows: 40,
         ...(dockerContainerName
@@ -2041,6 +2051,7 @@ export class Coordinator {
       worktreePath: opts?.worktreePath,
       mcpServerInfo: null,
       spawnDefaults: { ...this.coordinatorSpawnDefaults },
+      agentEnvFile: this.coordinatorAgentEnvFile,
       pendingNotifications: [],
       stagedBatches: new Map(),
       ackedBatchIds: [],

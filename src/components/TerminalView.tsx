@@ -118,6 +118,8 @@ interface TerminalViewProps {
   args: string[];
   cwd: string;
   env?: Record<string, string>;
+  /** Path to a `KEY=VALUE` file merged into the agent's environment at spawn. */
+  envFile?: string;
   isShell?: boolean;
   /** Scroll bookmarks reserve a 24px left gutter. Only agent terminals use it;
    *  shell terminals (in-task shells and standalone full-size panels) opt out
@@ -1010,6 +1012,7 @@ export function TerminalView(props: TerminalViewProps) {
         args: props.args,
         cwd: props.cwd,
         env: props.env ?? {},
+        envFile: props.envFile,
         cols: term.cols,
         rows: term.rows,
         isShell: props.isShell,
