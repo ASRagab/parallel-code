@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
+import { app, autoUpdater, BrowserWindow, Menu, ipcMain, session, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -114,12 +114,74 @@ if (!app.isPackaged) verifyPreloadAllowlist();
 
 let mainWindow: BrowserWindow | null = null;
 
+// Set only while an update relaunch is genuinely in flight — see the listener
+// in `whenReady` — so `before-quit` can let that one quit through unchallenged.
+let quittingForUpdate = false;
+
 function getIconPath(): string | undefined {
   if (process.platform !== 'linux') return undefined;
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'icon.png');
   }
   return path.join(__dirname, '..', 'build', 'icon.png');
+}
+
+// Electron installs a default menu when none is set, and macOS dispatches native
+// menu key equivalents *before* the web contents sees the keydown — so every
+// accelerator that menu registers is a shortcut the renderer can never receive.
+// Three of its roles claim keys this app binds itself: `fileMenu` takes Cmd+W
+// (close the focused shell/terminal), `viewMenu` takes Cmd+0 / Cmd+± (the app
+// scales its whole UI through globalScale instead of Chromium's zoom), and
+// `appMenu` takes Cmd+Q (the renderer turns it into a hold, see below).
+// Spelling those submenus out keeps their items reachable by mouse while leaving
+// the keys to the renderer; Cmd+W stays unbound here on purpose, so it does
+// nothing when no pane is focused rather than closing the window out from under
+// a terminal. Linux keeps Electron's default: its File menu is Quit, and
+// unhandled keys reach the menu only after the renderer has had (and prevented)
+// them.
+function setupApplicationMenu(): void {
+  if (process.platform !== 'darwin') return;
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: app.name,
+        submenu: [
+          { role: 'about' },
+          { type: 'separator' },
+          { role: 'services' },
+          { type: 'separator' },
+          { role: 'hide' },
+          { role: 'hideOthers' },
+          { role: 'unhide' },
+          { type: 'separator' },
+          // Accelerator-free on purpose: the renderer turns Cmd+Q into a
+          // press-and-hold, so a stray tap can't tear down running terminals.
+          // (There is no way to show the key equivalent without also binding it:
+          // `registerAccelerator: false` is Linux/Windows-only. The hint the
+          // renderer shows on the first press is what teaches the gesture.)
+          // The mouse path skips only the hold — it still lands in `before-quit`
+          // below, so it still asks about running terminals.
+          { label: `Quit ${app.name}`, click: () => app.quit() },
+        ],
+      },
+      {
+        label: 'File',
+        submenu: [{ label: 'Close Window', click: (_item, window) => window?.close() }],
+      },
+      { role: 'editMenu' },
+      {
+        label: 'View',
+        submenu: [
+          { role: 'reload' },
+          { role: 'forceReload' },
+          { role: 'toggleDevTools' },
+          { type: 'separator' },
+          { role: 'togglefullscreen' },
+        ],
+      },
+      { role: 'windowMenu' },
+    ]),
+  );
 }
 
 function createWindow() {
@@ -211,13 +273,54 @@ app.whenReady().then(() => {
     },
   );
 
+  // electron-updater stages the install, then quits through `app.quit()`.
+  // Vetoing that quit below would leave the update staged with the app still
+  // running, so let it through — the window's own close prompt still asks about
+  // running terminals, and `autoInstallOnAppQuit` re-applies the update on the
+  // next quit if the user backs out. Both platform paths announce the relaunch
+  // on Electron's own updater immediately before quitting (the AppImage updater
+  // emits it by hand, Squirrel natively), so this is set only while a quit is
+  // genuinely in flight — unlike a flag set when the install is *requested*,
+  // which sticks for the whole session on the many paths where
+  // `quitAndInstall()` returns without quitting.
+  autoUpdater.on('before-quit-for-update', () => {
+    quittingForUpdate = true;
+  });
+
+  setupApplicationMenu();
   createWindow();
 });
 
-app.on('before-quit', () => {
+// A quit reaches `before-quit` *before* any window `close` event, so tearing
+// down agents here destroyed the very terminals the close dialog was about to
+// ask about — and destroyed them even when the user then cancelled the quit.
+// Decide here, tear down in `will-quit`: route the quit through the window so
+// the renderer's close handler owns the "kill / keep alive in background /
+// cancel" decision, and nothing is destroyed until it answers.
+//
+// Consequence worth knowing: with terminals running this vetoes a macOS
+// logout/restart too, the way any app with a confirm-on-quit prompt does.
+app.on('before-quit', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || quittingForUpdate) return;
+  event.preventDefault();
+  // The confirmation is a sheet on this window, and show() also focuses — a
+  // quit from the menu while the app sits hidden must not prompt invisibly.
+  mainWindow.show();
+  mainWindow.close();
+});
+
+// Runs only on a quit that got through the check above, so it cannot destroy
+// anything the user still had a chance to cancel.
+app.on('will-quit', () => {
   killAllAgents();
   stopAllPlanWatchers();
   stopAllStepsWatchers();
+});
+
+// "Keep them alive in the background" hides the window; without this the dock
+// icon is a dead end and the only way back is attempting to quit.
+app.on('activate', () => {
+  mainWindow?.show();
 });
 
 app.on('window-all-closed', () => {

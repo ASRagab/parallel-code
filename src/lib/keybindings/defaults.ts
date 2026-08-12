@@ -177,7 +177,7 @@ export const DEFAULT_BINDINGS: KeyBinding[] = [
     id: 'app.task.close-shell',
     layer: 'app',
     category: 'Tasks',
-    description: 'Close current shell',
+    description: 'Close current shell or terminal',
     platform: 'both',
     key: 'w',
     modifiers: { cmdOrCtrl: true },
