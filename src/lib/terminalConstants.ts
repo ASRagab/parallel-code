@@ -1,11 +1,11 @@
 // Keep substantially more terminal history available for agent review/debugging
 // without turning xterm into a memory landfill.
-export const TERMINAL_SCROLLBACK_LINES = 10_000;
-
+// xterm defaults scrollSensitivity to 1 line per wheel notch, which makes scrolling
+// back through agent output painfully slow. Alt-scroll multiplies this again by
+// xterm's fastScrollSensitivity default of 5, so we leave that one alone.
 export const TERMINAL_SCROLL_OPTIONS = {
-  scrollback: TERMINAL_SCROLLBACK_LINES,
+  scrollback: 10_000,
   scrollSensitivity: 4,
-  fastScrollSensitivity: 5,
 } as const;
 
 // Pre-computed base64 lookup table — avoids atob() intermediate string allocation.
