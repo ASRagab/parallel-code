@@ -5,7 +5,7 @@
 // xterm's fastScrollSensitivity default of 5, so we leave that one alone.
 export const TERMINAL_SCROLL_OPTIONS = {
   scrollback: 10_000,
-  scrollSensitivity: 4,
+  scrollSensitivity: 2,
 } as const;
 
 // Pre-computed base64 lookup table — avoids atob() intermediate string allocation.
