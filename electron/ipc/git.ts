@@ -14,6 +14,11 @@ import {
   foreignOwnedRemovalError,
   reclaimOwnership,
 } from './worktree-cleanup.js';
+import {
+  ensureNodeModulesEntryLinks,
+  isManagedNodeModules,
+  realpathOrNull,
+} from './worktree-node-modules.js';
 import type {
   ChangedFile,
   CommitInfo,
@@ -953,7 +958,14 @@ export async function createWorktree(
     try {
       if (!fs.existsSync(source)) continue;
       if (fs.existsSync(target)) continue;
-      fs.symlinkSync(source, target);
+      if (name === 'node_modules') {
+        // Not a whole-dir symlink: per-entry links, so root-level cache writes
+        // (vite's `.vite-temp`/`.vite`, `.cache`) land inside the worktree —
+        // the only path agent sandboxes allow writes to.
+        if (!ensureNodeModulesEntryLinks(source, target)) continue;
+      } else {
+        fs.symlinkSync(source, target);
+      }
       createdSymlinks.push(name);
     } catch (err) {
       console.warn(`Failed to symlink directory '${name}' into worktree:`, err);
@@ -980,7 +992,7 @@ export async function createWorktree(
  * from the previous shallow-symlink behavior and seeds any newly-missing
  * entries from the source.
  */
-export function ensureClaudeSandboxFiles(worktreePath: string, repoRoot?: string): void {
+export function ensureClaudeSandboxFiles(worktreePath: string, repoRoot?: string | null): void {
   const claudeDir = path.join(worktreePath, '.claude');
   try {
     fs.mkdirSync(claudeDir, { recursive: true });
@@ -1009,7 +1021,7 @@ export function ensureClaudeSandboxFiles(worktreePath: string, repoRoot?: string
 
   // Seed missing entries from the main repo's .claude/. Dereferences any
   // symlinks in the source so the copy is pure real files (bwrap-safe).
-  const root = repoRoot ?? detectRepoRoot(worktreePath);
+  const root = repoRoot === undefined ? detectRepoRoot(worktreePath) : repoRoot;
   if (root && root !== worktreePath) {
     const source = path.join(root, '.claude');
     if (fs.existsSync(source)) {
@@ -1131,7 +1143,7 @@ export function ensureSymlinkExcludes(worktreePath: string, symlinkNames: string
  * Find the main repository root for a worktree via `git rev-parse
  * --git-common-dir`. Returns null when the cwd isn't inside a git repo.
  */
-function detectRepoRoot(worktreePath: string): string | null {
+export function detectRepoRoot(worktreePath: string): string | null {
   try {
     const out = execFileSync('git', ['rev-parse', '--git-common-dir'], {
       cwd: worktreePath,
@@ -1143,6 +1155,33 @@ function detectRepoRoot(worktreePath: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Spawn-time backfill for a worktree's `node_modules`: converts the legacy
+ * whole-dir symlink to per-entry links and tops up links for packages
+ * installed in the main checkout since the worktree was created. Only acts on
+ * a `node_modules` this app manages (`isManagedNodeModules`) — the main
+ * checkout's real install, a worktree-local `npm ci`, and a foreign symlink
+ * are all left untouched. The ownership check also backstops the main-repo
+ * path guard: a real install has no entry links into itself, so it can never
+ * be classified as managed.
+ *
+ * Pass `repoRoot` when the caller already resolved it (null meaning "not a
+ * repo") to avoid a redundant `git rev-parse` subprocess.
+ */
+export function refreshWorktreeNodeModules(worktreePath: string, repoRoot?: string | null): void {
+  const root = repoRoot === undefined ? detectRepoRoot(worktreePath) : repoRoot;
+  if (!root) return;
+  // Realpath comparison so a symlinked alias of the main checkout can't slip
+  // past the same-directory guard.
+  const rootReal = realpathOrNull(root) ?? path.resolve(root);
+  const worktreeReal = realpathOrNull(worktreePath) ?? path.resolve(worktreePath);
+  if (rootReal === worktreeReal) return;
+  const source = path.join(root, 'node_modules');
+  const target = path.join(worktreePath, 'node_modules');
+  if (!isManagedNodeModules(source, target)) return;
+  ensureNodeModulesEntryLinks(source, target);
 }
 
 export async function removeWorktree(
