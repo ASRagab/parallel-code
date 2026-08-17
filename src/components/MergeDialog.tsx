@@ -13,6 +13,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { ChangedFilesList } from './ChangedFilesList';
 import { MergeReadinessPanel } from './MergeReadinessPanel';
 import { buildMergeReadiness } from './merge-readiness';
+import { isAdoptableBranch } from '../lib/branch-divergence';
 import { theme, bannerStyle } from '../lib/theme';
 import type { CoverageComparison } from '../lib/coverage-comparison';
 import type { Task } from '../store/types';
@@ -84,6 +85,16 @@ export function MergeDialog(props: MergeDialogProps) {
     // null means detached HEAD — also a mismatch
     return current === null || current !== props.task.branchName;
   };
+  // Never offer adopting the base branch: merge would become a self-merge and
+  // close-time cleanup would try to delete the base.
+  const adoptableWorktreeBranch = () => {
+    const status = worktreeStatus();
+    const current = status?.current_branch;
+    if (!current || current === props.task.branchName) return null;
+    return isAdoptableBranch(current, props.task.baseBranch ?? status?.base_branch)
+      ? current
+      : null;
+  };
   const mergeReadiness = () =>
     buildMergeReadiness({
       expectedBranch: props.task.branchName,
@@ -150,38 +161,39 @@ export function MergeDialog(props: MergeDialogProps) {
                   The worktree is on '{worktreeStatus()?.current_branch}' but this task tracks '
                   {props.task.branchName}'.
                 </div>
-                <div
-                  style={{
-                    'margin-top': '8px',
-                    display: 'flex',
-                    'align-items': 'center',
-                    gap: '8px',
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const current = worktreeStatus()?.current_branch;
-                      if (current) {
-                        updateTaskBranch(props.task.id, current);
-                        refetchBranchLog();
-                        refetchMergeStatus();
-                        refetchWorktreeStatus();
-                      }
-                    }}
-                    style={{
-                      padding: '4px 12px',
-                      background: theme.bgInput,
-                      border: `1px solid ${theme.border}`,
-                      'border-radius': '6px',
-                      color: theme.fg,
-                      cursor: 'pointer',
-                      'font-size': '13px',
-                    }}
-                  >
-                    Use '{worktreeStatus()?.current_branch}'
-                  </button>
-                </div>
+                <Show when={adoptableWorktreeBranch()}>
+                  {(branch) => (
+                    <div
+                      style={{
+                        'margin-top': '8px',
+                        display: 'flex',
+                        'align-items': 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateTaskBranch(props.task.id, branch());
+                          refetchBranchLog();
+                          refetchMergeStatus();
+                          refetchWorktreeStatus();
+                        }}
+                        style={{
+                          padding: '4px 12px',
+                          background: theme.bgInput,
+                          border: `1px solid ${theme.border}`,
+                          'border-radius': '6px',
+                          color: theme.fg,
+                          cursor: 'pointer',
+                          'font-size': '13px',
+                        }}
+                      >
+                        Use '{branch()}'
+                      </button>
+                    </div>
+                  )}
+                </Show>
               </Show>
             </div>
           </Show>

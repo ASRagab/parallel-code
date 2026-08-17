@@ -72,6 +72,9 @@ export interface WorktreeStatus {
   has_committed_changes: boolean;
   has_uncommitted_changes: boolean;
   current_branch: string | null;
+  /** Resolved base branch (explicit or detected main); null when the worktree
+   *  is unreadable. */
+  base_branch: string | null;
 }
 
 export interface ImportableWorktree {

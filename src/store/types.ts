@@ -115,6 +115,9 @@ export interface Task {
   closingError?: string;
   gitIsolation: GitIsolationMode;
   baseBranch?: string;
+  /** Worktree branch the user declined to adopt as the task branch.
+   *  Session-only (not persisted) — restarting re-offers, which is fine. */
+  branchOfferDismissed?: string;
   externalWorktree?: boolean;
   skipPermissions?: boolean;
   dockerMode?: boolean;

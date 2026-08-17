@@ -564,6 +564,7 @@ export function registerAllHandlers(win: BrowserWindow): void {
       branchName: args.branchName,
       deleteBranch: args.deleteBranch,
       projectRoot: args.projectRoot,
+      worktreePath: optionalWorktreePath(args),
     });
   });
 

@@ -512,6 +512,9 @@ export async function closeTask(taskId: string): Promise<void> {
         branchName,
         deleteBranch,
         projectRoot,
+        // The folder keeps its original branch-derived name even if the task
+        // later adopted the branch the agent switched to — pass the real path.
+        worktreePath: task.worktreePath,
       });
     }
 
@@ -690,6 +693,18 @@ export function updateTaskBranch(taskId: string, branchName: string): void {
   if (branchChanged && task.prUrl) {
     setStore('tasks', taskId, 'prUrl', undefined);
   }
+  // A dismissed offer was about the old branch situation — let the next
+  // divergence surface again.
+  if (branchChanged && task.branchOfferDismissed) {
+    setStore('tasks', taskId, 'branchOfferDismissed', undefined);
+  }
+}
+
+/** Remember that the user declined adopting `branchName` as the task branch,
+ *  so the divergence hint stays quiet until the worktree moves elsewhere. */
+export function dismissBranchOffer(taskId: string, branchName: string): void {
+  if (!store.tasks[taskId]) return;
+  setStore('tasks', taskId, 'branchOfferDismissed', branchName);
 }
 
 export function updateTaskNotes(taskId: string, notes: string): void {

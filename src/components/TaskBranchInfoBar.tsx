@@ -1,8 +1,19 @@
-import { Match, Show, Switch, type JSX } from 'solid-js';
+import { Match, Show, Switch, createMemo, createSignal, type JSX } from 'solid-js';
 import { errMessage } from '../lib/log';
-import { store, getProject, showNotification, getPrChecks } from '../store/store';
+import {
+  store,
+  getProject,
+  showNotification,
+  getPrChecks,
+  getBranchDivergence,
+  updateTaskBranch,
+  dismissBranchOffer,
+} from '../store/store';
+import { sameDivergence } from '../lib/branch-divergence';
+import { badgeStyle } from '../lib/badgeStyle';
 import { revealItemInDir, openInEditor } from '../lib/shell';
 import { InfoBar } from './InfoBar';
+import { ConfirmDialog } from './ConfirmDialog';
 import { theme } from '../lib/theme';
 import { isMac } from '../lib/platform';
 import { parseGitHubUrl } from '../lib/github-url';
@@ -19,6 +30,12 @@ const infoBarBtnStyle: JSX.CSSProperties = {
   cursor: 'pointer',
   'font-family': 'inherit',
   'font-size': 'inherit',
+};
+
+const warningChipStyle: JSX.CSSProperties = {
+  ...badgeStyle(theme.warning),
+  'font-size': '11px',
+  padding: '1px 6px',
 };
 
 type ReviewStatusKind = 'approved' | 'changes-requested' | 'review-needed' | 'draft';
@@ -84,6 +101,23 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
       ? `Click to open in ${store.editorCommand} · ${mod}+Click to reveal in file manager · ${mod}+Shift+Click to open the project root in ${store.editorCommand}`
       : `Click to reveal in file manager · ${mod}+Shift+Click to reveal the project root`;
   const worktreeTitle = () => `${props.task.worktreePath}\n${editorTitle()}`;
+
+  // Confirmed divergence between the branch the task tracks and the branch
+  // the agent actually put the worktree on (tracked store-side from the
+  // git-status poll). The equals guard stops per-poll re-renders while a
+  // divergence chip is visible.
+  const confirmedDivergence = createMemo(() => getBranchDivergence(props.task.id), null, {
+    equals: sameDivergence,
+  });
+  const switchedDivergence = () => {
+    const d = confirmedDivergence();
+    return d?.kind === 'switched' ? d : null;
+  };
+  const isDetached = () => confirmedDivergence()?.kind === 'detached';
+  // Branch the adoption dialog was opened for; keying the dialog to the branch
+  // (instead of a boolean) means a divergence change can never silently re-open
+  // it for a branch the user did not click.
+  const [offeredBranch, setOfferedBranch] = createSignal<string | null>(null);
 
   const handleOpenInEditor = (e: MouseEvent) => {
     const modKey = e.ctrlKey || e.metaKey;
@@ -311,22 +345,79 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
             <span class="task-branch-name-label">{props.task.branchName}</span>
           </Show>
           <Show when={props.task.gitIsolation === 'direct'}>
-            <span
-              class="task-branch-name-label"
-              style={{
-                'font-size': '11px',
-                'font-weight': '600',
-                padding: '1px 6px',
-                'border-radius': '4px',
-                background: `color-mix(in srgb, ${theme.warning} 15%, transparent)`,
-                color: theme.warning,
-                border: `1px solid color-mix(in srgb, ${theme.warning} 25%, transparent)`,
-              }}
-            >
+            <span class="task-branch-name-label" style={warningChipStyle}>
               {props.task.branchName}
             </span>
           </Show>
         </button>
+      </Show>
+      <Show when={isDetached()}>
+        <span
+          class="task-branch-divergence"
+          title={`The worktree is not on any branch (detached HEAD). Merging is blocked until it is back on '${props.task.branchName}'.`}
+          style={{ ...warningChipStyle, 'margin-right': '12px' }}
+        >
+          detached HEAD
+        </span>
+      </Show>
+      <Show when={switchedDivergence()}>
+        {(d) => (
+          <Show
+            when={d().adoptable}
+            fallback={
+              <span
+                class="task-branch-divergence"
+                title={`The worktree is on the base branch '${d().branch}' but this task tracks '${props.task.branchName}'. Ask the agent to switch back.`}
+                style={{ ...warningChipStyle, 'margin-right': '12px' }}
+              >
+                → {d().branch}
+              </span>
+            }
+          >
+            <button
+              type="button"
+              class="task-branch-divergence"
+              title={`The agent switched the worktree to '${d().branch}' but this task tracks '${props.task.branchName}'. Click to review.`}
+              onClick={() => setOfferedBranch(d().branch)}
+              style={{
+                ...warningChipStyle,
+                cursor: 'pointer',
+                'font-family': 'inherit',
+                'margin-right': '12px',
+              }}
+            >
+              → {d().branch}
+            </button>
+            <ConfirmDialog
+              open={offeredBranch() === d().branch}
+              title="Worktree branch changed"
+              width="440px"
+              message={
+                <div>
+                  <p style={{ margin: '0 0 8px' }}>
+                    The agent switched this task's worktree to '{d().branch}', but the task still
+                    tracks '{props.task.branchName}'.
+                  </p>
+                  <p style={{ margin: '0' }}>
+                    Adopting '{d().branch}' makes merge, diff and PR detection use it (the worktree
+                    folder keeps its name). Keeping '{props.task.branchName}' hides this offer for '
+                    {d().branch}' for this session.
+                  </p>
+                </div>
+              }
+              confirmLabel={`Use '${d().branch}'`}
+              cancelLabel={`Keep '${props.task.branchName}'`}
+              onConfirm={() => {
+                updateTaskBranch(props.task.id, d().branch);
+                setOfferedBranch(null);
+              }}
+              onCancel={() => {
+                dismissBranchOffer(props.task.id, d().branch);
+                setOfferedBranch(null);
+              }}
+            />
+          </Show>
+        )}
       </Show>
       <button
         type="button"

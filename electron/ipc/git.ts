@@ -14,7 +14,13 @@ import {
   foreignOwnedRemovalError,
   reclaimOwnership,
 } from './worktree-cleanup.js';
-import type { ChangedFile, CommitInfo, FileDiffResult, GitIgnoredEntry } from './shared-types.js';
+import type {
+  ChangedFile,
+  CommitInfo,
+  FileDiffResult,
+  GitIgnoredEntry,
+  WorktreeStatus,
+} from './shared-types.js';
 
 export type { ChangedFile, CommitInfo, FileDiffResult, GitIgnoredEntry } from './shared-types.js';
 
@@ -1143,8 +1149,12 @@ export async function removeWorktree(
   repoRoot: string,
   branchName: string,
   deleteBranch: boolean,
+  explicitWorktreePath?: string,
 ): Promise<void> {
-  const worktreePath = `${repoRoot}/.worktrees/${branchName}`;
+  // After the user adopts a branch the agent switched the worktree to, the
+  // folder keeps its original branch-derived name — callers that know the real
+  // path must pass it, deriving from branchName is only a fallback.
+  const worktreePath = explicitWorktreePath ?? `${repoRoot}/.worktrees/${branchName}`;
 
   if (!fs.existsSync(repoRoot)) return;
 
@@ -1612,16 +1622,19 @@ export async function getFileDiff(
   return { diff, oldContent, newContent };
 }
 
+const UNREADABLE_WORKTREE_STATUS: WorktreeStatus = {
+  has_committed_changes: false,
+  has_uncommitted_changes: false,
+  current_branch: null,
+  base_branch: null,
+};
+
 export async function getWorktreeStatus(
   worktreePath: string,
   baseBranch?: string,
-): Promise<{
-  has_committed_changes: boolean;
-  has_uncommitted_changes: boolean;
-  current_branch: string | null;
-}> {
+): Promise<WorktreeStatus> {
   if (!fs.existsSync(worktreePath)) {
-    return { has_committed_changes: false, has_uncommitted_changes: false, current_branch: null };
+    return UNREADABLE_WORKTREE_STATUS;
   }
   let statusOut: string;
   try {
@@ -1631,13 +1644,18 @@ export async function getWorktreeStatus(
     }));
   } catch {
     // Worktree removed between existsSync and exec (race condition)
-    return { has_committed_changes: false, has_uncommitted_changes: false, current_branch: null };
+    return UNREADABLE_WORKTREE_STATUS;
   }
   const hasUncommittedChanges = statusOut.trim().length > 0;
 
-  const currentBranch = await getCurrentBranchName(worktreePath).catch(() => null);
+  // Resolved base branch name, so the frontend can tell "agent switched to a
+  // feature branch" (adoptable) apart from "agent is sitting on main" (not).
+  const [currentBranch, resolvedBaseBranch] = await Promise.all([
+    getCurrentBranchName(worktreePath).catch(() => null),
+    baseBranch ?? detectMainBranch(worktreePath).catch(() => null),
+  ]);
 
-  const mergeBase = await detectMergeBase(worktreePath, 'HEAD', baseBranch);
+  const mergeBase = await detectMergeBase(worktreePath, 'HEAD', resolvedBaseBranch ?? undefined);
   let hasCommittedChanges = false;
   try {
     const { stdout: logOut } = await exec('git', ['log', `${mergeBase}..HEAD`, '--oneline'], {
@@ -1652,6 +1670,7 @@ export async function getWorktreeStatus(
     has_committed_changes: hasCommittedChanges,
     has_uncommitted_changes: hasUncommittedChanges,
     current_branch: currentBranch,
+    base_branch: resolvedBaseBranch,
   };
 }
 
@@ -1913,7 +1932,7 @@ export async function mergeTask(
     invalidateDiffBaseCache();
 
     if (cleanup) {
-      await removeWorktree(projectRoot, branchName, true);
+      await removeWorktree(projectRoot, branchName, true, worktreePath);
     }
 
     await restoreBranch();

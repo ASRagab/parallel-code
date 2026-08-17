@@ -15,6 +15,7 @@ const cleanWorktreeStatus: WorktreeStatus = {
   has_committed_changes: true,
   has_uncommitted_changes: false,
   current_branch: 'task/readiness',
+  base_branch: 'main',
 };
 
 const passedVerification: SubtaskVerification = {
