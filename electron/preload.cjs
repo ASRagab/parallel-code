@@ -116,6 +116,7 @@ const ALLOWED_CHANNELS = new Set([
   'detect_pr_for_branch',
   'refresh_pr_checks_watcher',
   'pr_checks_update',
+  'get_eslint_quality_findings',
   'log_from_renderer',
   'check_for_updates',
   'download_update',

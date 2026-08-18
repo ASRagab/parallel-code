@@ -38,6 +38,7 @@ import {
   isPrUrl,
 } from './pr-checks.js';
 import { readCoverageSummary } from './coverage.js';
+import { loadEslintQualityFindings } from './eslint-quality-findings.js';
 import { startRemoteServer, getMCPLogs, type RemoteProject } from '../remote/server.js';
 import type { RemoteAttentionState } from '../remote/protocol.js';
 import { atomicWriteFileSync } from '../mcp/atomic.js';
@@ -879,6 +880,14 @@ export function registerAllHandlers(win: BrowserWindow): void {
   ipcMain.handle(IPC.RefreshPrChecksWatcher, (_e, args) => {
     assertString(args.taskId, 'taskId');
     refreshPrChecksWatcher(args.taskId);
+  });
+
+  // --- Local ESLint quality findings ---
+  ipcMain.handle(IPC.GetEslintQualityFindings, (_e, args) => {
+    validatePath(args.worktreePath, 'worktreePath');
+    assertStringArray(args.filePaths, 'filePaths');
+    for (const filePath of args.filePaths) validateRelativePath(filePath, 'filePath');
+    return loadEslintQualityFindings(args.worktreePath, args.filePaths);
   });
 
   // --- Steps content (one-shot read) ---

@@ -139,6 +139,27 @@ export interface BranchPrDetectionResult {
   unavailable?: 'missing' | 'auth';
 }
 
+export interface EslintQualityFinding {
+  id: string;
+  source: 'eslint';
+  ruleId: string;
+  category: 'maintainability';
+  severity: 'error' | 'warning';
+  location: {
+    filePath: string;
+    startLine: number;
+    startColumn?: number;
+    endLine?: number;
+    endColumn?: number;
+  };
+  explanation: string;
+}
+
+export type EslintQualityResult =
+  | { status: 'available'; findings: EslintQualityFinding[] }
+  | { status: 'not-applicable' }
+  | { status: 'unavailable'; message: string };
+
 export interface StepEntry {
   summary: string;
   detail?: string;

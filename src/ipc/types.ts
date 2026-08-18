@@ -7,6 +7,8 @@ export type {
   CoverageMetricSummary,
   CoverageSummary,
   CreateTaskResult,
+  EslintQualityFinding,
+  EslintQualityResult,
   FileDiffResult,
   GitIgnoredEntry,
   ImportableWorktree,

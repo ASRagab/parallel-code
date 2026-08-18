@@ -112,6 +112,7 @@
   "DetectPrForBranch": "detect_pr_for_branch",
   "RefreshPrChecksWatcher": "refresh_pr_checks_watcher",
   "PrChecksUpdate": "pr_checks_update",
+  "GetEslintQualityFindings": "get_eslint_quality_findings",
   "LogFromRenderer": "log_from_renderer",
   "CheckForUpdates": "check_for_updates",
   "DownloadUpdate": "download_update",
