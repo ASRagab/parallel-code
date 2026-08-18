@@ -21,7 +21,11 @@ import {
   isCommitHashSelection,
   isUncommittedSelection,
 } from './CommitNavBar';
-import { ReviewCommentsButton, ReviewSidebarPanel } from './ReviewSidebarPanel';
+import {
+  ReviewCommentsButton,
+  ReviewFindingsRefreshButton,
+  ReviewSidebarPanel,
+} from './ReviewSidebarPanel';
 import { ReviewProvider, useReview } from './ReviewProvider';
 import { ChangedFilesList } from './ChangedFilesList';
 import { CloseIcon } from './icons';
@@ -127,6 +131,7 @@ export function DiffViewerDialog(props: DiffViewerDialogProps) {
             selectedCommit={props.selectedCommit}
             onCommitNavigate={props.onCommitNavigate}
             gitIsolation={props.gitIsolation}
+            findingProvider={props.findingProvider}
           />
         </Show>
       </Dialog>
@@ -386,6 +391,9 @@ function DiffViewerContent(props: DiffViewerDialogProps) {
         </span>
 
         <ReviewCommentsButton />
+        <Show when={props.findingProvider}>
+          <ReviewFindingsRefreshButton />
+        </Show>
 
         <span style={{ flex: '1' }} />
 

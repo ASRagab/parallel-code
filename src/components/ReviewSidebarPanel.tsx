@@ -55,6 +55,32 @@ export function ReviewCommentsButton() {
   );
 }
 
+/** Explicitly rerun the configured quality-finding provider for the current diff. */
+export function ReviewFindingsRefreshButton() {
+  const review = useReview();
+  return (
+    <button
+      type="button"
+      onClick={review.refreshFindings}
+      disabled={review.findingsLoading()}
+      title="Rerun quality findings for this diff"
+      aria-label="Refresh quality findings"
+      style={{
+        background: 'transparent',
+        color: theme.fgMuted,
+        border: `1px solid ${theme.border}`,
+        'font-size': sf(12),
+        padding: '2px 10px',
+        'border-radius': '4px',
+        cursor: review.findingsLoading() ? 'wait' : 'pointer',
+        opacity: review.findingsLoading() ? '0.6' : '1',
+      }}
+    >
+      Refresh findings
+    </button>
+  );
+}
+
 /** Sidebar column with human comments and provider findings. */
 export function ReviewSidebarPanel() {
   const review = useReview();
