@@ -11,6 +11,7 @@ import {
   detectRepoRoot,
   ensureClaudeSandboxFiles,
   ensureSandboxExcludes,
+  ensureWorktreeContainerExclude,
   refreshWorktreeNodeModules,
 } from './git.js';
 import { loadEnvFile } from './env-file.js';
@@ -534,6 +535,7 @@ export function spawnAgent(win: BrowserWindow, args: SpawnAgentArgs): void {
     const repoRoot = detectRepoRoot(cwd);
     ensureClaudeSandboxFiles(cwd, repoRoot);
     ensureSandboxExcludes(cwd);
+    ensureWorktreeContainerExclude(cwd);
     // Migrate legacy whole-dir node_modules symlinks and pick up packages
     // installed in the main checkout since worktree creation.
     refreshWorktreeNodeModules(cwd, repoRoot);

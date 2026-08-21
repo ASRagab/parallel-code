@@ -343,6 +343,16 @@ describe('getSymlinkCandidates', () => {
 });
 
 describe('createWorktree', () => {
+  it('git-excludes the worktree container so the project root stays clean', async () => {
+    const root = initRepository();
+
+    await createWorktree(root, 'task-container', []);
+
+    const exclude = fs.readFileSync(path.join(root, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude).toContain('/.worktrees/');
+    expect(git(root, ['status', '--porcelain'])).toBe('');
+  });
+
   it('symlinks a selected ignored directory from the main checkout', async () => {
     const root = initRepository();
     fs.writeFileSync(path.join(root, '.gitignore'), 'dist/\n', 'utf8');
