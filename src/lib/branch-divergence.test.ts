@@ -107,6 +107,15 @@ describe('isAdoptableBranch', () => {
     expect(isAdoptableBranch('fix/a', null)).toBe(false);
     expect(isAdoptableBranch('fix/a', undefined)).toBe(false);
   });
+
+  it('refuses names the IPC branch validator rejects', () => {
+    // git allows these in refnames; the IPC layer does not, and adopting one
+    // would wedge every branch-parameterized call including task close.
+    expect(isAdoptableBranch('pwn;x', 'main')).toBe(false);
+    expect(isAdoptableBranch('feature/$(rm -rf)', 'main')).toBe(false);
+    expect(isAdoptableBranch('feat`x`', 'main')).toBe(false);
+    expect(isAdoptableBranch('feature/ok-name_1.2', 'main')).toBe(true);
+  });
 });
 
 describe('trackDivergence', () => {

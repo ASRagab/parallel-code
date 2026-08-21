@@ -76,6 +76,8 @@ vi.mock('solid-js', () => {
     onMount: vi.fn(),
     onCleanup: vi.fn(),
     untrack: (fn: () => unknown) => fn(),
+    // task-branch.ts (imported transitively via taskStatus.ts) calls batch.
+    batch: (fn: () => unknown) => fn(),
   };
 });
 

@@ -34,8 +34,6 @@ export {
   mergeTask,
   pushTask,
   updateTaskName,
-  updateTaskBranch,
-  dismissBranchOffer,
   updateTaskNotes,
   sendPrompt,
   setLastPrompt,
@@ -72,6 +70,7 @@ export {
   markTaskMcpError,
   retryTaskMcpStartup,
 } from './tasks';
+export { updateTaskBranch, undoBranchAdoption, dismissBranchAdoptionNotice } from './task-branch';
 export {
   setActiveTask,
   setActiveAgent,

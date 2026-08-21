@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createMemo, createSignal, type JSX } from 'solid-js';
+import { Match, Show, Switch, createMemo, type JSX } from 'solid-js';
 import { errMessage } from '../lib/log';
 import {
   store,
@@ -6,14 +6,11 @@ import {
   showNotification,
   getPrChecks,
   getBranchDivergence,
-  updateTaskBranch,
-  dismissBranchOffer,
 } from '../store/store';
 import { sameDivergence } from '../lib/branch-divergence';
 import { badgeStyle } from '../lib/badgeStyle';
 import { revealItemInDir, openInEditor } from '../lib/shell';
 import { InfoBar } from './InfoBar';
-import { ConfirmDialog } from './ConfirmDialog';
 import { theme } from '../lib/theme';
 import { isMac } from '../lib/platform';
 import { parseGitHubUrl } from '../lib/github-url';
@@ -109,15 +106,15 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
   const confirmedDivergence = createMemo(() => getBranchDivergence(props.task.id), null, {
     equals: sameDivergence,
   });
-  const switchedDivergence = () => {
+  // Adoptable divergence never renders here: the store auto-adopts it as soon
+  // as it is confirmed, and the task banner takes over. Only the non-adoptable
+  // cases (worktree on the base branch, or on a name the IPC layer rejects)
+  // warn.
+  const nonAdoptableDivergence = () => {
     const d = confirmedDivergence();
-    return d?.kind === 'switched' ? d : null;
+    return d?.kind === 'switched' && !d.adoptable ? d : null;
   };
   const isDetached = () => confirmedDivergence()?.kind === 'detached';
-  // Branch the adoption dialog was opened for; keying the dialog to the branch
-  // (instead of a boolean) means a divergence change can never silently re-open
-  // it for a branch the user did not click.
-  const [offeredBranch, setOfferedBranch] = createSignal<string | null>(null);
 
   const handleOpenInEditor = (e: MouseEvent) => {
     const modKey = e.ctrlKey || e.metaKey;
@@ -360,63 +357,19 @@ export function TaskBranchInfoBar(props: TaskBranchInfoBarProps) {
           detached HEAD
         </span>
       </Show>
-      <Show when={switchedDivergence()}>
+      <Show when={nonAdoptableDivergence()}>
         {(d) => (
-          <Show
-            when={d().adoptable}
-            fallback={
-              <span
-                class="task-branch-divergence"
-                title={`The worktree is on the base branch '${d().branch}' but this task tracks '${props.task.branchName}'. Ask the agent to switch back.`}
-                style={{ ...warningChipStyle, 'margin-right': '12px' }}
-              >
-                → {d().branch}
-              </span>
+          <span
+            class="task-branch-divergence"
+            title={
+              d().branch === props.task.baseBranch
+                ? `The worktree is on the base branch '${d().branch}' but this task tracks '${props.task.branchName}'. Ask the agent to switch back.`
+                : `The worktree is on '${d().branch}', which this task cannot adopt, but it tracks '${props.task.branchName}'. Ask the agent to switch back.`
             }
+            style={{ ...warningChipStyle, 'margin-right': '12px' }}
           >
-            <button
-              type="button"
-              class="task-branch-divergence"
-              title={`The agent switched the worktree to '${d().branch}' but this task tracks '${props.task.branchName}'. Click to review.`}
-              onClick={() => setOfferedBranch(d().branch)}
-              style={{
-                ...warningChipStyle,
-                cursor: 'pointer',
-                'font-family': 'inherit',
-                'margin-right': '12px',
-              }}
-            >
-              → {d().branch}
-            </button>
-            <ConfirmDialog
-              open={offeredBranch() === d().branch}
-              title="Worktree branch changed"
-              width="440px"
-              message={
-                <div>
-                  <p style={{ margin: '0 0 8px' }}>
-                    The agent switched this task's worktree to '{d().branch}', but the task still
-                    tracks '{props.task.branchName}'.
-                  </p>
-                  <p style={{ margin: '0' }}>
-                    Adopting '{d().branch}' makes merge, diff and PR detection use it (the worktree
-                    folder keeps its name). Keeping '{props.task.branchName}' hides this offer for '
-                    {d().branch}' for this session.
-                  </p>
-                </div>
-              }
-              confirmLabel={`Use '${d().branch}'`}
-              cancelLabel={`Keep '${props.task.branchName}'`}
-              onConfirm={() => {
-                updateTaskBranch(props.task.id, d().branch);
-                setOfferedBranch(null);
-              }}
-              onCancel={() => {
-                dismissBranchOffer(props.task.id, d().branch);
-                setOfferedBranch(null);
-              }}
-            />
-          </Show>
+            → {d().branch}
+          </span>
         )}
       </Show>
       <button

@@ -25,6 +25,7 @@ import { PlanViewerDialog } from './PlanViewerDialog';
 import { EditProjectDialog } from './EditProjectDialog';
 import { TaskTitleBar } from './TaskTitleBar';
 import { TaskBranchInfoBar } from './TaskBranchInfoBar';
+import { TaskBranchAdoptionBanner } from './TaskBranchAdoptionBanner';
 import { TaskNotesBody } from './TaskNotesBody';
 import { TaskChangedFilesSection } from './TaskChangedFilesSection';
 import { isCommitHashSelection, type CommitSelection } from './CommitNavBar';
@@ -510,6 +511,7 @@ export function TaskPanel(props: TaskPanelProps) {
       <Show when={props.task.coordinatorMode}>
         <SubTaskStrip coordinatorTaskId={props.task.id} />
       </Show>
+      <TaskBranchAdoptionBanner task={props.task} />
       <div
         class="task-header-stack"
         style={{

@@ -110,6 +110,13 @@ function validAgentIndex(value: unknown): number | undefined {
     : undefined;
 }
 
+/** Branch names restored from JSON: only non-empty strings. `exclude` drops a
+ *  value that would be nonsensical (e.g. an adopted-from equal to the branch
+ *  itself, which would render an "adopted 'X' (was 'X')" banner). */
+function validBranch(value: unknown, exclude?: string): string | undefined {
+  return typeof value === 'string' && value.length > 0 && value !== exclude ? value : undefined;
+}
+
 /**
  * Serialize a Task to its persisted shape. The caller supplies agentDefs
  * because active and collapsed tasks source them differently (live store
@@ -147,6 +154,8 @@ function toPersistedTask(task: Task, agentDefs: AgentDef[], collapsed?: boolean)
     savedPromptedAgentIndexes: task.savedPromptedAgentIndexes,
     planFileName: task.planFileName,
     stepsEnabled: task.stepsEnabled,
+    branchAdoptedFrom: task.branchAdoptedFrom,
+    branchOfferDismissed: task.branchOfferDismissed,
     ...(collapsed ? { collapsed: true } : {}),
     coordinatorMode: task.coordinatorMode,
     propagateSkipPermissions: task.propagateSkipPermissions,
@@ -693,6 +702,8 @@ export async function loadState(): Promise<void> {
           savedPromptedAgentIndexes: validPromptedAgentIndexes(pt.savedPromptedAgentIndexes),
           planFileName: pt.planFileName,
           stepsEnabled: pt.stepsEnabled,
+          branchAdoptedFrom: validBranch(pt.branchAdoptedFrom, pt.branchName),
+          branchOfferDismissed: validBranch(pt.branchOfferDismissed),
           coordinatorMode: pt.coordinatorMode,
           propagateSkipPermissions: pt.propagateSkipPermissions,
           coordinatedBy: pt.coordinatedBy,
@@ -798,6 +809,8 @@ export async function loadState(): Promise<void> {
           savedPromptedAgentIndexes: validPromptedAgentIndexes(pt.savedPromptedAgentIndexes),
           planFileName: pt.planFileName,
           stepsEnabled: pt.stepsEnabled,
+          branchAdoptedFrom: validBranch(pt.branchAdoptedFrom, pt.branchName),
+          branchOfferDismissed: validBranch(pt.branchOfferDismissed),
           collapsed: true,
           savedAgentDef: agentDefs[0],
           savedAgentDefs: agentDefs.length > 0 ? agentDefs : undefined,

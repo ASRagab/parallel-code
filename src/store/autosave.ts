@@ -63,6 +63,8 @@ export function persistedSnapshot(): string {
               gitIsolation: t.gitIsolation,
               baseBranch: t.baseBranch,
               branchName: t.branchName,
+              branchAdoptedFrom: t.branchAdoptedFrom,
+              branchOfferDismissed: t.branchOfferDismissed,
               externalWorktree: t.externalWorktree,
               savedInitialPrompt: t.savedInitialPrompt,
               collapsed: t.collapsed,

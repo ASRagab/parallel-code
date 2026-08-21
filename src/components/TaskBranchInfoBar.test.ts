@@ -14,8 +14,6 @@ vi.mock('../store/store', () => ({
   showNotification: vi.fn(),
   getPrChecks: mockGetPrChecks,
   getBranchDivergence: vi.fn(() => null),
-  updateTaskBranch: vi.fn(),
-  dismissBranchOffer: vi.fn(),
 }));
 
 vi.mock('../lib/platform', () => ({ isMac: false }));

@@ -157,11 +157,11 @@ import {
   markTaskMcpError,
   retryTaskMcpStartup,
   clearTaskLandingReview,
-  updateTaskBranch,
   toggleAITerminalLayout,
   createAgentRecord,
   selectActiveNeighborAfterRemoval,
 } from './tasks';
+import { updateTaskBranch } from './task-branch';
 import { getCoordinatorChildren } from './sidebar-order';
 import { recordMergedLines, recordTaskMerged } from './completion';
 import { markAgentSpawned, rescheduleTaskStatusPolling } from './taskStatus';

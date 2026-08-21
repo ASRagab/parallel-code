@@ -11,7 +11,8 @@ import {
   type BranchDivergence,
   type DivergenceObservation,
 } from '../lib/branch-divergence';
-import { warn as logWarn, errMessage } from '../lib/log';
+import { warn as logWarn, info as logInfo, errMessage } from '../lib/log';
+import { adoptTaskBranch } from './task-branch';
 import {
   chunkContainsAgentPrompt,
   PROMPT_PATTERNS,
@@ -1018,6 +1019,25 @@ export function clearTaskGitStatusTracking(taskId: string): void {
   divergenceObservations.delete(taskId);
 }
 
+/** Auto-adopt a confirmed divergent branch as the task branch. Runs after
+ *  every successful snapshot write; the two-snapshot debounce inside
+ *  getBranchDivergence keeps transient checkouts (rebases, bisects) from
+ *  adopting. The banner on the task explains what happened and offers undo;
+ *  an undone (dismissed) branch is never re-adopted. */
+function maybeAdoptDivergentBranch(taskId: string): void {
+  const divergence = getBranchDivergence(taskId);
+  if (divergence?.kind !== 'switched' || !divergence.adoptable) return;
+  const task = store.tasks[taskId];
+  // Don't touch branch identity mid-close: cleanup deletes by branch name.
+  if (!task || task.closingStatus) return;
+  logInfo('taskStatus', 'Auto-adopting branch the agent switched the worktree to', {
+    taskId,
+    from: task.branchName,
+    to: divergence.branch,
+  });
+  adoptTaskBranch(taskId, divergence.branch);
+}
+
 async function refreshTaskGitStatus(
   taskId: string,
   options: { invalidateExisting?: boolean } = {},
@@ -1055,6 +1075,16 @@ async function refreshTaskGitStatus(
     const next: TaskGitStatusSnapshot = {
       ...status,
       refreshedAt,
+      // Solid's setStore MERGES objects at a path instead of replacing them,
+      // so flags from earlier snapshots survive any write that omits them. A
+      // single failed refresh (error), 5-minute polling gap (stale), or
+      // invalidateExisting pass (refreshing) would otherwise poison the
+      // snapshot for the rest of the session, permanently suppressing branch
+      // divergence detection and the ready status. `error: undefined` deletes
+      // the key on merge.
+      refreshing: false,
+      stale: false,
+      error: undefined,
     };
     // Update the divergence debounce before the snapshot write so consumers
     // reacting to the write read a consistent observation.
@@ -1068,6 +1098,7 @@ async function refreshTaskGitStatus(
     );
     setStore('taskGitStatus', taskId, next);
     scheduleGitStatusStaleTimer(taskId, refreshedAt);
+    maybeAdoptDivergentBranch(taskId);
   } catch (err) {
     if (!store.tasks[taskId] || !isCurrentGitRefresh(taskId, version)) return;
     clearGitStatusStaleTimer(taskId);

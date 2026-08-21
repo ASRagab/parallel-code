@@ -1,3 +1,4 @@
+import { validateBranchName } from '../../electron/mcp/validation';
 import type { Task, TaskGitStatusSnapshot } from '../store/types';
 
 /** Divergence between the branch a task tracks and what its worktree is on. */
@@ -23,11 +24,23 @@ type DivergenceSnapshotInput = Pick<
   'current_branch' | 'base_branch' | 'refreshedAt' | 'stale' | 'error'
 >;
 
+function isValidBranchName(branch: string): boolean {
+  try {
+    validateBranchName(branch);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Whether adopting `branch` as the task branch is safe. Adopting the base
  *  branch would make merge a self-merge and close-time cleanup would delete
- *  the base; an unknown base is treated as not-safe for the same reason. */
+ *  the base; an unknown base is treated as not-safe for the same reason.
+ *  Names the IPC validator rejects (git allows chars like `;` and `$` that it
+ *  refuses) are not adoptable either — adopting one would wedge every
+ *  branch-parameterized IPC call, including task close. */
 export function isAdoptableBranch(branch: string, base: string | null | undefined): boolean {
-  return base !== null && base !== undefined && branch !== base;
+  return base !== null && base !== undefined && branch !== base && isValidBranchName(branch);
 }
 
 /**
