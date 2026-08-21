@@ -5,6 +5,7 @@ import path from 'path';
 import type { BrowserWindow } from 'electron';
 import { debug as logDebug } from '../log.js';
 import {
+  appendGitInfoExcludeBlock,
   appendGitInfoExcludeBlockAtPath,
   normalizeExcludeLine,
   resolveGitInfoExcludePath,
@@ -183,6 +184,9 @@ const INTERNAL_SYMLINK_EXCLUSIONS = new Set([
 ]);
 const SANDBOX_EXCLUDE_HEADER = '# parallel-code: sandbox bind-mount artifacts';
 const seededSandboxExcludes = new Set<string>();
+
+const WORKTREE_CONTAINER_EXCLUDE_HEADER = '# parallel-code: task worktree container';
+const WORKTREE_CONTAINER_EXCLUDE = '/.worktrees/';
 
 /**
  * Header written once per repo when symlink excludes are first added. Each
@@ -935,6 +939,9 @@ export async function createWorktree(
     );
   }
 
+  // Before `worktree add`: a `git status` racing creation must never see it.
+  ensureWorktreeContainerExclude(repoRoot);
+
   const worktreeArgs = ['worktree', 'add', '-b', branchName, worktreePath];
   if (baseBranch) worktreeArgs.push(baseBranch);
   await exec('git', worktreeArgs, { cwd: repoRoot });
@@ -1058,6 +1065,25 @@ export function ensureClaudeSandboxFiles(worktreePath: string, repoRoot?: string
       console.warn(`Failed to create placeholder ${p}:`, err);
     }
   }
+}
+
+/**
+ * Keep the worktree container out of the project's `git status`. `.worktrees/`
+ * sits inside the repo's own working tree, so in a project whose `.gitignore`
+ * doesn't list it every task leaves the root dirty — and merging then fails on
+ * the clean-tree guard with "Working tree has uncommitted changes". Writing to
+ * `.git/info/exclude` leaves a tracked `.gitignore` alone; the leading `/`
+ * keeps a nested `foo/.worktrees/` visible. Also runs as a backfill on agent
+ * spawn, for worktrees created before this rule existed. `pathInRepo` may be
+ * the repo root or any worktree — both resolve to the shared exclude file.
+ */
+export function ensureWorktreeContainerExclude(pathInRepo: string): void {
+  appendGitInfoExcludeBlock(
+    pathInRepo,
+    WORKTREE_CONTAINER_EXCLUDE,
+    `${WORKTREE_CONTAINER_EXCLUDE_HEADER}\n${WORKTREE_CONTAINER_EXCLUDE}\n`,
+    (err) => console.warn(`Failed to git-exclude ${WORKTREE_CONTAINER_EXCLUDE}:`, err),
+  );
 }
 
 /**

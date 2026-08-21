@@ -26,6 +26,9 @@ function makeRepo(name: string): { root: string; worktreePath: string } {
   run(root, ['config', 'user.name', 'Test']);
   run(root, ['config', 'commit.gpgsign', 'false']);
   fs.writeFileSync(path.join(root, 'README.md'), 'hello\n');
+  // Mirror what createWorktree seeds in a real project — without it the root
+  // reads `?? .worktrees/` and the clean-tree guard refuses to merge.
+  fs.appendFileSync(path.join(root, '.git', 'info', 'exclude'), '/.worktrees/\n');
   run(root, ['add', '.']);
   run(root, ['commit', '-m', 'initial']);
   run(root, ['worktree', 'add', '-b', TASK_BRANCH, `.worktrees/${TASK_BRANCH}`]);
