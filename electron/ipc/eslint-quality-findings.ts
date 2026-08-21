@@ -4,9 +4,22 @@ import path from 'path';
 import { promisify } from 'util';
 import type { EslintQualityFinding, EslintQualityResult } from './shared-types.js';
 
-const exec = promisify(execFile);
+type EslintExec = (
+  file: string,
+  args: string[],
+  options: { cwd: string; timeout: number; maxBuffer: number },
+) => Promise<{ stdout: string; stderr: string }>;
+
+const exec: EslintExec = async (file, args, options) => {
+  const result = await promisify(execFile)(file, args, options);
+  return {
+    stdout: String(result.stdout),
+    stderr: String(result.stderr),
+  };
+};
 const ESLINT_TIMEOUT_MS = 30_000;
 const ESLINT_MAX_BUFFER = 8 * 1024 * 1024;
+const ESLINT_BINARY_SEARCH_DEPTH = 3;
 const LINTABLE_EXTENSIONS = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
 const ESLINT_CONFIG_NAMES = [
   'eslint.config.js',
@@ -15,12 +28,6 @@ const ESLINT_CONFIG_NAMES = [
   'eslint.config.ts',
   'eslint.config.cts',
   'eslint.config.mts',
-  '.eslintrc',
-  '.eslintrc.js',
-  '.eslintrc.cjs',
-  '.eslintrc.json',
-  '.eslintrc.yml',
-  '.eslintrc.yaml',
 ] as const;
 
 interface EslintMessage {
@@ -150,6 +157,22 @@ function hasEslintConfig(worktreePath: string): boolean {
   }
 }
 
+function findLocalEslintBinary(worktreePath: string): string | undefined {
+  let currentPath = path.resolve(worktreePath);
+  for (let depth = 0; depth <= ESLINT_BINARY_SEARCH_DEPTH; depth += 1) {
+    const binaryNames =
+      process.platform === 'win32' ? ['eslint.cmd', 'eslint.exe', 'eslint'] : ['eslint'];
+    for (const binaryName of binaryNames) {
+      const binaryPath = path.join(currentPath, 'node_modules', '.bin', binaryName);
+      if (fs.existsSync(binaryPath)) return binaryPath;
+    }
+    const parentPath = path.dirname(currentPath);
+    if (parentPath === currentPath) break;
+    currentPath = parentPath;
+  }
+  return undefined;
+}
+
 function errorText(error: unknown): string {
   const value = record(error);
   return [value?.message, value?.stderr, value?.stdout]
@@ -161,12 +184,16 @@ function unavailable(message: string): EslintQualityResult {
   return { status: 'unavailable', message };
 }
 
-function classifyEslintError(error: unknown): EslintQualityResult {
+export function classifyEslintError(error: unknown): EslintQualityResult {
   const code = (error as NodeJS.ErrnoException | undefined)?.code;
   const text = errorText(error);
-  if (code === 'ENOENT') return unavailable('ESLint is not available in this project.');
-  if (/eslint.*not found|could not determine executable|no such file/i.test(text)) {
-    return unavailable('ESLint is configured but its local binary is unavailable.');
+  if (
+    code === 'ENOENT' ||
+    /eslint.*not found|could not determine executable|no such file|couldn't find an eslint\.config\./i.test(
+      text,
+    )
+  ) {
+    return { status: 'not-applicable' };
   }
   if (/configuration.*invalid|failed to load config|cannot find module/i.test(text)) {
     return unavailable('ESLint could not load this project configuration.');
@@ -179,22 +206,18 @@ function classifyEslintError(error: unknown): EslintQualityResult {
 export async function loadEslintQualityFindings(
   worktreePath: string,
   changedPaths: readonly string[],
+  execImpl: EslintExec = exec,
 ): Promise<EslintQualityResult> {
   if (!hasEslintConfig(worktreePath)) return { status: 'not-applicable' };
   const lintablePaths = changedPaths.filter(isLintablePath);
   if (lintablePaths.length === 0) return { status: 'available', findings: [] };
+  const eslintBinary = findLocalEslintBinary(worktreePath);
+  if (!eslintBinary) return { status: 'not-applicable' };
 
   try {
-    const { stdout } = await exec(
-      'npx',
-      [
-        '--no-install',
-        'eslint',
-        '--format',
-        'json',
-        '--no-error-on-unmatched-pattern',
-        ...lintablePaths,
-      ],
+    const { stdout } = await execImpl(
+      eslintBinary,
+      ['--format', 'json', '--no-error-on-unmatched-pattern', '--', ...lintablePaths],
       { cwd: worktreePath, timeout: ESLINT_TIMEOUT_MS, maxBuffer: ESLINT_MAX_BUFFER },
     );
     return {

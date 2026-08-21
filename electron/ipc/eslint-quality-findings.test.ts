@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
+  classifyEslintError,
   isLintablePath,
   loadEslintQualityFindings,
   parseEslintFindings,
@@ -68,5 +69,91 @@ describe('ESLint quality findings', () => {
     } finally {
       fs.rmSync(worktreePath, { recursive: true, force: true });
     }
+  });
+
+  it('silently skips legacy ESLint configs that ESLint 9 does not load', async () => {
+    const worktreePath = fs.mkdtempSync(path.join(os.tmpdir(), 'parallel-code-eslint-'));
+    try {
+      fs.writeFileSync(path.join(worktreePath, '.eslintrc.json'), '{}');
+      await expect(loadEslintQualityFindings(worktreePath, ['src/a.ts'])).resolves.toEqual({
+        status: 'not-applicable',
+      });
+    } finally {
+      fs.rmSync(worktreePath, { recursive: true, force: true });
+    }
+  });
+
+  it('silently skips configured projects without a local ESLint binary', async () => {
+    const worktreePath = fs.mkdtempSync(path.join(os.tmpdir(), 'parallel-code-eslint-'));
+    try {
+      fs.writeFileSync(path.join(worktreePath, 'eslint.config.js'), 'export default [];');
+      await expect(loadEslintQualityFindings(worktreePath, ['src/a.ts'])).resolves.toEqual({
+        status: 'not-applicable',
+      });
+    } finally {
+      fs.rmSync(worktreePath, { recursive: true, force: true });
+    }
+  });
+
+  it('runs the local binary with a path separator and parses its output', async () => {
+    const worktreePath = fs.mkdtempSync(path.join(os.tmpdir(), 'parallel-code-eslint-'));
+    try {
+      const binaryPath = path.join(worktreePath, 'node_modules', '.bin');
+      fs.mkdirSync(binaryPath, { recursive: true });
+      fs.writeFileSync(path.join(worktreePath, 'eslint.config.js'), 'export default [];');
+      fs.writeFileSync(path.join(binaryPath, 'eslint'), '');
+      const calls: Array<{ file: string; args: string[]; cwd: string }> = [];
+      const execImpl = async (
+        file: string,
+        args: string[],
+        options: { cwd: string; timeout: number; maxBuffer: number },
+      ) => {
+        calls.push({ file, args, cwd: options.cwd });
+        return {
+          stdout: JSON.stringify([
+            {
+              filePath: path.join(worktreePath, 'src/a.ts'),
+              messages: [
+                {
+                  ruleId: 'no-console',
+                  severity: 1,
+                  message: 'Unexpected console statement.',
+                  line: 2,
+                },
+              ],
+            },
+          ]),
+          stderr: '',
+        };
+      };
+
+      await expect(
+        loadEslintQualityFindings(worktreePath, ['src/a.ts'], execImpl),
+      ).resolves.toEqual({
+        status: 'available',
+        findings: [
+          expect.objectContaining({
+            ruleId: 'no-console',
+            severity: 'warning',
+          }),
+        ],
+      });
+      expect(calls).toEqual([
+        expect.objectContaining({
+          file: path.join(worktreePath, 'node_modules', '.bin', 'eslint'),
+          args: ['--format', 'json', '--no-error-on-unmatched-pattern', '--', 'src/a.ts'],
+          cwd: worktreePath,
+        }),
+      ]);
+    } finally {
+      fs.rmSync(worktreePath, { recursive: true, force: true });
+    }
+  });
+
+  it('maps missing executable and unsupported flat-config errors to not-applicable', () => {
+    expect(classifyEslintError({ code: 'ENOENT' })).toEqual({ status: 'not-applicable' });
+    expect(
+      classifyEslintError({ stderr: "ESLint couldn't find an eslint.config.(js|mjs|cjs) file." }),
+    ).toEqual({ status: 'not-applicable' });
   });
 });
