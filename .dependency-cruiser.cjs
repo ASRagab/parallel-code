@@ -13,7 +13,13 @@ module.exports = {
         // Allow importing pure shared modules with no Node/Electron deps:
         //   - electron/ipc/channels.ts — IPC channel enum
         //   - electron/mcp/prompt-detect.ts — regex-only prompt detector reused by the renderer task-status pipeline
-        pathNot: ['^electron/ipc/channels\\.ts', '^electron/mcp/prompt-detect\\.ts'],
+        //   - electron/mcp/validation.ts — string-only branch/UUID validators; the renderer
+        //     shares them so it never offers a branch the IPC layer would reject
+        pathNot: [
+          '^electron/ipc/channels\\.ts',
+          '^electron/mcp/prompt-detect\\.ts',
+          '^electron/mcp/validation\\.ts',
+        ],
       },
     },
     {
